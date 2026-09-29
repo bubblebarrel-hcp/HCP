@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { LogOut, Search } from 'lucide-react';
@@ -13,6 +14,14 @@ import { isActive, primaryNav, type NavItem } from '@/components/layout/nav';
 import { NotificationBell } from '@/components/layout/NotificationBell';
 import type { SessionUser } from '@/lib/types';
 import { cn } from '@/lib/utils';
+
+const logoCompanions = [
+  '/alt-image1.png',
+  '/alt-image2.png',
+  '/alt-image3.png',
+  '/alt-image4.png',
+  '/alt-image5.png',
+] as const;
 
 function TopTab({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
@@ -141,6 +150,23 @@ function AccountMenu({ user }: { user: SessionUser }) {
 export function Header() {
   const { user, loading } = useAuth();
   const pathname = usePathname();
+  const [companionImage, setCompanionImage] = useState<number | null>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const previousImage = window.sessionStorage.getItem('hcp-logo-companion');
+      const previousIndex = previousImage === null ? -1 : Number(previousImage);
+      let nextIndex = Math.floor(Math.random() * logoCompanions.length);
+
+      if (previousIndex >= 0 && previousIndex < logoCompanions.length && nextIndex === previousIndex) {
+        nextIndex = (nextIndex + 1 + Math.floor(Math.random() * (logoCompanions.length - 1))) % logoCompanions.length;
+      }
+
+      window.sessionStorage.setItem('hcp-logo-companion', String(nextIndex));
+      setCompanionImage(nextIndex);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-card pt-[env(safe-area-inset-top)] shadow-sm">
@@ -153,6 +179,18 @@ export function Header() {
           >
             <BrandMark />
           </Link>
+          <span className="grid h-10 w-10 shrink-0 place-items-center" aria-hidden="true">
+            {companionImage !== null && (
+              <Image
+                src={logoCompanions[companionImage]}
+                alt=""
+                width={48}
+                height={48}
+                className="h-10 w-10 object-contain"
+                priority
+              />
+            )}
+          </span>
           {/* Plain GET form: search works without JavaScript */}
           <form action="/search" role="search" className="relative hidden sm:block">
             <label htmlFor="global-search" className="sr-only">Search HCP</label>
