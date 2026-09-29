@@ -1,0 +1,2660 @@
+// HCP — Hash Community Platform
+//
+// Source of truth: product-Bible Chapter 23 (entities + relationships) and
+// Chapter 22 (every `status` enum below is a Chapter 22 state machine, named
+// verbatim where the chapter names it). Stakeholder decisions D1-D17 live in
+// CODEX/DECISION-LOG.md and are referenced inline where they shape a field.
+//
+// Conventions
+// - Every id is a UUID and never changes (Ch.23 naming conventions).
+// - Historical records (timelines, revisions, appointments, audit, events) are
+//   append-only. Corrections are new rows, never destructive updates.
+// - Actor attribution columns that exist purely for audit (approvedById,
+//   publishedById, ...) are plain UUID columns rather than relations: they are
+//   read by audit tooling, not traversed by the app, and a relation per actor
+//   column would add dozens of back-references to User.
+// - No direct / one-to-one messaging model exists. That is deliberate (D8).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7: the connection URL lives in prisma.config.ts, not here.
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum PlatformRole {
+  USER
+  ADMIN
+}
+
+enum AccountStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+// Ch.22 A.9
+enum TrustLevel {
+  UNVERIFIED
+  VERIFIED_EMAIL
+  VERIFIED_MEMBER
+  TRUSTED_VOLUNTEER
+  OFFICER_VERIFIED
+  ORGANIZATION_VERIFIED
+  PLATFORM_VERIFIED
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  NON_BINARY
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  MEMBERS_ONLY
+  PRIVATE
+}
+
+enum OrganizationType {
+  LOCAL_KENNEL
+  REGIONAL_ASSOCIATION
+  NATIONAL_ASSOCIATION
+  CONTINENTAL_ASSOCIATION
+  INTERNATIONAL_COMMITTEE
+  WORKING_GROUP
+  HERITAGE_FOUNDATION
+  TEMPORARY_EVENT_COMMITTEE
+}
+
+// Ch.22 A.1
+enum KennelStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+// Ch.22 A.8 — gated by D10 (minimum active mismanagement members)
+enum VerificationLevel {
+  PENDING
+  COMMUNITY_VERIFIED
+  OFFICER_VERIFIED
+  PLATFORM_VERIFIED
+}
+
+enum KennelVisibility {
+  PUBLIC
+  UNLISTED
+  HIDDEN
+}
+
+// D3 — set by the hosting kennel's admin
+enum RunVisibility {
+  PUBLIC
+  MEMBERS_ONLY
+  INVITE_ONLY
+}
+
+// BR-RUN-012
+enum MediaModerationMode {
+  IMMEDIATE
+  OFFICER_APPROVAL
+  AI_ASSISTED
+  COMMUNITY_REPORTING
+}
+
+enum SisterKennelStatus {
+  PROPOSED
+  ACTIVE
+  ENDED
+}
+
+// FR-MEMBER-003
+enum MembershipType {
+  FULL
+  ASSOCIATE
+  VISITING
+  HONORARY
+  LIFE
+  GUEST
+  VIRGIN
+  COMMITTEE
+}
+
+// Ch.22 A.2 (reconciled), plus REJECTED for Ch.24 MembershipRejected and
+// WITHDRAWN (D52) for a hasher taking back their own still-open request.
+enum MembershipStatus {
+  APPLICANT
+  PENDING_REVIEW
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  RESIGNED
+  REMOVED
+  REJECTED
+  WITHDRAWN
+  ARCHIVED
+}
+
+// FR-MEMBER-010
+enum MembershipTimelineType {
+  REQUESTED
+  APPROVED
+  REJECTED
+  OFFICER_APPOINTMENT
+  SUSPENSION
+  REINSTATEMENT
+  PROMOTION
+  TYPE_CHANGED
+  RESIGNATION
+  REMOVAL
+  WITHDRAWAL
+  HOME_KENNEL_TRANSFER
+  ARCHIVED
+}
+
+enum InvitationMethod {
+  EMAIL
+  QR_CODE
+  LINK
+}
+
+// FR-ID-007
+enum AffiliationType {
+  VOLUNTEER
+  ADVISOR
+  EVENT_ORGANIZER
+  FORMER_OFFICER
+  HONORARY_GUEST
+  PARTNER_ORGANIZATION
+}
+
+enum AppointmentMethod {
+  APPOINTED
+  ELECTED
+  ACCLAIMED
+  INTERIM
+  FOUNDING
+}
+
+// Ch.22 A.10 (Delegated is modelled as a parallel Delegation row, not a state)
+enum RoleAssignmentStatus {
+  NOMINATED
+  APPOINTED
+  ACTIVE
+  TERM_ENDED
+  RESIGNED
+  REVOKED
+  HISTORICAL
+}
+
+// Contextual roles. A person is never a role (ARCHITECTURE-RULES); these attach
+// to a scope (kennel / run / event).
+enum ScopedRole {
+  KENNEL_ADMIN
+  HARE
+  CO_HARE
+  SCRIBE
+  ASSISTANT_SCRIBE
+  REVIEWER
+  PHOTOGRAPHER
+  VOLUNTEER
+  MODERATOR
+  EVENT_ORGANIZER
+}
+
+enum MotionStatus {
+  DRAFT
+  OPEN
+  PASSED
+  FAILED
+  WITHDRAWN
+}
+
+enum VoteChoice {
+  YES
+  NO
+  ABSTAIN
+}
+
+enum ElectionStatus {
+  DRAFT
+  NOMINATIONS_OPEN
+  VOTING_OPEN
+  VOTING_CLOSED
+  CERTIFIED
+  CANCELLED
+}
+
+enum CandidateStatus {
+  NOMINATED
+  ACCEPTED
+  DECLINED
+  ELECTED
+  NOT_ELECTED
+}
+
+enum PolicyType {
+  CONSTITUTION
+  BYLAW
+  POLICY
+  CODE_OF_CONDUCT
+}
+
+enum PolicyStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+  ARCHIVED
+}
+
+enum EventType {
+  WEEKLY_RUN
+  FULL_MOON_RUN
+  RED_DRESS_RUN
+  CAMPOUT
+  AGM
+  INTERHASH
+  NASH_HASH
+  CHARITY
+  WORKSHOP
+  OTHER
+}
+
+// Ch.22 A.7
+enum EventStatus {
+  DRAFT
+  PLANNING
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  PREPARATION
+  LIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  CHECKED_IN
+}
+
+// Ch.22: a hasher puts their hand up for a run, and the kennel answers. The
+// offer is a record either way — a kennel can see who keeps offering (D44).
+enum HareOfferStatus {
+  OFFERED
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+}
+
+enum VolunteerStatus {
+  INVITED
+  CONFIRMED
+  DECLINED
+  COMPLETED
+}
+
+enum RunType {
+  REGULAR
+  FULL_MOON
+  RED_DRESS
+  CAMPOUT
+  CHARITY
+  INTERHASH
+  NASH_HASH
+  THEMED
+  SPECIAL
+}
+
+// Ch.22 A.3. Paused is a sub-state of LIVE (Run.isPaused + RunPause rows).
+// "Run Capsule" is the RunCapsule entity, not a Run status.
+enum RunStatus {
+  DRAFT
+  SCHEDULED
+  PLANNING
+  TRAIL_HIDDEN
+  TRAIL_RELEASED
+  CHECK_IN_OPEN
+  LIVE
+  CIRCLE
+  REPORTING
+  ARCHIVED
+  // Ch.22 A.3 (D22): called off before the run went live; terminal, kept as history
+  CANCELLED
+}
+
+enum RsvpStatus {
+  GOING
+  MAYBE
+  NOT_GOING
+  CANCELLED
+}
+
+// FR-RUN-008
+enum CheckInMethod {
+  GPS
+  QR
+  OFFICER
+  MANUAL
+}
+
+// Ch.22 A.4
+enum TrailStatus {
+  IDEA
+  DRAFT
+  PLANNING
+  REVIEW
+  LOCKED
+  HIDDEN
+  RELEASED
+  LIVE
+  COMPLETED
+  ARCHIVED
+  HISTORIC
+}
+
+enum TrailStyle {
+  LIVE_HARE
+  DEAD_HARE
+  A_TO_A
+  A_TO_B
+  OTHER
+}
+
+// FR-TRAIL-007 / Ch.22 B.3
+enum ReleaseMode {
+  AT_RUN_START
+  SCHEDULED
+  MANUAL
+  CHECK_IN
+  GEOFENCE
+}
+
+enum WaypointKind {
+  START
+  FINISH
+  CHECKPOINT
+  REGROUP
+  HAZARD
+  SCENIC
+  ON_IN
+  OTHER
+}
+
+enum ChalkSymbol {
+  ON_ON
+  CHECK
+  FALSE_TRAIL
+  BACK_CHECK
+  REGROUP
+  BEER_NEAR
+  TRUE_TRAIL
+  ON_IN
+  HAZARD
+  CUSTOM
+}
+
+// FR-STORY-004
+enum StoryCategory {
+  TRAIL
+  BEER_CHECK
+  CIRCLE
+  VISITOR
+  AWARD
+  SONG
+  INCIDENT
+  HUMOR
+  SAFETY
+  HISTORICAL
+  GENERAL
+}
+
+enum StorySource {
+  AUTOMATIC
+  MANUAL
+}
+
+// Ch.22 A.5
+enum TrailReportStatus {
+  DRAFT
+  SCRIBE_EDITING
+  REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ReportContributorRole {
+  ASSISTANT_SCRIBE
+  REVIEWER
+}
+
+// Ch.22 A.6
+enum CapsuleStatus {
+  PLANNED
+  PREPARING
+  LIVE
+  DRAFT
+  PENDING_PUBLICATION
+  PUBLISHED
+  ARCHIVED
+  LEGACY
+}
+
+enum SupplementalType {
+  PHOTO
+  SCANNED_NEWSLETTER
+  INTERVIEW
+  REFLECTION
+  DOCUMENT
+  OTHER
+}
+
+enum MediaKind {
+  PHOTO
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
+// Ch.22 B.2 (server-visible part; Captured is client-local only)
+enum UploadState {
+  QUEUED
+  UPLOADING
+  PROCESSING
+  AVAILABLE
+  FAILED
+}
+
+enum ModerationState {
+  PENDING
+  APPROVED
+  REJECTED
+  REPORTED
+}
+
+// BR-RUN-007 / BR-TRAIL-012: every media item links to at least one of these
+enum MediaTargetType {
+  RUN
+  TRAIL
+  WAYPOINT
+  BEER_CHECK
+  CIRCLE
+  STORY_ASSET
+  GALLERY
+  CAPSULE
+  // A kennel's own branding: the banner behind its name and the logo in the
+  // circle. Its admins upload it; a member never does (D37).
+  KENNEL
+  // A hasher's own short video (D41).
+  REEL
+  // The photos on a hasher's written post (D51).
+  POST
+}
+
+// A reel's life (Ch.22): created empty, published once its video has landed,
+// and ended either by its author (Archived) or by a moderator (Removed).
+enum ReelStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  REMOVED
+}
+
+// Who a reel is for. Deliberately short: a reel is a hasher's own post, not a
+// run with an invitation list (D41).
+enum ReelVisibility {
+  PUBLIC
+  KENNEL_ONLY
+}
+
+// MVP channels are group-scoped only (D8)
+enum ChannelType {
+  KENNEL
+  EVENT
+  COMMITTEE
+  GOVERNANCE
+  RUN
+}
+
+enum NotificationCategory {
+  MEMBERSHIP
+  RUN
+  TRAIL_RELEASE
+  REMINDER
+  REPORT
+  ANNOUNCEMENT
+  GOVERNANCE
+  EVENT
+  MEDIA
+  SAFETY
+  // Somebody followed you, liked your post, replied to you or reshared it
+  // (D50). Its own category so a hasher can mute applause without muting the
+  // trail release that tells them where to run.
+  SOCIAL
+  SYSTEM
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+// Ch.22 A.11
+enum NotificationStatus {
+  CREATED
+  EVALUATED
+  QUEUED
+  BATCHED
+  DIGESTED
+  SCHEDULED
+  DELIVERED
+  READ
+  EXPIRED
+  SUPPRESSED
+}
+
+// D12 — no SMS for now
+enum DeliveryChannel {
+  IN_APP
+  PUSH
+  EMAIL
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+enum EvidenceCategory {
+  ATTENDANCE
+  IDENTITY
+  MEMBERSHIP
+  GOVERNANCE
+  FINANCIAL
+  HISTORICAL
+  GEOGRAPHICAL
+  MEDIA
+  AWARDS
+  VOLUNTEER_SERVICE
+  TRAIL_VERIFICATION
+  ADMINISTRATIVE
+  IMPORTED_RECORDS
+}
+
+enum EvidenceStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  DISPUTED
+  REJECTED
+}
+
+// Ch.24 AI Event Boundaries: an AI agent is never an actor on a domain event.
+enum ActorType {
+  USER
+  SYSTEM
+}
+
+enum AuditDecision {
+  ALLOWED
+  DENIED
+}
+
+enum AiSuggestionKind {
+  TRAIL_REPORT_DRAFT
+  RUN_SUMMARY
+  TERM_EXPLANATION
+  SEARCH_ASSIST
+  GOVERNANCE_SUGGESTION
+  MODERATION_FLAG
+  PREPARATION_TIPS
+}
+
+enum AiSuggestionStatus {
+  PENDING
+  ACCEPTED
+  PARTIALLY_ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+// Ch.22 B.1 as seen by the server
+enum SyncStatus {
+  RECEIVED
+  APPLIED
+  CONFLICT
+  REJECTED
+}
+
+// ───────────────────── Part A — Identity & Membership ─────────────────────
+
+// Identity (Ch.23). Authentication lives here too: one account per person.
+model User {
+  id                String            @id @default(uuid()) @db.Uuid
+  email             String            @unique
+  passwordHash      String
+  platformRole      PlatformRole      @default(USER)
+  status            AccountStatus     @default(ACTIVE)
+  trustLevel        TrustLevel        @default(UNVERIFIED)
+  emailVerifiedAt   DateTime?
+  // Public identity (D5/D11): shown as hashHandle, or "Just <firstName>" when
+  // the hasher has not been named yet.
+  hashHandle        String?
+  avatarUrl         String?
+  bio               String?
+  profileVisibility ProfileVisibility @default(MEMBERS_ONLY)
+  homeKennelId      String?           @db.Uuid
+  preferredLanguage String            @default("en")
+  timeZone          String?
+  termsAcceptedAt   DateTime
+  lastLoginAt       DateTime?
+  deactivatedAt     DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  homeKennel Kennel? @relation("HomeKennel", fields: [homeKennelId], references: [id])
+
+  refreshTokens           RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  person                  PersonProfile?
+  hashNames               HashName[]
+  passport                HashPassport?
+  claimedGuests           GuestProfile[]
+  memberships             Membership[]
+  affiliations            OrganizationAffiliation[]
+  officerAppointments     OfficerAppointment[]
+  roleAssignments         RoleAssignment[]
+  delegationsGranted      Delegation[]              @relation("DelegationDelegator")
+  delegationsReceived     Delegation[]              @relation("DelegationDelegate")
+  committeeMemberships    CommitteeMember[]
+  motionsProposed         Motion[]
+  votes                   Vote[]
+  electionCandidacies     ElectionCandidate[]
+  electionVoterRecords    ElectionVoterRecord[]
+  policyRevisions         PolicyRevision[]
+  registrations           Registration[]
+  volunteerAssignments    VolunteerAssignment[]
+  runHares                RunHare[]
+  reels                   Reel[]                    @relation("ReelAuthor")
+  hareOffers              HareOffer[]
+  participations          Participation[]
+  awardsReceived          Award[]
+  trailHares              TrailHare[]
+  chalkPlaced             DigitalChalkSymbol[]
+  trailRevisions          TrailRevision[]
+  storyAssets             StoryAsset[]
+  reportsAsScribe         TrailReport[]
+  reportContributions     TrailReportContributor[]
+  reportRevisions         ReportRevision[]
+  reportComments          ReportReviewComment[]
+  aiSuggestions           AiSuggestion[]
+  supplementalArtifacts   SupplementalArtifact[]
+  mediaUploads            MediaAsset[]
+  announcements           Announcement[]
+  channelMemberships      ChannelMember[]
+  messages                Message[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+  pushDevices             PushDevice[]
+  timelineEntries         IdentityTimelineEntry[]
+  syncOperations          SyncOperation[]
+  follows                 Follow[]                  @relation("Follower")
+  likes                   ContentLike[]
+  comments                ContentComment[]          @relation("CommentAuthor")
+  commentsRemoved         ContentComment[]          @relation("CommentRemover")
+  reshares                ContentReshare[]          @relation("Resharer")
+  bookmarks               ContentBookmark[]
+  contentViews            ContentView[]
+  posts                   Post[]                    @relation("PostAuthor")
+  postsRemoved            Post[]                    @relation("PostRemover")
+
+  @@index([hashHandle])
+  @@index([homeKennelId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique
+  userId    String    @db.Uuid
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique
+  userId    String    @db.Uuid
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  tokenHash String    @unique
+  userId    String    @db.Uuid
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Person + PrivateProfile (Ch.23). Full biodata is required at registration (D5)
+// and never exposed publicly. Sensitive columns are to be encrypted at the
+// application layer before production (see CODEX/TODO.md).
+// FR-ID-005: dateOfBirth, phone, the three emergencyContact* fields and
+// medicalNotes are encrypted at the application layer (utils/field-crypto.ts)
+// before they ever reach Prisma, so each is a String column holding an opaque
+// "v1:<iv>:<tag>:<ciphertext>" blob rather than its plaintext type. That is
+// why dateOfBirth is String, not DateTime: Postgres cannot sort or filter
+// ciphertext, which is the point — nothing but the application can read it.
+model PersonProfile {
+  id                           String    @id @default(uuid()) @db.Uuid
+  userId                       String    @unique @db.Uuid
+  firstName                    String
+  middleName                   String?
+  lastName                     String
+  dateOfBirth                  String
+  gender                       Gender
+  phone                        String
+  nationality                  String
+  country                      String
+  stateProvince                String
+  city                         String
+  addressLine                  String?
+  occupation                   String?
+  languages                    String[]
+  emergencyContactName         String
+  emergencyContactPhone        String
+  emergencyContactRelationship String
+  medicalNotes                 String?
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// FR-ID-003: one current primary Hash name plus history, nicknames, aliases.
+model HashName {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  name        String
+  isPrimary   Boolean   @default(false)
+  isAlias     Boolean   @default(false)
+  kennelId    String?   @db.Uuid
+  bestowedAt  DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([name])
+}
+
+// D2: guests register for runs without an account; claimable later so their
+// attendance flows into a Hash Passport.
+model GuestProfile {
+  id              String    @id @default(uuid()) @db.Uuid
+  firstName       String
+  lastName        String
+  email           String
+  phone           String?
+  consentAt       DateTime
+  claimedByUserId String?   @db.Uuid
+  claimedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  claimedBy      User?           @relation(fields: [claimedByUserId], references: [id])
+  participations Participation[]
+  registrations  Registration[]
+  awards         Award[]
+  notifications  Notification[]
+
+  @@index([email])
+}
+
+model HashPassport {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @unique @db.Uuid
+  shareToken String   @unique @default(uuid())
+  // LifetimeStatistics (FR-PASSPORT-005) — derived by the Passport consumer,
+  // never authored directly.
+  runsAttended    Int      @default(0)
+  trailsLaid      Int      @default(0)
+  beerChecks      Int      @default(0)
+  reportsWritten  Int      @default(0)
+  photosUploaded  Int      @default(0)
+  videosUploaded  Int      @default(0)
+  countriesHashed Int      @default(0)
+  kennelsJoined   Int      @default(0)
+  distanceMeters  Int      @default(0)
+  statsUpdatedAt  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stamps     PassportStamp[]
+  milestones PassportMilestone[]
+  memories   PassportMemory[]
+  places     PlaceVisited[]
+}
+
+model PassportStamp {
+  id         String   @id @default(uuid()) @db.Uuid
+  passportId String   @db.Uuid
+  code       String // FIRST_HASH, FIRST_HARE, FIRST_INTERHASH, ...
+  runId      String?  @db.Uuid
+  awardedAt  DateTime @default(now())
+
+  passport HashPassport @relation(fields: [passportId], references: [id], onDelete: Cascade)
+
+  @@unique([passportId, code])
+}
+
+model PassportMilestone {
+  id         String   @id @default(uuid()) @db.Uuid
+  passportId String   @db.Uuid
+  threshold  Int
+  runId      String?  @db.Uuid
+  reachedAt  DateTime @default(now())
+
+  passport HashPassport @relation(fields: [passportId], references: [id], onDelete: Cascade)
+
+  @@unique([passportId, threshold])
+}
+
+model PassportMemory {
+  id         String   @id @default(uuid()) @db.Uuid
+  passportId String   @db.Uuid
+  kind       String // FAVORITE_TRAIL, FAVORITE_BEER_STOP, FAVORITE_PHOTO, NOTE, ...
+  title      String
+  note       String?
+  refType    String?
+  refId      String?  @db.Uuid
+  pinnedAt   DateTime @default(now())
+
+  passport HashPassport @relation(fields: [passportId], references: [id], onDelete: Cascade)
+
+  @@index([passportId])
+}
+
+model PlaceVisited {
+  id             String   @id @default(uuid()) @db.Uuid
+  passportId     String   @db.Uuid
+  country        String
+  stateProvince  String   @default("")
+  city           String   @default("")
+  kennelId       String?  @db.Uuid
+  firstVisitedAt DateTime
+
+  passport HashPassport @relation(fields: [passportId], references: [id], onDelete: Cascade)
+
+  @@unique([passportId, country, stateProvince, city])
+}
+
+// FR-ID-009
+model IdentityTimelineEntry {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  type       String // MEMBERSHIP, ROLE, AWARD, MILESTONE, TRUST_LEVEL, HASH_NAME, ...
+  title      String
+  refType    String?
+  refId      String?  @db.Uuid
+  occurredAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, occurredAt])
+}
+
+// ───────────────────── Part B — Kennel & Governance ─────────────────────
+
+model Kennel {
+  id                   String              @id @default(uuid()) @db.Uuid
+  name                 String
+  shortName            String
+  slug                 String              @unique
+  orgType              OrganizationType    @default(LOCAL_KENNEL)
+  parentId             String?             @db.Uuid
+  country              String
+  stateProvince        String
+  city                 String
+  timeZone             String
+  latitude             Float?
+  longitude            Float?
+  description          String
+  logoUrl              String?
+  bannerUrl            String?
+  // Which part of the banner the crop shows, as a CSS background-position pair
+  // ("50% 30%"). Null means centred, which is what every banner uploaded before
+  // repositioning existed gets (D37).
+  bannerPosition       String?
+  primaryColor         String?
+  secondaryColor       String?
+  motto                String?
+  landingMessage       String?
+  meetingDay           String?
+  foundedOn            DateTime?           @db.Date
+  status               KennelStatus        @default(PENDING_VERIFICATION)
+  verificationLevel    VerificationLevel   @default(PENDING)
+  verifiedAt           DateTime?
+  visibility           KennelVisibility    @default(PUBLIC)
+  defaultRunVisibility RunVisibility       @default(MEMBERS_ONLY)
+  mediaModerationMode  MediaModerationMode @default(IMMEDIATE)
+  // Ch.22 B.3: offline provisional trail release is opt-in per kennel.
+  allowOfflineProvisionalRelease Boolean   @default(false)
+  // FR-CIRCLE-006: "Kennels may disable this feature" (down-downs). Awards in
+  // general stay on; this only blocks isDownDown: true on a new one.
+  downDownsEnabled     Boolean             @default(true)
+  // D45 follow-up: null means "use the platform default"
+  // (settings.service.ts#SETTING_DEFAULTS). A kennel that hashes weekly wants
+  // to hear about an un-hared date sooner than one that meets monthly.
+  hareNudgeSoonDays    Int?
+  hareNudgeUrgentDays  Int?
+  hashDna              Json?
+  createdById          String?             @db.Uuid
+  archivedAt           DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  parent   Kennel?  @relation("KennelHierarchy", fields: [parentId], references: [id])
+  children Kennel[] @relation("KennelHierarchy")
+
+  homeKennelOf        User[]                    @relation("HomeKennel")
+  memberships         Membership[]
+  invitations         MembershipInvitation[]
+  affiliations        OrganizationAffiliation[]
+  officerPositions    OfficerPosition[]
+  officerAppointments OfficerAppointment[]
+  roleAssignments     RoleAssignment[]
+  delegations         Delegation[]
+  committees          Committee[]
+  motions             Motion[]
+  elections           Election[]
+  meetingRecords      MeetingRecord[]
+  policies            Policy[]
+  sisterOf            SisterKennelRelationship[] @relation("SisterA")
+  sisterTo            SisterKennelRelationship[] @relation("SisterB")
+  runs                Run[]
+  eventHosts          EventHostKennel[]
+  announcements       Announcement[]
+  channels            Channel[]
+  galleries           Gallery[]
+  reels               Reel[]
+  posts               Post[]
+  notificationRules   KennelNotificationRule[]
+  glossaryTerms       GlossaryTerm[]
+
+  // FR-KENNEL-001: duplicate local kennel names are not permitted.
+  @@unique([name, city, country])
+  @@index([status, visibility])
+  @@index([country, city])
+}
+
+// FR-KENNEL-012
+model SisterKennelRelationship {
+  id            String             @id @default(uuid()) @db.Uuid
+  kennelAId     String             @db.Uuid
+  kennelBId     String             @db.Uuid
+  status        SisterKennelStatus @default(PROPOSED)
+  establishedAt DateTime?
+  endedAt       DateTime?
+  createdAt     DateTime           @default(now())
+
+  kennelA Kennel @relation("SisterA", fields: [kennelAId], references: [id])
+  kennelB Kennel @relation("SisterB", fields: [kennelBId], references: [id])
+
+  @@unique([kennelAId, kennelBId])
+}
+
+model Membership {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @db.Uuid
+  kennelId         String           @db.Uuid
+  type             MembershipType   @default(FULL)
+  status           MembershipStatus @default(PENDING_REVIEW)
+  isHomeKennel     Boolean          @default(false)
+  startDate        DateTime?
+  endDate          DateTime?
+  sponsorUserId    String?          @db.Uuid
+  approvedById     String?          @db.Uuid
+  approvedAt       DateTime?
+  approvalNotes    String?
+  suspensionReason String?
+  suspendedUntil   DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  user            User                      @relation(fields: [userId], references: [id])
+  kennel          Kennel                    @relation(fields: [kennelId], references: [id])
+  timeline        MembershipTimelineEntry[]
+  roleAssignments RoleAssignment[]
+  appointments    OfficerAppointment[]
+
+  // Duplicate pending requests (FR-MEMBER-001) are rejected in the service,
+  // since resigned/removed history rows for the same pair must coexist.
+  @@index([userId, kennelId])
+  @@index([kennelId, status])
+}
+
+// FR-MEMBER-010 — immutable
+model MembershipTimelineEntry {
+  id           String                 @id @default(uuid()) @db.Uuid
+  membershipId String                 @db.Uuid
+  type         MembershipTimelineType
+  fromStatus   MembershipStatus?
+  toStatus     MembershipStatus?
+  actorId      String?                @db.Uuid
+  note         String?
+  occurredAt   DateTime               @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id])
+
+  @@index([membershipId, occurredAt])
+}
+
+// FR-MEMBER-005
+model MembershipInvitation {
+  id               String           @id @default(uuid()) @db.Uuid
+  kennelId         String           @db.Uuid
+  invitedById      String           @db.Uuid
+  method           InvitationMethod
+  email            String?
+  tokenHash        String           @unique
+  membershipType   MembershipType   @default(FULL)
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedByUserId String?          @db.Uuid
+  revokedAt        DateTime?
+  createdAt        DateTime         @default(now())
+
+  kennel Kennel @relation(fields: [kennelId], references: [id])
+
+  @@index([kennelId])
+}
+
+// FR-ID-007 — non-membership relationship to a kennel, committee or event
+model OrganizationAffiliation {
+  id          String          @id @default(uuid()) @db.Uuid
+  userId      String          @db.Uuid
+  type        AffiliationType
+  kennelId    String?         @db.Uuid
+  committeeId String?         @db.Uuid
+  eventId     String?         @db.Uuid
+  startDate   DateTime
+  endDate     DateTime?
+  note        String?
+  createdAt   DateTime        @default(now())
+
+  user      User       @relation(fields: [userId], references: [id])
+  kennel    Kennel?    @relation(fields: [kennelId], references: [id])
+  committee Committee? @relation(fields: [committeeId], references: [id])
+  event     Event?     @relation(fields: [eventId], references: [id])
+
+  @@index([userId])
+}
+
+// FR-KENNEL-006 — Grand Master, Joint Master, RA, Hash Cash, On Sec, ...
+model OfficerPosition {
+  id                String            @id @default(uuid()) @db.Uuid
+  kennelId          String            @db.Uuid
+  title             String
+  description       String?
+  responsibilities  String?
+  permissions       String[]
+  termMonths        Int?
+  appointmentMethod AppointmentMethod @default(ELECTED)
+  // D10: counts toward the kennel's mismanagement for verification.
+  isMismanagement   Boolean           @default(true)
+  sortOrder         Int               @default(0)
+  archivedAt        DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  kennel       Kennel               @relation(fields: [kennelId], references: [id])
+  appointments OfficerAppointment[]
+  candidates   ElectionCandidate[]
+  voterRecords ElectionVoterRecord[]
+  ballots      ElectionBallot[]
+
+  @@unique([kennelId, title])
+}
+
+// Ch.22 A.10 — historical record of one person holding one position
+model OfficerAppointment {
+  id           String               @id @default(uuid()) @db.Uuid
+  kennelId     String               @db.Uuid
+  positionId   String               @db.Uuid
+  userId       String               @db.Uuid
+  membershipId String?              @db.Uuid
+  status       RoleAssignmentStatus @default(ACTIVE)
+  method       AppointmentMethod
+  electionId   String?              @db.Uuid
+  startDate    DateTime
+  endDate      DateTime?
+  endedReason  String?
+  appointedById String?             @db.Uuid
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  kennel      Kennel          @relation(fields: [kennelId], references: [id])
+  position    OfficerPosition @relation(fields: [positionId], references: [id])
+  user        User            @relation(fields: [userId], references: [id])
+  membership  Membership?     @relation(fields: [membershipId], references: [id])
+  election    Election?       @relation(fields: [electionId], references: [id])
+  delegations Delegation[]
+
+  @@index([kennelId, status])
+  @@index([userId])
+}
+
+// Contextual role on a kennel, run or event (hare, scribe, kennel admin, ...)
+model RoleAssignment {
+  id           String               @id @default(uuid()) @db.Uuid
+  userId       String               @db.Uuid
+  role         ScopedRole
+  // What this kennel calls the job. The role is the authority; the title is the
+  // kennel's own word for it, because naming varies everywhere (D40). Null
+  // means the platform's default wording.
+  title        String?
+  status       RoleAssignmentStatus @default(ACTIVE)
+  membershipId String?              @db.Uuid
+  kennelId     String?              @db.Uuid
+  runId        String?              @db.Uuid
+  eventId      String?              @db.Uuid
+  startDate    DateTime             @default(now())
+  endDate      DateTime?
+  grantedById  String?              @db.Uuid
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id])
+  membership  Membership?  @relation(fields: [membershipId], references: [id])
+  kennel      Kennel?      @relation(fields: [kennelId], references: [id])
+  run         Run?         @relation(fields: [runId], references: [id])
+  event       Event?       @relation(fields: [eventId], references: [id])
+  delegations Delegation[]
+
+  @@index([userId, status])
+  @@index([kennelId, role, status])
+  @@index([runId])
+}
+
+// FR-ID-024 / FR-GOV-033 — time-boxed sub-grant. D13: a kennel admin
+// delegates "run.visibility.change" to a hare through this.
+model Delegation {
+  id                     String    @id @default(uuid()) @db.Uuid
+  kennelId               String    @db.Uuid
+  delegatorId            String    @db.Uuid
+  delegateId             String    @db.Uuid
+  sourceAppointmentId    String?   @db.Uuid
+  sourceRoleAssignmentId String?   @db.Uuid
+  permissions            String[]
+  reason                 String
+  startsAt               DateTime  @default(now())
+  expiresAt              DateTime
+  revokedAt              DateTime?
+  createdAt              DateTime  @default(now())
+
+  kennel               Kennel              @relation(fields: [kennelId], references: [id])
+  delegator            User                @relation("DelegationDelegator", fields: [delegatorId], references: [id])
+  delegate             User                @relation("DelegationDelegate", fields: [delegateId], references: [id])
+  sourceAppointment    OfficerAppointment? @relation(fields: [sourceAppointmentId], references: [id])
+  sourceRoleAssignment RoleAssignment?     @relation(fields: [sourceRoleAssignmentId], references: [id])
+
+  @@index([delegateId, expiresAt])
+}
+
+model Committee {
+  id          String    @id @default(uuid()) @db.Uuid
+  kennelId    String    @db.Uuid
+  name        String
+  mandate     String?
+  chairUserId String?   @db.Uuid
+  createdAt   DateTime  @default(now())
+  dissolvedAt DateTime?
+
+  kennel         Kennel                    @relation(fields: [kennelId], references: [id])
+  members        CommitteeMember[]
+  motions        Motion[]
+  meetingRecords MeetingRecord[]
+  channels       Channel[]
+  affiliations   OrganizationAffiliation[]
+
+  @@unique([kennelId, name])
+}
+
+model CommitteeMember {
+  id          String    @id @default(uuid()) @db.Uuid
+  committeeId String    @db.Uuid
+  userId      String    @db.Uuid
+  role        String?
+  startDate   DateTime  @default(now())
+  endDate     DateTime?
+
+  committee Committee @relation(fields: [committeeId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([committeeId])
+}
+
+model Motion {
+  id           String       @id @default(uuid()) @db.Uuid
+  kennelId     String       @db.Uuid
+  committeeId  String?      @db.Uuid
+  title        String
+  body         String
+  status       MotionStatus @default(DRAFT)
+  proposedById String       @db.Uuid
+  opensAt      DateTime?
+  closesAt     DateTime?
+  resolvedAt   DateTime?
+  outcomeNote  String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  kennel     Kennel     @relation(fields: [kennelId], references: [id])
+  committee  Committee? @relation(fields: [committeeId], references: [id])
+  proposedBy User       @relation(fields: [proposedById], references: [id])
+  votes      Vote[]
+
+  @@index([kennelId, status])
+}
+
+model Vote {
+  id       String     @id @default(uuid()) @db.Uuid
+  motionId String     @db.Uuid
+  voterId  String     @db.Uuid
+  choice   VoteChoice
+  castAt   DateTime   @default(now())
+
+  motion Motion @relation(fields: [motionId], references: [id])
+  voter  User   @relation(fields: [voterId], references: [id])
+
+  @@unique([motionId, voterId])
+}
+
+// Officer elections (D9: launch scope). Ballots are secret: who voted
+// (ElectionVoterRecord) is stored apart from how they voted (ElectionBallot).
+model Election {
+  id                 String         @id @default(uuid()) @db.Uuid
+  kennelId           String         @db.Uuid
+  title              String
+  status             ElectionStatus @default(DRAFT)
+  nominationsOpenAt  DateTime?
+  nominationsCloseAt DateTime?
+  votingOpensAt      DateTime?
+  votingClosesAt     DateTime?
+  certifiedAt        DateTime?
+  certifiedById      String?        @db.Uuid
+  createdById        String         @db.Uuid
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  kennel       Kennel                @relation(fields: [kennelId], references: [id])
+  candidates   ElectionCandidate[]
+  voterRecords ElectionVoterRecord[]
+  ballots      ElectionBallot[]
+  appointments OfficerAppointment[]
+
+  @@index([kennelId, status])
+}
+
+model ElectionCandidate {
+  id            String          @id @default(uuid()) @db.Uuid
+  electionId    String          @db.Uuid
+  positionId    String          @db.Uuid
+  userId        String          @db.Uuid
+  nominatedById String?         @db.Uuid
+  status        CandidateStatus @default(NOMINATED)
+  statement     String?
+  createdAt     DateTime        @default(now())
+
+  election Election         @relation(fields: [electionId], references: [id])
+  position OfficerPosition  @relation(fields: [positionId], references: [id])
+  user     User             @relation(fields: [userId], references: [id])
+  ballots  ElectionBallot[]
+
+  @@unique([electionId, positionId, userId])
+}
+
+model ElectionVoterRecord {
+  id         String   @id @default(uuid()) @db.Uuid
+  electionId String   @db.Uuid
+  positionId String   @db.Uuid
+  voterId    String   @db.Uuid
+  votedAt    DateTime @default(now())
+
+  election Election        @relation(fields: [electionId], references: [id])
+  position OfficerPosition @relation(fields: [positionId], references: [id])
+  voter    User            @relation(fields: [voterId], references: [id])
+
+  @@unique([electionId, positionId, voterId])
+}
+
+model ElectionBallot {
+  id          String   @id @default(uuid()) @db.Uuid
+  electionId  String   @db.Uuid
+  positionId  String   @db.Uuid
+  candidateId String?  @db.Uuid // null = abstain
+  castAt      DateTime @default(now())
+
+  election  Election           @relation(fields: [electionId], references: [id])
+  position  OfficerPosition    @relation(fields: [positionId], references: [id])
+  candidate ElectionCandidate? @relation(fields: [candidateId], references: [id])
+
+  @@index([electionId, positionId])
+}
+
+model MeetingRecord {
+  id           String   @id @default(uuid()) @db.Uuid
+  kennelId     String   @db.Uuid
+  committeeId  String?  @db.Uuid
+  title        String
+  kind         String // AGM, COMMITTEE, EXTRAORDINARY, ...
+  heldAt       DateTime
+  minutes      String?
+  recordedById String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  kennel    Kennel     @relation(fields: [kennelId], references: [id])
+  committee Committee? @relation(fields: [committeeId], references: [id])
+
+  @@index([kennelId, heldAt])
+}
+
+model Policy {
+  id        String       @id @default(uuid()) @db.Uuid
+  kennelId  String       @db.Uuid
+  title     String
+  type      PolicyType
+  status    PolicyStatus @default(DRAFT)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  kennel    Kennel           @relation(fields: [kennelId], references: [id])
+  revisions PolicyRevision[]
+
+  @@index([kennelId, type])
+}
+
+// Immutable version history
+model PolicyRevision {
+  id          String    @id @default(uuid()) @db.Uuid
+  policyId    String    @db.Uuid
+  version     Int
+  body        String
+  summary     String?
+  authorId    String    @db.Uuid
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  policy Policy @relation(fields: [policyId], references: [id])
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@unique([policyId, version])
+}
+
+// Platform-wide configurable values, e.g. kennel.verification.minMismanagement = 4 (D10)
+model PlatformSetting {
+  key         String   @id
+  value       Json
+  description String?
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
+}
+
+// Hash terminology, platform-wide or kennel-local (feeds AI term explanations)
+model GlossaryTerm {
+  id         String   @id @default(uuid()) @db.Uuid
+  kennelId   String?  @db.Uuid
+  term       String
+  definition String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  kennel Kennel? @relation(fields: [kennelId], references: [id])
+
+  @@unique([kennelId, term])
+}
+
+// ───────────────────── Part C — Events & Runs ─────────────────────
+
+model Event {
+  id                   String        @id @default(uuid()) @db.Uuid
+  slug                 String        @unique
+  title                String
+  type                 EventType
+  status               EventStatus   @default(DRAFT)
+  description          String?
+  visibility           RunVisibility @default(PUBLIC)
+  startsAt             DateTime
+  endsAt               DateTime
+  timeZone             String
+  venueName            String?
+  venueAddress         String?
+  latitude             Float?
+  longitude            Float?
+  country              String
+  city                 String
+  capacity             Int?
+  registrationOpensAt  DateTime?
+  registrationClosesAt DateTime?
+  createdById          String        @db.Uuid
+  completedAt          DateTime?
+  archivedAt           DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  hosts           EventHostKennel[]
+  sessions        EventSession[]
+  registrations   Registration[]
+  volunteers      VolunteerAssignment[]
+  sponsors        EventSponsor[]
+  runs            Run[]
+  reels           Reel[]
+  roleAssignments RoleAssignment[]
+  channels        Channel[]
+  affiliations    OrganizationAffiliation[]
+
+  @@index([status, startsAt])
+}
+
+// An Event is hosted by one kennel or a coalition
+model EventHostKennel {
+  eventId   String  @db.Uuid
+  kennelId  String  @db.Uuid
+  isPrimary Boolean @default(false)
+
+  event  Event  @relation(fields: [eventId], references: [id])
+  kennel Kennel @relation(fields: [kennelId], references: [id])
+
+  @@id([eventId, kennelId])
+}
+
+model EventSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventId     String   @db.Uuid
+  title       String
+  description String?
+  location    String?
+  startsAt    DateTime
+  endsAt      DateTime
+
+  event Event @relation(fields: [eventId], references: [id])
+
+  @@index([eventId, startsAt])
+}
+
+model Registration {
+  id           String             @id @default(uuid()) @db.Uuid
+  eventId      String             @db.Uuid
+  userId       String?            @db.Uuid
+  guestId      String?            @db.Uuid
+  status       RegistrationStatus @default(PENDING)
+  ticketCode   String             @unique @default(uuid())
+  ticketType   String?
+  registeredAt DateTime           @default(now())
+  cancelledAt  DateTime?
+  checkedInAt  DateTime?
+
+  event Event         @relation(fields: [eventId], references: [id])
+  user  User?         @relation(fields: [userId], references: [id])
+  guest GuestProfile? @relation(fields: [guestId], references: [id])
+
+  @@unique([eventId, userId])
+  @@unique([eventId, guestId])
+}
+
+model Sponsor {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  url       String?
+  logoUrl   String?
+  createdAt DateTime @default(now())
+
+  events EventSponsor[]
+}
+
+model EventSponsor {
+  eventId   String  @db.Uuid
+  sponsorId String  @db.Uuid
+  tier      String?
+
+  event   Event   @relation(fields: [eventId], references: [id])
+  sponsor Sponsor @relation(fields: [sponsorId], references: [id])
+
+  @@id([eventId, sponsorId])
+}
+
+model VolunteerAssignment {
+  id           String          @id @default(uuid()) @db.Uuid
+  userId       String          @db.Uuid
+  eventId      String?         @db.Uuid
+  runId        String?         @db.Uuid
+  role         String // CHECK_IN, BEER_STOP, SAFETY, SWEEP, CLEANUP, MEDIA, ...
+  status       VolunteerStatus @default(INVITED)
+  shiftStartsAt DateTime?
+  shiftEndsAt  DateTime?
+  assignedById String?         @db.Uuid
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id])
+  event Event? @relation(fields: [eventId], references: [id])
+  run   Run?   @relation(fields: [runId], references: [id])
+
+  @@index([userId])
+  @@index([runId])
+  @@index([eventId])
+}
+
+// Run Session (Ch.23 Part C)
+model Run {
+  id               String        @id @default(uuid()) @db.Uuid
+  kennelId         String        @db.Uuid
+  eventId          String?       @db.Uuid
+  runNumber        Int
+  title            String
+  description      String?
+  theme            String?
+  // The flyer a kennel puts out for the run — the thing that lands in WhatsApp
+  // today. Optional: the details below say the same thing in words (D43).
+  posterUrl        String?
+  runType          RunType       @default(REGULAR)
+  status           RunStatus     @default(DRAFT)
+  // D3/D13: defaults from Kennel.defaultRunVisibility; changed only by the
+  // kennel admin or a hare holding a delegation.
+  visibility       RunVisibility
+  startsAt         DateTime
+  timeZone         String
+  meetingPointName String?
+  meetingAddress   String?
+  meetingLatitude  Float?
+  meetingLongitude Float?
+  country          String
+  city             String
+  // D1: no waitlist. When set and reached, joining is rejected.
+  capacity         Int?
+  allowGuests      Boolean       @default(true)
+  allowVisitors    Boolean       @default(true)
+  hashCash         String?
+  isPaused         Boolean       @default(false)
+  circleSkipReason String?
+  // D22: cancellation is terminal and keeps RSVPs for the record
+  cancelReason     String?
+  cancelledById    String?       @db.Uuid
+  cancelledAt      DateTime?
+  trailReleasedAt  DateTime?
+  circleSkippedById String?      @db.Uuid
+  weather          Json?
+  createdById      String        @db.Uuid
+  scheduledAt      DateTime?
+  checkInOpenedAt  DateTime?
+  startedAt        DateTime?
+  endedAt          DateTime?
+  archivedAt       DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  kennel          Kennel                @relation(fields: [kennelId], references: [id])
+  event           Event?                @relation(fields: [eventId], references: [id])
+  hares           RunHare[]
+  pauses          RunPause[]
+  trails          Trail[]
+  participations  Participation[]
+  circle          Circle?
+  trailReport     TrailReport?
+  capsule         RunCapsule?
+  storyAssets     StoryAsset[]
+  reels           Reel[]
+  posts           Post[]
+  hareOffers      HareOffer[]
+  volunteers      VolunteerAssignment[]
+  roleAssignments RoleAssignment[]
+  channels        Channel[]
+  aiSuggestions   AiSuggestion[]
+
+  // BR-RUN-001
+  @@unique([kennelId, runNumber])
+  @@index([status, startsAt])
+  @@index([kennelId, startsAt])
+}
+
+// BR-RUN-003: at least one hare before publication
+// "Please pick a date convenient for you to hare a run" — the ask every kennel
+// makes, as something a hasher can answer from the platform (D44). Offering is
+// not haring: an officer still says yes, because a trail is the kennel's name
+// on the line.
+model HareOffer {
+  id         String          @id @default(uuid()) @db.Uuid
+  runId      String          @db.Uuid
+  userId     String          @db.Uuid
+  // What they said when they offered, and whether they want to lead.
+  message    String?
+  wantsLead  Boolean         @default(false)
+  status     HareOfferStatus @default(OFFERED)
+  decidedById String?        @db.Uuid
+  decidedAt  DateTime?
+  // Why an offer was turned down, or why it was withdrawn.
+  reason     String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  run  Run  @relation(fields: [runId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([runId, status])
+  @@index([userId])
+}
+
+model RunHare {
+  runId   String   @db.Uuid
+  userId  String   @db.Uuid
+  isLead  Boolean  @default(false)
+  addedAt DateTime @default(now())
+
+  run  Run  @relation(fields: [runId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@id([runId, userId])
+}
+
+// Ch.22 A.3 Paused sub-state, recorded on the timeline
+model RunPause {
+  id        String    @id @default(uuid()) @db.Uuid
+  runId     String    @db.Uuid
+  pausedAt  DateTime  @default(now())
+  resumedAt DateTime?
+  reason    String?
+  actorId   String    @db.Uuid
+
+  run Run @relation(fields: [runId], references: [id])
+
+  @@index([runId])
+}
+
+// Attendance / RSVP / check-in. Exactly one of userId or guestId (D2).
+// Immutable once the run is archived (BR-RUN-008).
+model Participation {
+  id            String         @id @default(uuid()) @db.Uuid
+  runId         String         @db.Uuid
+  userId        String?        @db.Uuid
+  guestId       String?        @db.Uuid
+  rsvpStatus    RsvpStatus     @default(GOING)
+  isVisitor     Boolean        @default(false)
+  // BR-RUN-009: home kennel attribution snapshotted at RSVP time
+  homeKennelId  String?        @db.Uuid
+  isVirginRun   Boolean        @default(false)
+  checkInMethod CheckInMethod?
+  checkedInAt   DateTime?
+  checkedInById String?        @db.Uuid
+  lockedAt      DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  run   Run           @relation(fields: [runId], references: [id])
+  user  User?         @relation(fields: [userId], references: [id])
+  guest GuestProfile? @relation(fields: [guestId], references: [id])
+
+  @@unique([runId, userId])
+  @@unique([runId, guestId])
+  @@index([userId])
+}
+
+model Circle {
+  id            String    @id @default(uuid()) @db.Uuid
+  runId         String    @unique @db.Uuid
+  startedAt     DateTime?
+  endedAt       DateTime?
+  songs         String[]
+  announcements String?
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  run    Run     @relation(fields: [runId], references: [id])
+  awards Award[]
+}
+
+model Award {
+  id               String   @id @default(uuid()) @db.Uuid
+  circleId         String   @db.Uuid
+  title            String
+  reason           String?
+  isDownDown       Boolean  @default(false)
+  recipientUserId  String?  @db.Uuid
+  recipientGuestId String?  @db.Uuid
+  recipientName    String?
+  awardedById      String?  @db.Uuid
+  createdAt        DateTime @default(now())
+
+  circle         Circle        @relation(fields: [circleId], references: [id])
+  recipientUser  User?         @relation(fields: [recipientUserId], references: [id])
+  recipientGuest GuestProfile? @relation(fields: [recipientGuestId], references: [id])
+
+  @@index([circleId])
+}
+
+// ───────────────────── Part D — Trails ─────────────────────
+
+model Trail {
+  id                   String       @id @default(uuid()) @db.Uuid
+  runId                String       @db.Uuid
+  name                 String
+  style                TrailStyle   @default(DEAD_HARE)
+  status               TrailStatus  @default(IDEA)
+  estimatedDistanceM   Int?
+  estimatedDurationMin Int?
+  terrain              String?
+  // Secret until release (BR-TRAIL-005). Never serialized to a participant
+  // before releasedAt is set; enforced server-side.
+  routeGeoJson         Json?
+  startLatitude        Float?
+  startLongitude       Float?
+  finishLatitude       Float?
+  finishLongitude      Float?
+  notes                String?
+  releaseMode          ReleaseMode  @default(AT_RUN_START)
+  releaseAt            DateTime?
+  geofenceLatitude     Float?
+  geofenceLongitude    Float?
+  geofenceRadiusM      Int?
+  // Ch.22 B.3: devices may pre-cache the encrypted payload; this key is only
+  // handed out once the release condition is met.
+  payloadKeyEncrypted  String?
+  releasedAt           DateTime?
+  releasedById         String?      @db.Uuid
+  lockedAt             DateTime?
+  lockedById           String?      @db.Uuid
+  safetyReviewedAt     DateTime?
+  safetyReviewedById   String?      @db.Uuid
+  trailDna             Json?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  run         Run                  @relation(fields: [runId], references: [id])
+  hares       TrailHare[]
+  waypoints   Waypoint[]
+  beerChecks  BeerCheck[]
+  chalk       DigitalChalkSymbol[]
+  revisions   TrailRevision[]
+
+  // BR-TRAIL-001
+  @@unique([runId, name])
+  @@index([status])
+}
+
+// BR-TRAIL-003: one lead hare, zero or more co-hares
+model TrailHare {
+  trailId String   @db.Uuid
+  userId  String   @db.Uuid
+  isLead  Boolean  @default(false)
+  addedAt DateTime @default(now())
+
+  trail Trail @relation(fields: [trailId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@id([trailId, userId])
+}
+
+model Waypoint {
+  id        String       @id @default(uuid()) @db.Uuid
+  trailId   String       @db.Uuid
+  kind      WaypointKind
+  label     String?
+  latitude  Float
+  longitude Float
+  sequence  Int
+  notes     String?
+  deletedAt DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  trail Trail @relation(fields: [trailId], references: [id])
+
+  @@index([trailId, sequence])
+}
+
+model BeerCheck {
+  id        String    @id @default(uuid()) @db.Uuid
+  trailId   String    @db.Uuid
+  name      String
+  latitude  Float
+  longitude Float
+  sequence  Int
+  notes     String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  trail Trail @relation(fields: [trailId], references: [id])
+
+  @@index([trailId, sequence])
+}
+
+// BR-TRAIL-007: deleted symbols stay (soft delete + revision history)
+model DigitalChalkSymbol {
+  id          String      @id @default(uuid()) @db.Uuid
+  trailId     String      @db.Uuid
+  symbol      ChalkSymbol
+  customLabel String?
+  latitude    Float
+  longitude   Float
+  bearingDeg  Float?
+  sequence    Int?
+  placedById  String      @db.Uuid
+  placedAt    DateTime    @default(now())
+  deletedAt   DateTime?
+  deletedById String?     @db.Uuid
+
+  trail    Trail @relation(fields: [trailId], references: [id])
+  placedBy User  @relation(fields: [placedById], references: [id])
+
+  @@index([trailId])
+}
+
+// BR-TRAIL-008 — immutable
+model TrailRevision {
+  id        String   @id @default(uuid()) @db.Uuid
+  trailId   String   @db.Uuid
+  editorId  String   @db.Uuid
+  changes   Json // changed elements with previous values
+  reason    String?
+  createdAt DateTime @default(now())
+
+  trail  Trail @relation(fields: [trailId], references: [id])
+  editor User  @relation(fields: [editorId], references: [id])
+
+  @@index([trailId, createdAt])
+}
+
+// ───────────────────── Part E — Story & Capsule ─────────────────────
+
+model StoryAsset {
+  id            String        @id @default(uuid()) @db.Uuid
+  runId         String        @db.Uuid
+  category      StoryCategory
+  source        StorySource
+  body          String
+  occurredAt    DateTime
+  contributorId String?       @db.Uuid
+  trailReportId String?       @db.Uuid
+  refType       String?
+  refId         String?       @db.Uuid
+  createdAt     DateTime      @default(now())
+
+  run         Run          @relation(fields: [runId], references: [id])
+  contributor User?        @relation(fields: [contributorId], references: [id])
+  trailReport TrailReport? @relation(fields: [trailReportId], references: [id])
+
+  @@index([runId, occurredAt])
+}
+
+// Ch.22 A.5 — exactly one official report per run (BR-SCRIBE-002)
+model TrailReport {
+  id                String            @id @default(uuid()) @db.Uuid
+  runId             String            @unique @db.Uuid
+  status            TrailReportStatus @default(DRAFT)
+  officialScribeId  String            @db.Uuid
+  title             String
+  body              String            @default("")
+  // true until a human has accepted every AI suggestion (Ch.22 A.5)
+  aiAssisted        Boolean           @default(false)
+  publishedAt       DateTime?
+  publishedById     String?           @db.Uuid
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  run            Run                      @relation(fields: [runId], references: [id])
+  officialScribe User                     @relation(fields: [officialScribeId], references: [id])
+  contributors   TrailReportContributor[]
+  revisions      ReportRevision[]
+  comments       ReportReviewComment[]
+  storyAssets    StoryAsset[]
+  capsule        RunCapsule?
+  aiSuggestions  AiSuggestion[]
+}
+
+model TrailReportContributor {
+  reportId String                @db.Uuid
+  userId   String                @db.Uuid
+  role     ReportContributorRole
+  addedAt  DateTime              @default(now())
+
+  report TrailReport @relation(fields: [reportId], references: [id])
+  user   User        @relation(fields: [userId], references: [id])
+
+  @@id([reportId, userId, role])
+}
+
+// BR-SCRIBE-008 / BR-SCRIBE-011 — immutable; publications and post-publication
+// corrections are revisions, the original stays findable.
+model ReportRevision {
+  id            String   @id @default(uuid()) @db.Uuid
+  reportId      String   @db.Uuid
+  version       Int
+  title         String
+  body          String
+  authorId      String   @db.Uuid
+  aiAssisted    Boolean  @default(false)
+  isPublication Boolean  @default(false)
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  report TrailReport @relation(fields: [reportId], references: [id])
+  author User        @relation(fields: [authorId], references: [id])
+
+  @@unique([reportId, version])
+}
+
+model ReportReviewComment {
+  id         String    @id @default(uuid()) @db.Uuid
+  reportId   String    @db.Uuid
+  authorId   String    @db.Uuid
+  body       String
+  anchor     String?
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  report TrailReport @relation(fields: [reportId], references: [id])
+  author User        @relation(fields: [authorId], references: [id])
+
+  @@index([reportId])
+}
+
+// Ch.22 A.6 — exactly one per run (BR-CAPSULE-002)
+model RunCapsule {
+  id             String        @id @default(uuid()) @db.Uuid
+  runId          String        @unique @db.Uuid
+  status         CapsuleStatus @default(PLANNED)
+  isLegacyImport Boolean       @default(false)
+  trailReportId  String?       @unique @db.Uuid
+  summary        String?
+  timeline       Json?
+  publishedAt    DateTime?
+  publishedById  String?       @db.Uuid
+  archivedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  run           Run                    @relation(fields: [runId], references: [id])
+  trailReport   TrailReport?           @relation(fields: [trailReportId], references: [id])
+  supplementals SupplementalArtifact[]
+}
+
+// BR-CAPSULE-005 — post-publication additions, visibly distinct from the original
+model SupplementalArtifact {
+  id            String           @id @default(uuid()) @db.Uuid
+  capsuleId     String           @db.Uuid
+  type          SupplementalType
+  title         String
+  description   String?
+  mediaAssetId  String?          @db.Uuid
+  contributorId String           @db.Uuid
+  addedAt       DateTime         @default(now())
+
+  capsule     RunCapsule  @relation(fields: [capsuleId], references: [id])
+  mediaAsset  MediaAsset? @relation(fields: [mediaAssetId], references: [id])
+  contributor User        @relation(fields: [contributorId], references: [id])
+
+  @@index([capsuleId])
+}
+
+// Advisory AI output (D7/D14). Never publishes, registers attendance, or
+// changes governance: a human decision turns a suggestion into a real action.
+model AiSuggestion {
+  id            String             @id @default(uuid()) @db.Uuid
+  kind          AiSuggestionKind
+  status        AiSuggestionStatus @default(PENDING)
+  requestedById String             @db.Uuid
+  kennelId      String?            @db.Uuid
+  runId         String?            @db.Uuid
+  reportId      String?            @db.Uuid
+  model         String
+  promptVersion String
+  input         Json?
+  output        String
+  sourceRefs    Json?
+  decidedById   String?            @db.Uuid
+  decidedAt     DateTime?
+  createdAt     DateTime           @default(now())
+
+  requestedBy User         @relation(fields: [requestedById], references: [id])
+  run         Run?         @relation(fields: [runId], references: [id])
+  report      TrailReport? @relation(fields: [reportId], references: [id])
+
+  @@index([kind, status])
+}
+
+// ───────────────────── Part F — Media ─────────────────────
+
+model MediaAsset {
+  id              String          @id @default(uuid()) @db.Uuid
+  uploaderId      String?         @db.Uuid
+  // Idempotency key from the offline upload queue (Ch.22 B.2)
+  clientId        String?         @unique
+  kind            MediaKind
+  storageKey      String
+  url             String?
+  thumbnailUrl    String?
+  mimeType        String
+  sizeBytes       BigInt
+  width           Int?
+  height          Int?
+  durationSec     Float?
+  caption         String?
+  license         String?
+  latitude        Float?
+  longitude       Float?
+  capturedAt      DateTime?
+  uploadState     UploadState     @default(QUEUED)
+  moderationState ModerationState @default(PENDING)
+  moderatedById   String?         @db.Uuid
+  moderatedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Attribution is permanent (BR-CAPSULE-007)
+  uploader      User?                  @relation(fields: [uploaderId], references: [id])
+  links         MediaLink[]
+  reels         Reel[]
+  supplementals SupplementalArtifact[]
+  evidence      EvidenceRecord[]
+
+  @@index([uploaderId])
+  @@index([uploadState, moderationState])
+}
+
+// Polymorphic link. At least one link per asset is enforced in the service
+// (BR-RUN-007); links to hidden-trail targets inherit trail secrecy.
+model MediaLink {
+  id         String          @id @default(uuid()) @db.Uuid
+  mediaId    String          @db.Uuid
+  targetType MediaTargetType
+  targetId   String          @db.Uuid
+  createdAt  DateTime        @default(now())
+
+  media MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@unique([mediaId, targetType, targetId])
+  @@index([targetType, targetId])
+}
+
+model Gallery {
+  id          String   @id @default(uuid()) @db.Uuid
+  kennelId    String   @db.Uuid
+  title       String
+  description String?
+  isFeatured  Boolean  @default(false)
+  createdById String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  kennel Kennel @relation(fields: [kennelId], references: [id])
+
+  @@index([kennelId])
+}
+
+// A hasher's short video: at a run, at a meeting, or holding a beer at home
+// (D41). Attribution is permanent, like every other piece of media.
+model Reel {
+  id         String         @id @default(uuid()) @db.Uuid
+  authorId   String         @db.Uuid
+  // Optional context. A reel needs none of these — "just at home" is a reel too.
+  kennelId   String?        @db.Uuid
+  runId      String?        @db.Uuid
+  eventId    String?        @db.Uuid
+  caption    String?
+  status     ReelStatus     @default(DRAFT)
+  visibility ReelVisibility @default(PUBLIC)
+  // The video itself, linked through MediaLink like all other media.
+  mediaId    String?        @db.Uuid
+  publishedAt DateTime?
+  archivedAt  DateTime?
+  // Set when a moderator takes it down; the row stays (append-only history).
+  removedAt   DateTime?
+  removedById String?       @db.Uuid
+  removedReason String?
+  viewCount  Int            @default(0)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  author User    @relation("ReelAuthor", fields: [authorId], references: [id])
+  kennel Kennel? @relation(fields: [kennelId], references: [id])
+  run    Run?    @relation(fields: [runId], references: [id])
+  event  Event?  @relation(fields: [eventId], references: [id])
+  media  MediaAsset? @relation(fields: [mediaId], references: [id])
+
+  @@index([status, publishedAt])
+  @@index([authorId])
+  @@index([kennelId])
+  @@index([runId])
+}
+
+// ───────────────────── Part G — Communication & Notification ─────────────────────
+
+model Announcement {
+  id          String    @id @default(uuid()) @db.Uuid
+  kennelId    String    @db.Uuid
+  authorId    String    @db.Uuid
+  title       String
+  body        String
+  category    String?
+  isPinned    Boolean   @default(false)
+  publishAt   DateTime?
+  publishedAt DateTime?
+  expiresAt   DateTime?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  kennel Kennel @relation(fields: [kennelId], references: [id])
+  author User   @relation(fields: [authorId], references: [id])
+
+  @@index([kennelId, publishedAt])
+}
+
+// Group-scoped only. There is intentionally no 1:1 conversation model (D8).
+model Channel {
+  id          String      @id @default(uuid()) @db.Uuid
+  type        ChannelType
+  name        String
+  kennelId    String?     @db.Uuid
+  eventId     String?     @db.Uuid
+  committeeId String?     @db.Uuid
+  runId       String?     @db.Uuid
+  archivedAt  DateTime?
+  createdAt   DateTime    @default(now())
+
+  kennel    Kennel?         @relation(fields: [kennelId], references: [id])
+  event     Event?          @relation(fields: [eventId], references: [id])
+  committee Committee?      @relation(fields: [committeeId], references: [id])
+  run       Run?            @relation(fields: [runId], references: [id])
+  members   ChannelMember[]
+  messages  Message[]
+}
+
+model ChannelMember {
+  channelId String    @db.Uuid
+  userId    String    @db.Uuid
+  joinedAt  DateTime  @default(now())
+  mutedAt   DateTime?
+
+  channel Channel @relation(fields: [channelId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@id([channelId, userId])
+}
+
+model Message {
+  id        String    @id @default(uuid()) @db.Uuid
+  channelId String    @db.Uuid
+  authorId  String    @db.Uuid
+  parentId  String?   @db.Uuid
+  body      String
+  editedAt  DateTime?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  channel Channel   @relation(fields: [channelId], references: [id])
+  author  User      @relation(fields: [authorId], references: [id])
+  parent  Message?  @relation("MessageThread", fields: [parentId], references: [id])
+  replies Message[] @relation("MessageThread")
+
+  @@index([channelId, createdAt])
+}
+
+// Ch.22 A.11 — immutable once delivered (FR-NOT-001). Guests are reachable by
+// email only (D12).
+model Notification {
+  id               String               @id @default(uuid()) @db.Uuid
+  recipientUserId  String?              @db.Uuid
+  recipientGuestId String?              @db.Uuid
+  category         NotificationCategory
+  priority         NotificationPriority @default(NORMAL)
+  status           NotificationStatus   @default(CREATED)
+  title            String
+  body             String
+  contextType      String?
+  contextId        String?              @db.Uuid
+  domainEventId    String?              @db.Uuid
+  deliveryPolicy   String?
+  evaluationReason String?
+  deliveredAt      DateTime?
+  readAt           DateTime?
+  expiresAt        DateTime?
+  createdAt        DateTime             @default(now())
+
+  recipientUser  User?                  @relation(fields: [recipientUserId], references: [id])
+  recipientGuest GuestProfile?          @relation(fields: [recipientGuestId], references: [id])
+  deliveries     NotificationDelivery[]
+
+  @@index([recipientUserId, status, createdAt])
+  @@index([domainEventId])
+}
+
+model NotificationDelivery {
+  id                String          @id @default(uuid()) @db.Uuid
+  notificationId    String          @db.Uuid
+  channel           DeliveryChannel
+  status            DeliveryStatus  @default(PENDING)
+  providerMessageId String?
+  error             String?
+  attemptedAt       DateTime?
+  createdAt         DateTime        @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model NotificationPreference {
+  id              String               @id @default(uuid()) @db.Uuid
+  userId          String               @db.Uuid
+  category        NotificationCategory
+  channel         DeliveryChannel
+  enabled         Boolean              @default(true)
+  kennelId        String?              @db.Uuid
+  eventId         String?              @db.Uuid
+  quietHoursStart String? // "22:00" in the user's time zone
+  quietHoursEnd   String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category, channel, kennelId, eventId])
+}
+
+// BR-RUN-013: notifications only for events the kennel has enabled
+model KennelNotificationRule {
+  id       String               @id @default(uuid()) @db.Uuid
+  kennelId String               @db.Uuid
+  category NotificationCategory
+  enabled  Boolean              @default(true)
+
+  kennel Kennel @relation(fields: [kennelId], references: [id])
+
+  @@unique([kennelId, category])
+}
+
+model PushDevice {
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @db.Uuid
+  platform   DevicePlatform
+  pushToken  String         @unique
+  lastSeenAt DateTime       @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ───────────────────── Part H — Evidence, Audit, Events, Sync ─────────────────────
+
+model EvidenceRecord {
+  id                 String           @id @default(uuid()) @db.Uuid
+  category           EvidenceCategory
+  kennelId           String?          @db.Uuid
+  sourceType         String
+  sourceRef          String?
+  description        String?
+  confidence         Float?
+  verificationStatus EvidenceStatus   @default(UNVERIFIED)
+  verifiedById       String?          @db.Uuid
+  verifiedAt         DateTime?
+  expiresAt          DateTime?
+  chainOfCustody     Json?
+  mediaAssetId       String?          @db.Uuid
+  createdById        String?          @db.Uuid
+  createdAt          DateTime         @default(now())
+
+  mediaAsset MediaAsset?    @relation(fields: [mediaAssetId], references: [id])
+  links      EvidenceLink[]
+
+  @@index([category, verificationStatus])
+}
+
+model EvidenceLink {
+  id          String   @id @default(uuid()) @db.Uuid
+  evidenceId  String   @db.Uuid
+  subjectType String
+  subjectId   String   @db.Uuid
+  createdAt   DateTime @default(now())
+
+  evidence EvidenceRecord @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([evidenceId, subjectType, subjectId])
+  @@index([subjectType, subjectId])
+}
+
+// Append-only governance record: who was allowed to do what, and why.
+// Also carries Ch.23's GovernanceAuditEntry (kennelId set).
+model AuditLog {
+  id            String        @id @default(uuid()) @db.Uuid
+  actorId       String?       @db.Uuid
+  actorType     ActorType     @default(USER)
+  action        String
+  resourceType  String
+  resourceId    String?       @db.Uuid
+  kennelId      String?       @db.Uuid
+  decision      AuditDecision @default(ALLOWED)
+  previousState Json?
+  newState      Json?
+  reason        String?
+  policyRef     String?
+  evidenceId    String?       @db.Uuid
+  domainEventId String?       @db.Uuid
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime      @default(now())
+
+  @@index([resourceType, resourceId, createdAt])
+  @@index([kennelId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+// Ch.24 envelope, written in the same transaction as the state change
+// (transactional outbox). Consumers read unpublished rows.
+model DomainEvent {
+  id               String    @id @default(uuid()) @db.Uuid
+  eventType        String
+  version          Int       @default(1)
+  occurredAt       DateTime  @default(now())
+  // Ch.24 offline rule: client-asserted time kept separately from server time
+  clientOccurredAt DateTime?
+  actorId          String?   @db.Uuid
+  actorType        ActorType @default(USER)
+  aggregateType    String
+  aggregateId      String    @db.Uuid
+  payload          Json
+  publishedAt      DateTime?
+  attempts         Int       @default(0)
+
+  @@index([aggregateType, aggregateId, occurredAt])
+  @@index([publishedAt, occurredAt])
+}
+
+// Ch.22 B.1 — queued offline actions are applied idempotently by client id
+model SyncOperation {
+  id                String     @id @default(uuid()) @db.Uuid
+  clientOperationId String     @unique
+  userId            String     @db.Uuid
+  deviceId          String?
+  operation         String
+  payload           Json
+  status            SyncStatus @default(RECEIVED)
+  result            Json?
+  clientOccurredAt  DateTime?
+  receivedAt        DateTime   @default(now())
+  appliedAt         DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, receivedAt])
+}
+
+// ───────────────────── Part I — Social graph & engagement (D50) ─────────────────────
+
+// What a hasher can follow. A follow is interest, not belonging: following a
+// kennel is not joining it, and it grants no membership and no authority.
+enum FollowTargetType {
+  USER
+  KENNEL
+}
+
+// What can be liked, commented on, reshared, bookmarked and counted as seen.
+// Polymorphic on purpose: the feed already mixes kinds (D42), so engagement
+// that only worked on one of them would be engagement the feed could not show.
+enum SubjectType {
+  REEL
+  POST
+  TRAIL_REPORT
+  MEDIA_ASSET
+  RUN
+  RUN_CAPSULE
+  // A comment is itself likeable, which is the whole reason this is an enum
+  // and not a boolean somewhere.
+  COMMENT
+}
+
+// Ch.22 shape for a comment: visible, withdrawn by its author, or taken down by
+// a moderator. The row never leaves; only what it says changes.
+enum CommentStatus {
+  VISIBLE
+  DELETED
+  REMOVED
+}
+
+// Follow is a toggle, not a ledger: one row per (follower, target) that is
+// re-activated rather than duplicated. The history lives in DomainEvent, where
+// every other append-only record lives.
+//
+// Polymorphic targetId with no foreign key, the same shape MediaLink uses — a
+// nullable per-type column would let Postgres treat NULLs as distinct and admit
+// duplicate follows straight through the unique index.
+model Follow {
+  id           String           @id @default(uuid()) @db.Uuid
+  followerId   String           @db.Uuid
+  targetType   FollowTargetType
+  targetId     String           @db.Uuid
+  followedAt   DateTime         @default(now())
+  unfollowedAt DateTime?
+
+  follower User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, targetType, targetId])
+  @@index([targetType, targetId, unfollowedAt])
+  @@index([followerId, unfollowedAt])
+}
+
+// Denormalised counters, one row per subject. The feed asks for the numbers of
+// twenty mixed things at once; six aggregate queries per card is the version of
+// this that does not survive contact with a phone.
+model ContentStats {
+  subjectType   SubjectType
+  subjectId     String      @db.Uuid
+  likeCount     Int         @default(0)
+  commentCount  Int         @default(0)
+  reshareCount  Int         @default(0)
+  bookmarkCount Int         @default(0)
+  // Distinct signed-in viewers. Anonymous opens are a raw tally because the
+  // alternative is fingerprinting people who have not identified themselves.
+  viewerCount   Int         @default(0)
+  anonViewCount Int         @default(0)
+  updatedAt     DateTime    @updatedAt
+
+  @@id([subjectType, subjectId])
+}
+
+// A like is a toggle like a follow: unliking sets `unlikedAt`, re-liking clears
+// it, and the pair stays unique.
+model ContentLike {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String      @db.Uuid
+  subjectType SubjectType
+  subjectId   String      @db.Uuid
+  likedAt     DateTime    @default(now())
+  unlikedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subjectType, subjectId])
+  @@index([subjectType, subjectId, unlikedAt])
+  @@index([userId, unlikedAt])
+}
+
+// Public comment on a piece of content. Deliberately not ReportReviewComment:
+// that one is editorial and lives before publication (D29), this one is the
+// conversation after it.
+//
+// One level of replies. A reply to a reply is attached to the same root, so a
+// thread can be read top to bottom without recursion.
+model ContentComment {
+  id            String        @id @default(uuid()) @db.Uuid
+  subjectType   SubjectType
+  subjectId     String        @db.Uuid
+  authorId      String        @db.Uuid
+  parentId      String?       @db.Uuid
+  body          String
+  status        CommentStatus @default(VISIBLE)
+  editedAt      DateTime?
+  deletedAt     DateTime?
+  removedAt     DateTime?
+  removedById   String?       @db.Uuid
+  removedReason String?
+  replyCount    Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  author    User             @relation("CommentAuthor", fields: [authorId], references: [id])
+  removedBy User?            @relation("CommentRemover", fields: [removedById], references: [id])
+  parent    ContentComment?  @relation("CommentThread", fields: [parentId], references: [id])
+  replies   ContentComment[] @relation("CommentThread")
+
+  @@index([subjectType, subjectId, createdAt])
+  @@index([parentId, createdAt])
+  @@index([authorId])
+}
+
+// A quote reshare: the sharer's own feed entry pointing at somebody else's.
+// It carries no visibility of its own — a reshare can never open a door the
+// original keeps shut, the same rule a reel of a members-only run obeys (D41).
+model ContentReshare {
+  id          String      @id @default(uuid()) @db.Uuid
+  sharerId    String      @db.Uuid
+  subjectType SubjectType
+  subjectId   String      @db.Uuid
+  commentary  String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  undoneAt    DateTime?
+
+  sharer User @relation("Resharer", fields: [sharerId], references: [id], onDelete: Cascade)
+
+  @@unique([sharerId, subjectType, subjectId])
+  @@index([subjectType, subjectId, undoneAt])
+  @@index([sharerId, undoneAt])
+}
+
+// Private to the hasher who made it. A bookmark is never shown to anybody else
+// and never notifies the author, which is the difference between saving
+// something and applauding it.
+model ContentBookmark {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String      @db.Uuid
+  subjectType SubjectType
+  subjectId   String      @db.Uuid
+  note        String?
+  createdAt   DateTime    @default(now())
+  removedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subjectType, subjectId])
+  @@index([userId, removedAt, createdAt])
+}
+
+// One row per signed-in viewer per subject, first view and last. Anonymous
+// opens never make a row; they bump ContentStats.anonViewCount instead.
+model ContentView {
+  id            String      @id @default(uuid()) @db.Uuid
+  viewerId      String      @db.Uuid
+  subjectType   SubjectType
+  subjectId     String      @db.Uuid
+  firstViewedAt DateTime    @default(now())
+  lastViewedAt  DateTime    @default(now())
+  viewCount     Int         @default(1)
+
+  viewer User @relation(fields: [viewerId], references: [id], onDelete: Cascade)
+
+  @@unique([viewerId, subjectType, subjectId])
+  @@index([subjectType, subjectId])
+}
+
+// ───────────────────── Part J — A hasher's written post (D51) ─────────────────────
+
+// Ch.22 shape for a post: published the moment it is written, ended either by
+// its author (Archived) or by a moderator (Removed). There is no Draft: a post
+// is words, and words are finished when the hasher presses post — the draft
+// step reels need exists only because a video has to finish uploading first.
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  REMOVED
+}
+
+// "What's on trail?" — a hasher's own words in the feed (D51).
+//
+// Deliberately not a Reel. D48 refuses a reel with nothing in it because a reel
+// with no media is a broken player; a post with no photo is just a post. The
+// two are siblings: a reel is media with a caption, a post is words with
+// optional photos, and both belong to the hasher rather than to a kennel (D41).
+//
+// A post is always public (D51). There is no visibility column, because a
+// column with one value is a promise the schema cannot keep — adding audiences
+// later means adding the column then, with the migration that admits it.
+model Post {
+  id            String     @id @default(uuid()) @db.Uuid
+  authorId      String     @db.Uuid
+  // Optional context, like a reel's: where the hasher was, not who may read it.
+  kennelId      String?    @db.Uuid
+  runId         String?    @db.Uuid
+  body          String
+  status        PostStatus @default(DRAFT)
+  publishedAt   DateTime?
+  editedAt      DateTime?
+  archivedAt    DateTime?
+  // Set when a moderator takes it down; the row stays (append-only history).
+  removedAt     DateTime?
+  removedById   String?    @db.Uuid
+  removedReason String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  author    User    @relation("PostAuthor", fields: [authorId], references: [id])
+  removedBy User?   @relation("PostRemover", fields: [removedById], references: [id])
+  kennel    Kennel? @relation(fields: [kennelId], references: [id])
+  run       Run?    @relation(fields: [runId], references: [id])
+
+  @@index([status, publishedAt])
+  @@index([authorId, status])
+  @@index([kennelId, status])
+}

@@ -1,0 +1,319 @@
+@import "tailwindcss";
+
+/* HCP brand system (D24): Orange × Black × Flour.
+   HCP Orange #F4511E, Hash Black #171717, Flour #F4F1E8 are the identity.
+   Beer Gold, Trail Green and Hash Red are semantic only, never brand colours.
+
+   Contrast rules baked into the tokens:
+   - Orange is a FILL. On Flour it is 3.1:1, so it never carries small text.
+     Buttons are orange with Hash Black on top (5.2:1).
+   - --primary-strong is the orange for text, links and small icons: Ember
+     #B83A0E on light (5.1:1), a lighter #FF7043 on dark (6.9:1).
+   - Beer Gold is the same story: a fill with black on it, with --accent-strong
+     for text (5.5:1 on Flour).
+   Every token is defined in full for light, system-dark and the explicit .dark
+   class, so neither theme inherits a half-set palette. */
+:root {
+  --background: #f4f1e8;
+  /* Page ground behind cards in the feed shell, one step deeper than Flour */
+  --canvas: #eae5d6;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --primary: #f4511e;
+  --primary-foreground: #171717;
+  --primary-strong: #b83a0e;
+  --secondary: #e8e2d2;
+  --secondary-foreground: #171717;
+  --muted: #f0ece0;
+  --muted-foreground: #6b6b63;
+  --accent: #d9a441;
+  --accent-foreground: #171717;
+  --accent-strong: #7a5c14;
+  --trail: #3f6b4f;
+  --border: #e0d9c6;
+  --input: #cfc7b2;
+  --ring: #f4511e;
+  --destructive: #c62828;
+  --destructive-foreground: #ffffff;
+  --radius: 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --background: #111111;
+    --canvas: #0c0c0c;
+    --foreground: #f4f1e8;
+    --card: #1c1c1c;
+    --card-foreground: #f4f1e8;
+    --primary: #f4511e;
+    --primary-foreground: #171717;
+    --primary-strong: #ff7043;
+    --secondary: #242424;
+    --secondary-foreground: #f4f1e8;
+    --muted: #242424;
+    --muted-foreground: #a6a39b;
+    --accent: #d9a441;
+    --accent-foreground: #171717;
+    --accent-strong: #d9a441;
+    --trail: #6fa57f;
+    --border: #2e2e2e;
+    --input: #3a3a38;
+    --ring: #f4511e;
+    --destructive: #f05545;
+    --destructive-foreground: #171717;
+  }
+}
+
+.dark {
+  --background: #111111;
+  --canvas: #0c0c0c;
+  --foreground: #f4f1e8;
+  --card: #1c1c1c;
+  --card-foreground: #f4f1e8;
+  --primary: #f4511e;
+  --primary-foreground: #171717;
+  --primary-strong: #ff7043;
+  --secondary: #242424;
+  --secondary-foreground: #f4f1e8;
+  --muted: #242424;
+  --muted-foreground: #a6a39b;
+  --accent: #d9a441;
+  --accent-foreground: #171717;
+  --accent-strong: #d9a441;
+  --trail: #6fa57f;
+  --border: #2e2e2e;
+  --input: #3a3a38;
+  --ring: #f4511e;
+  --destructive: #f05545;
+  --destructive-foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-canvas: var(--canvas);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-strong: var(--primary-strong);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-strong: var(--accent-strong);
+  --color-trail: var(--trail);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── Clinking mugs (D46) ──────────────────────────────────────────────────
+   Pull-to-refresh: two mugs drawn from beer-mug.svg, the right one mirrored.
+   The gap closes with the pull (--pull, 0 to 1) and nothing moves on its own
+   until they meet — the sloshing belongs to the clink, not to the waiting. */
+
+.hcp-clink {
+  --pull: 0;
+  /* How far apart the mugs stand before anyone pulls. */
+  --spread: 1.6rem;
+}
+
+.hcp-clink-mug {
+  /* Untouched, the pair sit apart; a full pull brings them rim to rim. */
+  transform: translateX(calc(var(--spread) * (1 - var(--pull)) * var(--dir)))
+    rotate(calc(6deg * var(--pull) * var(--dir) * -1));
+}
+
+.hcp-clink-mug[data-side='left'] {
+  --dir: -1;
+}
+.hcp-clink-mug[data-side='right'] {
+  --dir: 1;
+}
+
+/* Armed: held at the threshold, leaning in, waiting for the release. */
+.hcp-clink[data-state='armed'] .hcp-clink-mug {
+  animation: hcp-clink-tremble 0.9s ease-in-out infinite;
+}
+
+/* Refreshing: they clink, come apart, and clink again until the feed lands. */
+.hcp-clink[data-state='refreshing'] .hcp-clink-mug {
+  animation: hcp-clink-strike 1.15s cubic-bezier(0.34, 0, 0.2, 1) infinite;
+}
+.hcp-clink[data-state='refreshing'] .hcp-mug-mug {
+  animation: hcp-mug-cheer 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.hcp-clink[data-state='refreshing'] .hcp-mug-foam {
+  animation: hcp-mug-foam 1.15s cubic-bezier(0.35, 0, 0.25, 1) infinite;
+}
+.hcp-clink[data-state='refreshing'] .hcp-mug-splash {
+  animation: hcp-mug-splash 1.15s cubic-bezier(0.3, 0, 0.2, 1) infinite;
+}
+.hcp-clink[data-state='refreshing'] .hcp-mug-droplet {
+  animation: hcp-mug-droplet 1.15s cubic-bezier(0.25, 0, 0.2, 1) infinite;
+}
+
+/* The asset's own motion, re-timed so the beer moves when the glass is struck
+   at 30% rather than on the asset's own 2.4s loop. Origins are in the SVG's
+   user units, which is why they are bare numbers. */
+.hcp-mug-mug {
+  transform-origin: 38px 58px;
+}
+.hcp-mug-foam {
+  transform-origin: 44px 18px;
+}
+.hcp-mug-splash {
+  transform-origin: 60px 24px;
+}
+.hcp-mug-droplet {
+  transform-origin: 71px 12px;
+}
+
+@keyframes hcp-clink-strike {
+  0% {
+    transform: translateX(calc(var(--spread) * 0.55 * var(--dir))) rotate(calc(3deg * var(--dir) * -1));
+  }
+  26% {
+    transform: translateX(calc(var(--spread) * 0.08 * var(--dir))) rotate(calc(8deg * var(--dir) * -1));
+  }
+  /* Contact. */
+  32% {
+    transform: translateX(0) rotate(calc(9deg * var(--dir) * -1));
+  }
+  44% {
+    transform: translateX(calc(var(--spread) * 0.42 * var(--dir))) rotate(calc(2deg * var(--dir) * -1));
+  }
+  62% {
+    transform: translateX(calc(var(--spread) * 0.48 * var(--dir))) rotate(calc(4deg * var(--dir) * -1));
+  }
+  100% {
+    transform: translateX(calc(var(--spread) * 0.55 * var(--dir))) rotate(calc(3deg * var(--dir) * -1));
+  }
+}
+
+@keyframes hcp-clink-tremble {
+  0%,
+  100% {
+    transform: translateX(calc(var(--spread) * (1 - var(--pull)) * var(--dir))) rotate(calc(6deg * var(--dir) * -1));
+  }
+  50% {
+    transform: translateX(calc(var(--spread) * (1 - var(--pull)) * var(--dir) + 1px * var(--dir) * -1))
+      rotate(calc(7.5deg * var(--dir) * -1));
+  }
+}
+
+@keyframes hcp-mug-cheer {
+  0%,
+  100% {
+    transform: rotate(0deg) translate(0px, 0px);
+  }
+  26% {
+    transform: rotate(-3deg) translate(-1px, 1px);
+  }
+  32% {
+    transform: rotate(6deg) translate(2px, -4px);
+  }
+  48% {
+    transform: rotate(-2.5deg) translate(-1px, 1px);
+  }
+  70% {
+    transform: rotate(1deg) translate(0.5px, -1px);
+  }
+}
+
+@keyframes hcp-mug-foam {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(1, 1) translate(0px, 0px);
+  }
+  26% {
+    transform: rotate(-2deg) scale(1.04, 0.96) translate(-1px, 2px);
+  }
+  34% {
+    transform: rotate(6deg) scale(0.95, 1.1) translate(2px, -6px);
+  }
+  46% {
+    transform: rotate(-3deg) scale(1.06, 0.94) translate(0px, -2px);
+  }
+  64% {
+    transform: rotate(1.5deg) scale(0.99, 1.02) translate(0.5px, 0px);
+  }
+}
+
+@keyframes hcp-mug-splash {
+  0%,
+  100% {
+    transform: scale(1) translate(0px, 0px) rotate(0deg);
+    opacity: 0.9;
+  }
+  26% {
+    transform: scale(0.85) translate(-1px, 1px) rotate(-3deg);
+    opacity: 0.7;
+  }
+  36% {
+    transform: translate(3.5px, -4.5px) scale(1.3) rotate(12deg);
+    opacity: 1;
+  }
+  52% {
+    transform: translate(1px, -1.5px) scale(1.08) rotate(4deg);
+    opacity: 0.95;
+  }
+  74% {
+    transform: translate(0px, 0px) scale(0.96) rotate(-1deg);
+    opacity: 0.9;
+  }
+}
+
+@keyframes hcp-mug-droplet {
+  0%,
+  100% {
+    transform: translate(0px, 0px) scale(1);
+    opacity: 0.85;
+  }
+  26% {
+    transform: translate(-0.5px, 1.5px) scale(0.85);
+    opacity: 0.6;
+  }
+  36% {
+    transform: translate(5px, -6.5px) scale(1.35);
+    opacity: 1;
+  }
+  54% {
+    transform: translate(2px, -2px) scale(1.1);
+    opacity: 0.9;
+  }
+  76% {
+    transform: translate(0.5px, 0.5px) scale(0.96);
+    opacity: 0.85;
+  }
+}
+
+/* Someone who has asked for less motion gets the mugs, the pull and the state
+   changes — just not the sloshing. */
+@media (prefers-reduced-motion: reduce) {
+  .hcp-clink[data-state='armed'] .hcp-clink-mug,
+  .hcp-clink[data-state='refreshing'] .hcp-clink-mug,
+  .hcp-clink[data-state='refreshing'] .hcp-mug-mug,
+  .hcp-clink[data-state='refreshing'] .hcp-mug-foam,
+  .hcp-clink[data-state='refreshing'] .hcp-mug-splash,
+  .hcp-clink[data-state='refreshing'] .hcp-mug-droplet {
+    animation: none;
+  }
+  .hcp-clink[data-state='refreshing'] .hcp-clink-mug {
+    transform: translateX(0);
+  }
+}

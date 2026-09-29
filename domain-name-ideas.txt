@@ -1,0 +1,35 @@
+HCP Domain Name Ideas
+======================
+
+Trail/Hare themed
+1. HareTrail       - haretrail.com
+2. ChalkTalk       - chalktalk.app
+3. OnOnHQ          - ononhq.com (from the classic "On-On!" hasher call)
+4. HashTrail       - hashtrail.com
+5. TrueTrail       - truetrail.app
+6. FalseTrail      - falsetrail.com (playful, self-aware)
+7. ShaggyPack      - shaggypack.com
+
+Kennel/Community themed
+8. KennelKeep      - kennelkeep.com
+9. PackCircle      - packcircle.app
+10. MismanagementHQ - mismgmt.com (in-joke name for hash leadership)
+11. HashKennel     - hashkennel.com
+12. CircleUp       - circleup.app (check availability/trademark first)
+
+Beer/Fun themed
+13. BeerCheck      - beercheck.app
+14. DownDownApp    - downdown.app (the post-run tradition)
+15. HashFlash      - hashflash.com
+16. ShiggyLog      - shiggylog.com ("shiggy" = hasher slang for messy trail)
+17. RedDressHQ     - playful nod to Red Dress Runs, though maybe too event-specific
+
+Passport/Journey themed
+18. HashPassport   - hashpassport.com
+19. HarrierLog     - harrierlog.com
+20. RunCapsule     - runcapsule.app (matches the platform's "Run Capsule" feature name directly)
+
+Notes:
+- HashPassport, RunCapsule, and OnOnHQ lean most directly into actual feature names and Hash vocabulary.
+- Check trademark/availability before committing.
+- Avoid names too close to existing hashing org sites (hashhouseharriers.com, world hash sites) to sidestep confusion or legal friction.

@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/* Same HCP brand system as apps/web (duplicated on purpose; see root CLAUDE.md).
+   Orange × Black × Flour (D24). Orange is a fill, never small text: use
+   --primary-strong for links and small orange text. Every token is defined in
+   full for light, system-dark and the explicit .dark class. */
+:root {
+  --background: #f4f1e8;
+  --canvas: #eae5d6;
+  --foreground: #171717;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --primary: #f4511e;
+  --primary-foreground: #171717;
+  --primary-strong: #b83a0e;
+  --secondary: #e8e2d2;
+  --secondary-foreground: #171717;
+  --muted: #f0ece0;
+  --muted-foreground: #6b6b63;
+  --accent: #d9a441;
+  --accent-foreground: #171717;
+  --accent-strong: #7a5c14;
+  --trail: #3f6b4f;
+  --border: #e0d9c6;
+  --input: #cfc7b2;
+  --ring: #f4511e;
+  --destructive: #c62828;
+  --destructive-foreground: #ffffff;
+  --radius: 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --background: #111111;
+    --canvas: #0c0c0c;
+    --foreground: #f4f1e8;
+    --card: #1c1c1c;
+    --card-foreground: #f4f1e8;
+    --primary: #f4511e;
+    --primary-foreground: #171717;
+    --primary-strong: #ff7043;
+    --secondary: #242424;
+    --secondary-foreground: #f4f1e8;
+    --muted: #242424;
+    --muted-foreground: #a6a39b;
+    --accent: #d9a441;
+    --accent-foreground: #171717;
+    --accent-strong: #d9a441;
+    --trail: #6fa57f;
+    --border: #2e2e2e;
+    --input: #3a3a38;
+    --ring: #f4511e;
+    --destructive: #f05545;
+    --destructive-foreground: #171717;
+  }
+}
+
+.dark {
+  --background: #111111;
+  --canvas: #0c0c0c;
+  --foreground: #f4f1e8;
+  --card: #1c1c1c;
+  --card-foreground: #f4f1e8;
+  --primary: #f4511e;
+  --primary-foreground: #171717;
+  --primary-strong: #ff7043;
+  --secondary: #242424;
+  --secondary-foreground: #f4f1e8;
+  --muted: #242424;
+  --muted-foreground: #a6a39b;
+  --accent: #d9a441;
+  --accent-foreground: #171717;
+  --accent-strong: #d9a441;
+  --trail: #6fa57f;
+  --border: #2e2e2e;
+  --input: #3a3a38;
+  --ring: #f4511e;
+  --destructive: #f05545;
+  --destructive-foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-canvas: var(--canvas);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-strong: var(--primary-strong);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-strong: var(--accent-strong);
+  --color-trail: var(--trail);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}

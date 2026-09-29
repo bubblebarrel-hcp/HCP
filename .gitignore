@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+build/
+.next/
+out/
+.expo/
+web-build/
+
+# env — .env.example files are committed, real .env files are not
+.env
+.env.*
+!.env.example
+
+# generated
+apps/api/src/generated/
+*.tsbuildinfo
+next-env.d.ts
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Office lock files
+~$*
