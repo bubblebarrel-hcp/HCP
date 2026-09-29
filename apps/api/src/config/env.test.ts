@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { validateRuntimeConfig } from './env.ts';
+import { validateRuntimeConfig } from './env';
 
 test('production config rejects resend.dev sender domains', () => {
   assert.throws(
