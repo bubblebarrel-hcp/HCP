@@ -38,7 +38,7 @@ export async function recordEvent(tx: Tx, input: EventInput) {
   // NOTIFY is delivered after commit, so this is a real queue wake-up without
   // needing a broker or a polling-only architecture. The timer remains as a
   // safety net in case the listener is not ready or a node is restarted.
-  await tx.$queryRaw`SELECT pg_notify('hcp_outbox_notify', ${event.id})`;
+  await tx.$queryRaw`SELECT pg_notify('hcp_outbox_notify', ${event.id}) IS NULL`;
 
   return event;
 }
