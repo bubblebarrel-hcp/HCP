@@ -44,9 +44,10 @@ export async function issueVerification(user: { id: string; email: string }) {
 
   const result = await sendEmail({
     to: user.email,
-    subject: 'Confirm your email to finish joining HCP',
-    body: 'One click and you are in. This link is good for 24 hours, after which you can ask for a fresh one from the sign-in page.',
+    subject: 'Confirm your email to join Shiggy Trails',
+    body: 'Confirm your email to get started with Shiggy Trails. This link is valid for 24 hours; after that, request a fresh one from the sign-in page.',
     action: { label: 'Confirm my email', path: link(token) },
+    template: 'signup-confirmation',
   });
 
   if (!result.sent && isEmailConfigured()) {
