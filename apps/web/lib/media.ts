@@ -27,6 +27,29 @@ async function readDimensions(file: File) {
   }
 }
 
+// The API caps this key at 120 characters. Built from the raw file name it passed
+// for "photo.jpg" and failed with a 400 for a phone's "Screenshot 2026-09-30 at
+// 10.12.45 AM.png", so the file's details are hashed to a fixed length instead:
+// the same file still gets the same key, which is all a retry needs.
+async function uploadKey(file: File, target: MediaTarget) {
+  const raw = `${file.name}:${file.size}:${file.lastModified}`;
+  let digest: string;
+  try {
+    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+    digest = Array.from(new Uint8Array(bytes))
+      .slice(0, 12)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  } catch {
+    // No SubtleCrypto (an insecure context): a plain 32-bit hash is enough to
+    // tell two files apart for one person's retries.
+    let h = 5381;
+    for (let i = 0; i < raw.length; i++) h = ((h << 5) + h + raw.charCodeAt(i)) | 0;
+    digest = (h >>> 0).toString(16).padStart(8, '0');
+  }
+  return `${target.type}:${target.id}:${digest}`;
+}
+
 export async function uploadPhoto(file: File, target: MediaTarget, caption?: string) {
   return uploadFile(file, target, { kind: 'PHOTO', caption });
 }
@@ -51,7 +74,7 @@ async function uploadFile(
       target,
       caption: opts.caption ?? null,
       // Lets a retry of the same file resume rather than duplicate.
-      clientId: `${target.type}:${target.id}:${file.name}:${file.size}:${file.lastModified}`,
+      clientId: await uploadKey(file, target),
     },
   );
   const { media, upload } = asked.data.data;
