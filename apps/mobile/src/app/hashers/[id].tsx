@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
@@ -71,8 +71,11 @@ export default function HasherProfileScreen() {
   return (
     <ThemedView type="canvas" style={styles.flex}>
       <ScrollView contentContainerStyle={styles.scroll}>
+        {hasher.bannerUrl ? (
+          <Image source={{ uri: hasher.bannerUrl }} style={styles.banner} resizeMode="cover" accessibilityIgnoresInvertColors />
+        ) : null}
         <View style={styles.header}>
-          <Avatar name={hasher.name} size={72} />
+          <Avatar name={hasher.name} size={72} src={hasher.avatarUrl} />
           <ThemedText type="title">{hasher.name}</ThemedText>
           {!hasher.isNamed && <ThemedText themeColor="textSecondary">Not yet named by a kennel</ThemedText>}
           {hasher.bio ? <ThemedText style={styles.bio}>{hasher.bio}</ThemedText> : null}
@@ -138,6 +141,8 @@ export default function HasherProfileScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  // The wide picture across the top of their page (D56); the avatar sits below it.
+  banner: { width: '100%', height: 120, borderRadius: Spacing.two },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four },
   scroll: { padding: Spacing.three, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center', paddingBottom: Spacing.six },
   header: { alignItems: 'center', gap: Spacing.one, paddingVertical: Spacing.three },

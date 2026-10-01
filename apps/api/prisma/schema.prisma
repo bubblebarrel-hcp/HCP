@@ -500,6 +500,9 @@ enum MediaTargetType {
   REEL
   // The photos on a hasher's written post (D51).
   POST
+  // A hasher's own profile picture or banner (D56). The target id is the
+  // hasher's own user id: it is theirs to set and nobody else's.
+  PROFILE
 }
 
 // A reel's life (Ch.22): created empty, published once its video has landed,
@@ -661,6 +664,9 @@ model User {
   // the hasher has not been named yet.
   hashHandle        String?
   avatarUrl         String?
+  // The wide picture across the top of their public page (D56). Like avatarUrl
+  // it only ever holds the URL of a MediaAsset this hasher uploaded.
+  bannerUrl         String?
   bio               String?
   profileVisibility ProfileVisibility @default(MEMBERS_ONLY)
   homeKennelId      String?           @db.Uuid

@@ -31,9 +31,20 @@ export default function AccountPage() {
     <>
       <div className="border-b border-border bg-card shadow-sm">
         <div>
-          <div aria-hidden className="h-40 sm:h-64" style={{ background: coverBackground() }} />
+          <div
+            aria-hidden
+            className="h-40 overflow-hidden sm:h-64"
+            style={user.bannerUrl ? undefined : { background: coverBackground() }}
+          >
+            {user.bannerUrl && (
+              // Storage is an arbitrary host, so next/image would need every
+              // deployment's domain configured up front.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={user.bannerUrl} alt="" className="h-full w-full object-cover" data-testid="account-banner" />
+            )}
+          </div>
           <div className="flex flex-col items-center gap-3 px-4 pb-5 sm:flex-row lg:px-8 sm:items-end sm:gap-5">
-            <Avatar name={user.displayName} size="xl" className="-mt-16 sm:-mt-12" />
+            <Avatar name={user.displayName} size="xl" src={user.avatarUrl} className="-mt-16 sm:-mt-12" />
             <div className="min-w-0 flex-1 text-center sm:pb-2 sm:text-left">
               <h1 className="text-3xl font-bold tracking-tight" data-testid="account-display-name">
                 {user.displayName}

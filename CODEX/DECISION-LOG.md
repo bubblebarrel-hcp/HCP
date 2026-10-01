@@ -1049,3 +1049,22 @@ Decision:
 Rationale: FR-CIRCLE-006's exact wording, the established pattern for a self-service kennel setting (D24's brand colours, same session).
 
 Consequences: `apps/admin` was not touched — this is a kennel-self-service setting (D34), the same category as brand colours, not part of admin's kennel CRUD.
+
+## 2026-10-01 - D56: A hasher's picture and banner are public identity, set by media id, and only ever their own
+
+Status: Active
+
+Nothing wrote `User.avatarUrl`, though a dozen places already read it, and there was no banner at all. The web hasher page had a gradient where one belongs. Codex inference; the Bible names a profile picture (FR-ID-003) but not how it is set.
+
+Decision:
+- A hasher sets their own **profile picture** and **banner** from the Edit profile page. They are public identity (D11), so they live on `User` (`avatarUrl`, new `bannerUrl`), not on the private `PersonProfile`, and a PRIVATE profile still hides them with the rest of the page.
+- Each picture is an ordinary media asset linked to a new `MediaTargetType.PROFILE` whose target id is the hasher's own user id. Uploading follows D28 (browser to storage directly), and only that hasher may attach to their profile (`NOT_YOUR_PROFILE`). A profile picture must be a photo in a format a browser can draw (JPEG, PNG, WebP, AVIF; not HEIC).
+- Profile media is live the moment it lands, with no moderation queue: it is the uploader's own page, like a kennel's branding (D37) or their own reel (D41, D51). A moderator deals with a profile, not with its picture held back.
+- `PATCH /me/profile-images` takes **media ids, never URLs**. The server resolves the URL from an asset that this hasher uploaded, to their own profile, and that has finished landing. A URL field would let a profile hot-link anything, or a tracking pixel, into a page other people open. `null` removes a picture.
+- The replaced or removed asset is kept. Attribution and history are permanent here; the profile simply stops pointing at it.
+- No new domain event: a change emits `ProfileUpdated` naming the fields (`avatarUrl`, `bannerUrl`), never their values, and writes an `identity.profile.images` audit row.
+- Media with no kennel (a profile picture, or a reel or post made outside any kennel) is now stored under `users/<userId>/...`. An empty kennel prefix produced keys with a leading slash, and a double slash in the public URL on R2. This changes new uploads only; existing keys are untouched.
+
+Rationale: D11 (public identity), D5 (biodata stays private), D28 (media pipeline), D37 (a kennel's branding is edited in place and lives immediately), BR-RUN-007 (every asset links to something).
+
+Consequences: Migration `profile_banner_and_target` adds one enum value and one nullable column, purely additive. Web: a "Picture and banner" card on `/account/profile`, the banner on `/account` and `/hashers/[id]`, and the picture now shows in the header and left nav. Mobile shows both on a hasher's profile but cannot edit them: that needs an image-picker library, which is not installed. Reposition and crop, as the kennel banner has (D37), were deliberately left out; the banner is cover-fitted and centred.

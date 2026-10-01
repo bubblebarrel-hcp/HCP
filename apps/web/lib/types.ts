@@ -18,6 +18,8 @@ export interface SessionUser {
   // hashHandle, or "Just <firstName>" (D11)
   displayName: string;
   avatarUrl: string | null;
+  // The wide picture across the top of their public page (D56).
+  bannerUrl: string | null;
   emailVerified: boolean;
   homeKennelId: string | null;
   createdAt: string;
@@ -566,7 +568,7 @@ export interface IdentityTimelineEntry {
   occurredAt: string;
 }
 
-export type MediaTargetType = 'RUN' | 'TRAIL' | 'CIRCLE' | 'GALLERY' | 'KENNEL' | 'REEL' | 'POST';
+export type MediaTargetType = 'RUN' | 'TRAIL' | 'CIRCLE' | 'GALLERY' | 'KENNEL' | 'REEL' | 'POST' | 'PROFILE';
 export type MediaKind = 'PHOTO' | 'VIDEO' | 'AUDIO' | 'DOCUMENT';
 // Ch.22 B.2 capture lifecycle.
 export type UploadState = 'QUEUED' | 'UPLOADING' | 'PROCESSING' | 'AVAILABLE' | 'FAILED';
@@ -1271,6 +1273,7 @@ export interface HasherProfile {
   name: string;
   isNamed: boolean;
   avatarUrl: string | null;
+  bannerUrl: string | null;
   bio: string | null;
   homeKennel: { slug: string; shortName: string; primaryColor: string | null } | null;
   kennels: { slug: string; shortName: string; name: string; primaryColor: string | null }[];

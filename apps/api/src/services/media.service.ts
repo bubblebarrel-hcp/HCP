@@ -38,6 +38,7 @@ export const SUPPORTED_TARGETS: MediaTargetType[] = [
   MediaTargetType.KENNEL,
   MediaTargetType.REEL,
   MediaTargetType.POST,
+  MediaTargetType.PROFILE,
 ];
 
 // Targets whose media is live the moment it lands, with no moderation queue,
@@ -45,7 +46,15 @@ export const SUPPORTED_TARGETS: MediaTargetType[] = [
 // branding, which only its admins may touch (D37), and a hasher's own reel or
 // post (D41, D51). A moderator takes the whole thing down rather than holding
 // its pictures back.
-const IMMEDIATE_TARGETS: MediaTargetType[] = [MediaTargetType.KENNEL, MediaTargetType.REEL, MediaTargetType.POST];
+const IMMEDIATE_TARGETS: MediaTargetType[] = [
+  MediaTargetType.KENNEL,
+  MediaTargetType.REEL,
+  MediaTargetType.POST,
+  MediaTargetType.PROFILE,
+];
+
+// Formats every browser can show in an <img> (D56).
+const PROFILE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
 
 export interface MediaTarget {
   type: MediaTargetType;
@@ -107,6 +116,16 @@ async function resolveTarget(actor: Actor, target: MediaTarget): Promise<TargetC
       throw ApiError.forbidden('Only the author adds photos to their post.', 'NOT_THE_AUTHOR');
     }
     return { kennelId: post.kennelId ?? '', runId: null, canUpload: true, canModerate: true };
+  }
+
+  // A hasher's own profile picture or banner (D56). The target is the hasher
+  // themself, so the check is simply "is that you": nobody sets somebody else's
+  // picture, and there is no kennel or moderator in the way.
+  if (target.type === MediaTargetType.PROFILE) {
+    if (target.id !== actor.id) {
+      throw ApiError.forbidden('You can only change your own profile pictures.', 'NOT_YOUR_PROFILE');
+    }
+    return { kennelId: '', runId: null, canUpload: true, canModerate: false };
   }
 
   // A kennel's own logo and banner (D37). Editing how the kennel presents
@@ -204,6 +223,20 @@ export async function requestUpload(
 ) {
   const context = await resolveTarget(actor, input.target);
 
+  // A profile picture or banner is a still image; a clip would leave the page
+  // pointing at something an <img> cannot show.
+  if (input.target.type === MediaTargetType.PROFILE) {
+    if (input.kind !== MediaKind.PHOTO) {
+      throw ApiError.badRequest('A profile picture must be a photo.', 'UNSUPPORTED_MEDIA_TYPE');
+    }
+    // HEIC is fine for a run photo someone opens later, but most browsers cannot
+    // draw it, and a picture that shows as a broken square on your own profile
+    // is worse than being asked to pick a different file.
+    if (!PROFILE_IMAGE_TYPES.includes(input.mimeType)) {
+      throw ApiError.badRequest('Use a JPEG, PNG, WebP or AVIF picture.', 'UNSUPPORTED_MEDIA_TYPE');
+    }
+  }
+
   if (!ALLOWED[input.kind].includes(input.mimeType)) {
     throw ApiError.badRequest(`${input.mimeType} is not an accepted ${input.kind.toLowerCase()} format.`, 'UNSUPPORTED_MEDIA_TYPE');
   }
@@ -223,7 +256,12 @@ export async function requestUpload(
     }
   }
 
-  const storageKey = buildStorageKey(`${context.kennelId}/${input.target.type.toLowerCase()}`, input.mimeType);
+  // Media is filed under the kennel it belongs to. A profile picture, or a reel or
+  // post made outside any kennel, has none, and an empty prefix produced keys with
+  // a leading slash (and a double slash in the public URL), so those are filed
+  // under the person who uploaded them instead.
+  const owner = context.kennelId || `users/${actor.id}`;
+  const storageKey = buildStorageKey(`${owner}/${input.target.type.toLowerCase()}`, input.mimeType);
 
   const media = await prisma.$transaction(async (tx) => {
     const created = await tx.mediaAsset.create({

@@ -98,7 +98,7 @@ function AccountMenu({ user }: { user: SessionUser }) {
         data-testid="header-account"
         className="flex h-10 items-center gap-2 rounded-full pr-1 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:pl-1 lg:pr-3"
       >
-        <Avatar name={user.displayName} />
+        <Avatar name={user.displayName} src={user.avatarUrl} />
         <span className="hidden max-w-40 truncate text-sm font-semibold lg:inline">{user.displayName}</span>
       </button>
 
@@ -114,7 +114,7 @@ function AccountMenu({ user }: { user: SessionUser }) {
             onClick={() => setOpen(false)}
             className="flex items-center gap-3 rounded-lg p-2 hover:bg-muted"
           >
-            <Avatar name={user.displayName} />
+            <Avatar name={user.displayName} src={user.avatarUrl} />
             <span className="min-w-0">
               <span className="block truncate font-semibold">{user.displayName}</span>
               <span className="block text-sm text-muted-foreground">See your profile</span>

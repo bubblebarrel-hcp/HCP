@@ -1,10 +1,20 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '@/hooks/use-theme';
 import { initials } from '@/lib/format';
 
-// Initials only: there is no media storage yet, so no uploaded avatars or logos.
-export function Avatar({ name, size = 40, color }: { name: string; size?: number; color?: string | null }) {
+// Initials, or the picture the hasher or kennel chose (D37, D56) when there is one.
+export function Avatar({
+  name,
+  size = 40,
+  color,
+  src,
+}: {
+  name: string;
+  size?: number;
+  color?: string | null;
+  src?: string | null;
+}) {
   const theme = useTheme();
   return (
     <View
@@ -13,14 +23,18 @@ export function Avatar({ name, size = 40, color }: { name: string; size?: number
         styles.circle,
         { width: size, height: size, borderRadius: size / 2, backgroundColor: color ?? theme.primary },
       ]}>
-      <Text style={[styles.text, { fontSize: size * 0.36, color: color ? '#ffffff' : theme.onPrimary }]}>
-        {initials(name)}
-      </Text>
+      {src ? (
+        <Image source={{ uri: src }} style={{ width: size, height: size }} resizeMode="cover" />
+      ) : (
+        <Text style={[styles.text, { fontSize: size * 0.36, color: color ? '#ffffff' : theme.onPrimary }]}>
+          {initials(name)}
+        </Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  circle: { alignItems: 'center', justifyContent: 'center' },
+  circle: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   text: { fontWeight: '700' },
 });

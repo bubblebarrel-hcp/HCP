@@ -1,5 +1,5 @@
 import prisma from '../config/prisma';
-import { ApiError } from '../utils/http';
+import { ApiError, isUuid } from '../utils/http';
 import { decryptField, decryptOptionalField, encryptField, encryptOptionalField } from '../utils/field-crypto';
 import { recordAudit, recordEvent } from './record.service';
 
@@ -160,4 +160,79 @@ export async function updateProfile(userId: string, input: UpdateProfileInput) {
   });
 
   return getProfile(userId);
+}
+
+// ─── Profile picture and banner (D56) ───
+
+export interface ProfileImagesInput {
+  // A MediaAsset id, or null to remove the picture. Absent leaves it alone.
+  avatarMediaId?: string | null;
+  bannerMediaId?: string | null;
+}
+
+// The picture on a hasher's public page is part of their public identity (D11),
+// so it is written to User, not to the private PersonProfile. What is accepted
+// is a media asset id, never a URL: the only picture a hasher can point their
+// profile at is one they uploaded themselves, to their own profile, and that has
+// finished landing. A URL field would let anybody hot-link anything, or a
+// tracking pixel, into a page other people open.
+async function ownProfileImageUrl(userId: string, mediaId: string) {
+  if (!isUuid(mediaId)) throw ApiError.badRequest('That picture was not found.', 'INVALID_PROFILE_IMAGE');
+  const asset = await prisma.mediaAsset.findFirst({
+    where: {
+      id: mediaId,
+      uploaderId: userId,
+      kind: 'PHOTO',
+      uploadState: 'AVAILABLE',
+      moderationState: { not: 'REJECTED' },
+      links: { some: { targetType: 'PROFILE', targetId: userId } },
+    },
+    select: { url: true },
+  });
+  if (!asset?.url) {
+    throw ApiError.badRequest(
+      'That picture is not ready or is not one you uploaded for your profile.',
+      'INVALID_PROFILE_IMAGE',
+    );
+  }
+  return asset.url;
+}
+
+export async function setProfileImages(userId: string, input: ProfileImagesInput) {
+  const data: { avatarUrl?: string | null; bannerUrl?: string | null } = {};
+  if (input.avatarMediaId !== undefined) {
+    data.avatarUrl = input.avatarMediaId === null ? null : await ownProfileImageUrl(userId, input.avatarMediaId);
+  }
+  if (input.bannerMediaId !== undefined) {
+    data.bannerUrl = input.bannerMediaId === null ? null : await ownProfileImageUrl(userId, input.bannerMediaId);
+  }
+
+  const user = await prisma.$transaction(async (tx) => {
+    const row = await tx.user.update({
+      where: { id: userId },
+      data,
+      select: { avatarUrl: true, bannerUrl: true },
+    });
+    // The previous picture's MediaAsset is kept: attribution and history are
+    // permanent here, and a removed picture is simply no longer pointed at.
+    const fields = Object.keys(data);
+    const event = await recordEvent(tx, {
+      eventType: 'ProfileUpdated',
+      aggregateType: 'Identity',
+      aggregateId: userId,
+      actorId: userId,
+      payload: { fields },
+    });
+    await recordAudit(tx, {
+      actorId: userId,
+      action: 'identity.profile.images',
+      resourceType: 'Identity',
+      resourceId: userId,
+      newState: { fields, removed: fields.filter((f) => data[f as keyof typeof data] === null) },
+      domainEventId: event.id,
+    });
+    return row;
+  });
+
+  return user;
 }

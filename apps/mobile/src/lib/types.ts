@@ -63,6 +63,7 @@ export interface HasherProfile {
   name: string;
   isNamed: boolean;
   avatarUrl: string | null;
+  bannerUrl: string | null;
   bio: string | null;
   homeKennel: { slug: string; shortName: string; primaryColor: string | null } | null;
   kennels: { slug: string; shortName: string; name: string; primaryColor: string | null }[];

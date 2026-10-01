@@ -27,3 +27,9 @@ export const updateProfileSchema = Joi.object({
 
   medicalNotes: text(2000).allow('', null),
 }).min(1);
+
+// D56. Media ids, never URLs: see profile.service#setProfileImages.
+export const profileImagesSchema = Joi.object({
+  avatarMediaId: Joi.string().uuid().allow(null),
+  bannerMediaId: Joi.string().uuid().allow(null),
+}).min(1);

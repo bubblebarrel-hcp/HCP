@@ -49,9 +49,20 @@ export default async function HasherPage({ params }: { params: Promise<{ id: str
     <FeedLayout left={<LeftNav />}>
       <Card className="overflow-hidden rounded-none border-x-0 sm:rounded-xl sm:border-x">
         <div
-          className="h-24 w-full"
-          style={{ background: `linear-gradient(135deg, var(--primary), color-mix(in oklab, var(--primary) 45%, black))` }}
-        />
+          className="h-24 w-full overflow-hidden sm:h-40"
+          style={
+            hasher.bannerUrl
+              ? undefined
+              : { background: `linear-gradient(135deg, var(--primary), color-mix(in oklab, var(--primary) 45%, black))` }
+          }
+        >
+          {hasher.bannerUrl && (
+            // Storage is an arbitrary host, so next/image would need every
+            // deployment's domain configured up front.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={hasher.bannerUrl} alt="" className="h-full w-full object-cover" data-testid="hasher-banner" />
+          )}
+        </div>
         <div className="px-4 pb-4">
           <div className="-mt-12 flex flex-wrap items-end justify-between gap-4">
             <Avatar
