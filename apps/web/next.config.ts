@@ -21,7 +21,16 @@ const csp = [
   // from R2 is https too. In development the media fallback is the API's own
   // /uploads on plain http, so that origin has to be named (D28).
   `img-src 'self' data: blob: https:${isDev ? ` ${backendOrigin}` : ''}`,
+  // Reels are <video>, which img-src does not cover: without this the browser
+  // falls back to default-src 'self' and refuses every clip (R2 in production,
+  // the API's /uploads in development), and the recorder's blob: preview too.
+  `media-src 'self' blob: https:${isDev ? ` ${backendOrigin}` : ''}`,
   "font-src 'self' data:",
+  // MapLibre does its GeoJSON and vector work in a web worker it builds from a
+  // blob: URL. Without this the worker is refused, silently: raster tiles and
+  // DOM markers still draw, but the trail's route line never does.
+  "worker-src 'self' blob:",
+  "child-src 'self' blob:",
   // MapLibre fetches raster tiles with fetch(), not <img>, so the tile host has
   // to be allowed here rather than in img-src. Without it both maps draw their
   // markers over a blank background (D15).
@@ -42,7 +51,9 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           // Geolocation stays available for check-in and trail features later.
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), payment=(), usb=()" },
+          // Camera and microphone are this origin's own: the reel recorder (D47)
+          // asks for both, and `camera=()` would refuse it for everyone.
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(self), payment=(), usb=()" },
         ],
       },
     ];

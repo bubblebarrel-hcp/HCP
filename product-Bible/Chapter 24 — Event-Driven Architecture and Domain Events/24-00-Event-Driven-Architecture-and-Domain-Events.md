@@ -55,6 +55,8 @@ Organized by Chapter 23 domain. "Consumers" lists which cross-cutting systems ca
 |---|---|---|---|
 | `IdentityCreated` | Identity created at registration | Identity Service | Notification, Search Index, Audit |
 | `EmailVerified` | FR-AUTH-002 confirmation accepted; account becomes usable | Identity Service | Audit (trust level lifts to VERIFIED_EMAIL) |
+| `PasswordReset` | A reset token was redeemed; every refresh token for the user is revoked | Identity Service | Audit |
+| `ProfileUpdated` | FR-ID-005 profile view/edit; payload lists changed fields, never their values | Identity Service | Search Index, Audit |
 | `HashNameChanged` | New primary Hash name recorded | Identity Service | Search Index, Audit |
 | `TrustLevelChanged` | A.9 transition | Identity Service | Authorization, Audit, AI (context signal only) |
 | `MembershipRequested` | A.2 Applicant → Pending Review | Membership Service | Notification (officers), Audit |
@@ -117,6 +119,11 @@ Organized by Chapter 23 domain. "Consumers" lists which cross-cutting systems ca
 | `RunPlanningStarted` | A.3 Scheduled → Planning | Run Service | Audit |
 | `RunCancelled` | A.3 → Cancelled (D22), reason required | Run Service | Notification, Search Index, RunCapsule, Audit |
 | `RunRsvpChanged` | FR-RUNPLAN-007 RSVP set or withdrawn (hasher or guest) | Run Service | Notification (organizer attendance forecast), RunCapsule |
+| `HareOffered` | D44: a member volunteers to hare an un-hared run | Run Service | Notification (officers), Audit |
+| `HareOfferAccepted` | D44: officer accepts; lands through the same path as `HareAssigned` | Run Service | Notification (offerer), Audit |
+| `HareOfferDeclined` | D44: officer declines, reason optional | Run Service | Notification (offerer), Audit |
+| `HareOfferWithdrawn` | D44: the offerer withdraws before a decision | Run Service | Audit |
+| `RunHareReminderIssued` | D45 scheduled sweep; payload `stage` is `no-hare-soon`, `no-hare-urgent` or `no-trail-planned`, and the event log itself is the idempotency check | Run Service (scheduled, actor SYSTEM) | Notification |
 | `GuestRegistered` | D2 guest profile created with consent | Run Service | Notification, Audit |
 | `GuestProfileClaimed` | D2 follow-up: a guest's run history links to the account that just proved it owns that email | Identity Service | Audit |
 | `ParticipantCheckInReverted` | Attendance correction before archive (BR-RUN-008) | Run Service | Passport, RunCapsule, Audit |
@@ -149,6 +156,9 @@ Organized by Chapter 23 domain. "Consumers" lists which cross-cutting systems ca
 | `StoryAssetCreated` | Manual Scribe entry (FR-STORY-002) | Scribe Service | RunCapsule |
 | `TrailReportDraftCreated` | A.5 Draft | Scribe Service | Audit |
 | `TrailReportAIDraftGenerated` | FR-STORY-007 | Scribe Service (AI) | Audit (must carry AI-assisted flag, never auto-published) |
+| `AiDraftRequested` | FR-STORY-007: an editor asks for a draft; a `PENDING` `AiSuggestion` is created and `report.body` is untouched. This is what the code emits in place of `TrailReportAIDraftGenerated` above | Scribe Service | Audit (carries the AI-assisted flag) |
+| `AiDraftAccepted` | BR-SCRIBE-005: a human accepts or partially accepts the suggestion; only now does `report.body` change. `actorId` is the human | Scribe Service | Audit |
+| `AiDraftRejected` | BR-SCRIBE-005: a human discards the suggestion | Scribe Service | Audit |
 | `TrailReportSubmittedForReview` | A.5 Scribe Editing → Review | Scribe Service | Notification (reviewers) |
 | `TrailReportPublished` | A.5 → Published | Scribe Service | Notification, Passport, RunCapsule, Search Index, Audit |
 | `TrailReportRevised` | Post-publication correction | Scribe Service | Audit (ReportRevision created, original preserved) |
@@ -168,7 +178,27 @@ Organized by Chapter 23 domain. "Consumers" lists which cross-cutting systems ca
 | `MediaUploaded` | Queued → Uploading → Processing complete | Media Service | RunCapsule, Scribe, Search Index |
 | `MediaModerationRequired` | BR-RUN-012 gate | Media Service | Notification (moderators) |
 | `MediaApproved` / `MediaRejected` | Moderation decision | Media Service | Notification (uploader), Audit |
+| `MediaModerated` | What the code emits for a moderation decision; payload carries the outcome, so `MediaApproved`/`MediaRejected` above are the same fact split by outcome | Media Service | Notification (uploader), Audit |
 | `MediaLinked` | Association to Run/Trail/Circle/StoryAsset (BR-RUN-007) | Media Service | RunCapsule |
+
+## Social & Content Events
+
+D41 reels, D50 follows and engagement, D51 posts. A reel and a post belong to the hasher, not the kennel. Every engagement act resolves its subject through `subject.service.ts#resolveSubject` first, so none of these events can exist for content the actor cannot see.
+
+| Event | Trigger | Producer | Consumers |
+|---|---|---|---|
+| `ReelPosted` | D41: a reel is published (draft, upload, publish, as with D28) | Social Service | Feed, Search Index, Audit |
+| `ReelArchived` | D41: the author archives their own reel | Social Service | Feed, Search Index |
+| `ReelRemoved` | D41: a moderator removes a reel; reason required | Social Service | Feed, Search Index, Audit |
+| `PostPublished` | D51: a post is published; always public, so the event carries no audience | Social Service | Feed, Search Index, Audit |
+| `PostArchived` | D51: the author archives their own post | Social Service | Feed, Search Index |
+| `PostRemoved` | D51: a moderator removes a post; reason required | Social Service | Feed, Search Index, Audit |
+| `HasherFollowed` / `HasherUnfollowed` | D50: a follow is toggled. Despite the name this also records kennel follows: `aggregateType` is `Kennel` and the payload `targetType` says which. A follow grants no membership, no vote and no authority | Social Service | Feed (Following scope), Audit |
+| `ContentLiked` / `ContentUnliked` | D50: a like is toggled on any `SubjectType` | Social Service | Feed (counts) |
+| `ContentCommented` | D50: a comment or reply is posted | Social Service | Notification (subject owner), Feed (counts) |
+| `ContentCommentWithdrawn` | D50: the author takes their own comment down | Social Service | Feed (counts) |
+| `ContentCommentRemoved` | D50: a moderator removes a comment; reason required | Social Service | Feed (counts), Audit |
+| `ContentReshared` / `ContentReshareWithdrawn` | D50: a reshare, with an optional quote, is made or withdrawn | Social Service | Feed |
 
 ## Notification Events
 
@@ -226,7 +256,7 @@ Per Chapter 22 Part B and `CODEX/ARCHITECTURE-RULES.md` Offline And Sync Rules:
 Restating and making explicit, for this chapter's purposes, the AI Rules already stated in `CODEX/ARCHITECTURE-RULES.md`:
 
 - AI may **consume**: Story/Report events (to draft), Search/Evidence events (to explain and cite), Notification events (to summarize).
-- AI may **produce**: only advisory artifacts (`TrailReportAIDraftGenerated`, AI governance suggestions per FR-GOV-040) that require a human action to become a "real" event elsewhere in this registry (`TrailReportPublished`, `MotionResolved`, etc.).
+- AI may **produce**: only advisory artifacts (`TrailReportAIDraftGenerated` / `AiDraftRequested`, AI governance suggestions per FR-GOV-040) that require a human action to become a "real" event elsewhere in this registry (`TrailReportPublished`, `MotionResolved`, etc.).
 - AI must never be the `actorId` on `MembershipApproved`, `ParticipantCheckedIn`, `RoleAssigned`, `TrailReportPublished`, `RunCapsulePublished`, or any governance/attendance/publication event. The `actorId` on those events is always a human Identity or `system` for a rule-based automatic transition (e.g., `RoleDelegationExpired`), never an AI agent.
 
 ---

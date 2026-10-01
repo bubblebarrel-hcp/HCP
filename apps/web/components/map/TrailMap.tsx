@@ -7,6 +7,7 @@ import {
   Marker,
   NavigationControl,
   ScaleControl,
+  setWorkerUrl,
   type GeoJSONSource,
   type LngLatLike,
   type MapMouseEvent,
@@ -15,6 +16,13 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { OSM_STYLE } from '@/components/map/osm-style';
 import type { RouteGeoJson } from '@/lib/types';
 import { cn } from '@/lib/utils';
+
+// MapLibre 6 works out its worker's URL from import.meta.url, which a bundler
+// turns into a file:// path, leaving it with an empty URL and no worker, so the
+// GeoJSON route layer never loads. The worker is served from our own origin
+// instead (copied from node_modules by scripts/sync-maplibre-worker.mjs).
+// Module scope, so it is set before any map on the page is created.
+setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
 
 export type MarkerTone = 'primary' | 'accent' | 'danger' | 'plain';
 
@@ -64,10 +72,18 @@ export function TrailMap({
   const markers = useRef<Marker[]>([]);
   // The map is created once, so its click listener reads the latest handler here.
   const clickHandler = useRef(onMapClick);
+  // Likewise the route: the source is only created once the style has loaded, and
+  // the route can arrive before or after that, so the load handler reads it here
+  // instead of relying on an effect having run at the right moment.
+  const routeRef = useRef(route);
 
   useEffect(() => {
     clickHandler.current = onMapClick;
   }, [onMapClick]);
+
+  useEffect(() => {
+    routeRef.current = route;
+  }, [route]);
 
   useEffect(() => {
     if (!container.current || map.current) return;
@@ -80,7 +96,7 @@ export function TrailMap({
     instance.addControl(new NavigationControl({ showCompass: true }), 'top-right');
     instance.addControl(new ScaleControl({ unit: 'metric' }));
     instance.on('load', () => {
-      instance.addSource('route', { type: 'geojson', data: emptyRoute() });
+      instance.addSource('route', { type: 'geojson', data: routeData(routeRef.current) });
       instance.addLayer({
         id: 'route-line',
         type: 'line',
@@ -110,12 +126,10 @@ export function TrailMap({
   useEffect(() => {
     const instance = map.current;
     if (!instance) return;
-    const apply = () => {
-      const source = instance.getSource('route') as GeoJSONSource | undefined;
-      source?.setData(routeData(route));
-    };
-    if (instance.isStyleLoaded()) apply();
-    else instance.once('load', apply);
+    // Before the source exists there is nothing to update: the load handler will
+    // create it from routeRef, which already holds this route.
+    const source = instance.getSource('route') as GeoJSONSource | undefined;
+    source?.setData(routeData(route));
   }, [route]);
 
   // Markers: the simplest correct thing is to redraw them when they change.

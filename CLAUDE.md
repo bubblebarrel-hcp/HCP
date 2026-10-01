@@ -36,6 +36,8 @@ Postgres is a local install managed through pgAdmin4 (PostgreSQL 17 on 5432), no
 
 Seeded admin: `admin@hcp.test` / `OnOn2026!`. Seeded hasher: `hasher@hcp.test`. Officers: `officer1..10@hcp.test`. Same password.
 
+For a database worth testing against, run `npm run prisma:seed:heavy` in `apps/api` after the base seed (`prisma/seed-heavy/`): ~100 hashers (`member01..96@hcp.test`) across ten kennels, every membership and run status, hidden trails in each release mode, reports and capsules at every stage, photos, reels, posts and a social graph. It refuses a non-local `DATABASE_URL`, runs in one transaction and is a no-op the second time; start over with `npx prisma migrate reset` and both seeds. Its placeholder media lives in `apps/api/uploads/seed/` (git-ignored); with R2 configured the API serves that folder in development only.
+
 ## Non-negotiable product rules
 
 - **No direct / one-to-one messaging** (D8). Channels are kennel/event/committee/run scoped only.

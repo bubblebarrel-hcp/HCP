@@ -11,6 +11,7 @@ export const notificationCategoryLabel: Record<NotificationCategory, string> = {
   EVENT: 'Events',
   MEDIA: 'Photos',
   SAFETY: 'Safety',
+  SOCIAL: 'Likes, replies and follows',
   SYSTEM: 'System',
 };
 
@@ -25,6 +26,7 @@ export const notificationCategoryHint: Record<NotificationCategory, string> = {
   EVENT: 'Interhash and multi-kennel events.',
   MEDIA: 'Photos added to your runs.',
   SAFETY: 'A run paused, a hazard, an emergency.',
+  SOCIAL: 'Someone liked or replied to your post, reshared it, or followed you.',
   SYSTEM: 'Account and platform notices.',
 };
 

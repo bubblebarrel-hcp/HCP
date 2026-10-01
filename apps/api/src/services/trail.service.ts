@@ -432,6 +432,14 @@ export async function createTrail(actor: Actor, runId: string, input: TrailInput
         estimatedDurationMin: input.estimatedDurationMin ?? null,
         terrain: input.terrain?.trim() || null,
         notes: input.notes?.trim() || null,
+        // The create schema accepts the route and its two ends, so they must be
+        // kept: dropping them silently left a trail that could not be locked
+        // ("draw the route, set the start") until it was patched again.
+        ...(input.routeGeoJson ? { routeGeoJson: input.routeGeoJson } : {}),
+        startLatitude: input.startLatitude ?? null,
+        startLongitude: input.startLongitude ?? null,
+        finishLatitude: input.finishLatitude ?? null,
+        finishLongitude: input.finishLongitude ?? null,
         releaseMode: input.releaseMode ?? ReleaseMode.AT_RUN_START,
         releaseAt: input.releaseAt ?? null,
         hares: { create: hares.map((h) => ({ userId: h.userId, isLead: h.isLead })) },

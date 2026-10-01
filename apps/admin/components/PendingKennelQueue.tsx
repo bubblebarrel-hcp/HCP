@@ -96,7 +96,9 @@ function Row({ kennel, onActivated }: { kennel: PendingKennel; onActivated: () =
   );
 }
 
-export function PendingKennelQueue() {
+// `onChanged` lets the page refresh what sits beside the queue (the stat tiles
+// count Active and Awaiting kennels), which activating one changes.
+export function PendingKennelQueue({ onChanged }: { onChanged?: () => void } = {}) {
   const [queue, setQueue] = useState<PendingKennels | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -142,7 +144,14 @@ export function PendingKennelQueue() {
         ) : (
           <ul className="divide-y divide-border">
             {queue.items.map((kennel) => (
-              <Row key={kennel.id} kennel={kennel} onActivated={load} />
+              <Row
+                key={kennel.id}
+                kennel={kennel}
+                onActivated={() => {
+                  load();
+                  onChanged?.();
+                }}
+              />
             ))}
           </ul>
         )}

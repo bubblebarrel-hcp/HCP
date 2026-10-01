@@ -1,3 +1,4 @@
+import path from 'path';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
@@ -121,6 +122,23 @@ if (storageDriver === 'local') {
         // helmet defaults this to same-origin, which stops the web app on
         // another port from displaying these images. In production media comes
         // from the bucket's own domain and never passes through here.
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      },
+    }),
+  );
+}
+
+// Development only: the heavy seed (prisma/seed-heavy) draws its placeholder
+// photos and clips into uploads/seed. When R2 is configured the block above is
+// off and nothing else would serve them, and they must never be pushed into
+// the real bucket. Only that one folder is exposed, and never in production.
+if (storageDriver !== 'local' && !env.isProduction) {
+  app.use(
+    '/uploads/seed',
+    express.static(path.join(localRoot, 'seed'), {
+      maxAge: '1h',
+      index: false,
+      setHeaders(res) {
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
       },
     }),

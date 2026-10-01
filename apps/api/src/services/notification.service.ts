@@ -83,6 +83,9 @@ function subjectWord(subjectType: string | null) {
       return 'Run Capsule';
     case 'COMMENT':
       return 'comment';
+    case 'POST':
+      return 'post';
+    case 'REEL':
     default:
       return 'reel';
   }
@@ -553,6 +556,11 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
     // to a crowd: the audience of a social notification is one person.
     case 'HasherFollowed': {
       if (!event.actorId) return null;
+      // Despite its name this event also records kennel follows, with the kennel's
+      // id as the aggregate. That id is not a user, so there is nobody to tell:
+      // a follow is interest, and it pings no officer (D50). Without this guard
+      // the notification insert broke its foreign key and the event stuck.
+      if (event.aggregateType !== 'User') return null;
       const follower = await publicNameOf(event.actorId);
       return {
         category: C.SOCIAL,

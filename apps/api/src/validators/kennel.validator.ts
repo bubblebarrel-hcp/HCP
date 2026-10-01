@@ -3,6 +3,15 @@ import Joi from 'joi';
 const text = (max: number) => Joi.string().trim().max(max);
 const optionalText = (max: number) => text(max).allow('', null);
 
+// #rgb or #rrggbb, the shape the web's brandColor() expects. A colour ends up in
+// a style attribute, so it must not be free text. Mirrored by the settings form's
+// Zod rule (apps/web/app/kennels/[slug]/settings/page.tsx).
+const hexColor = Joi.string()
+  .trim()
+  .pattern(/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i)
+  .message('Colour must be a hex value, e.g. #F4511E')
+  .allow('', null);
+
 // Mirrored by the admin app's Zod schema (apps/admin/lib/schemas.ts).
 // Changing one means changing the other.
 const kennelFields = {
@@ -106,8 +115,8 @@ export const kennelSettingsSchema = Joi.object({
   bannerUrl: kennelFields.bannerUrl,
   bannerPosition: kennelFields.bannerPosition,
   landingMessage: optionalText(2000),
-  primaryColor: optionalText(20),
-  secondaryColor: optionalText(20),
+  primaryColor: hexColor,
+  secondaryColor: hexColor,
   country: kennelFields.country,
   stateProvince: kennelFields.stateProvince,
   city: kennelFields.city,

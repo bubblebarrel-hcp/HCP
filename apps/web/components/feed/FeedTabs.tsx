@@ -42,6 +42,26 @@ export function FeedTabs({ initial, hasMore }: { initial: FeedEntry[]; hasMore: 
     if (scope === 'FOLLOWING' && following === null) void load('FOLLOWING');
   }, [scope, following, load]);
 
+  // The page is cached and anonymous, so what it rendered is the public view.
+  // A member can see more (their kennels' members-only runs and reports), so
+  // once there is a session the feed is asked for again as them, exactly as the
+  // reels rail does. The server-rendered list stands until that answers, and a
+  // failed ask leaves it in place.
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    api
+      .get<{ data: FeedPage }>('/feed?limit=12&scope=ALL')
+      .then((res) => {
+        if (!cancelled) setEverything(res.data.data.items);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
   // Posting and pull-to-refresh both raise this. The page is cached for a
   // minute (D42) and the API's own eviction rides the outbox on a five-second
   // tick, so without this the hasher who just posted comes back to a feed that

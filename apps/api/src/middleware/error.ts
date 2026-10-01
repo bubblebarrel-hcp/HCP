@@ -21,6 +21,23 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     });
   }
 
+  // The body parser's own failures (broken JSON, a body that is not an object, one
+  // over the size limit) are the caller's mistake and carry a 4xx of their own.
+  // Left unrecognised they fell through to the 500 below, which reads as a server
+  // fault and pages somebody for what is just a bad request.
+  const parser = err as { type?: unknown; status?: unknown; statusCode?: unknown } | null;
+  if (parser && typeof parser.type === 'string' && /^(entity|charset|encoding|request|stream)\./.test(parser.type)) {
+    const reported = Number(parser.status ?? parser.statusCode);
+    const status = reported >= 400 && reported < 500 ? reported : 400;
+    const [code, message] =
+      parser.type === 'entity.too.large'
+        ? ['PAYLOAD_TOO_LARGE', 'That request is too large.']
+        : parser.type === 'entity.parse.failed'
+          ? ['INVALID_JSON', 'The request body is not valid JSON.']
+          : ['BAD_REQUEST', 'The request could not be read.'];
+    return res.status(status).json({ success: false, error: { message, code } });
+  }
+
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === 'P2002') {
       const target = (err.meta?.target as string[] | undefined)?.join(', ') ?? 'value';

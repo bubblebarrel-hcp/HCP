@@ -73,8 +73,8 @@ Date: 2026-08-10
 
 - [x] Reels: a hasher posts a short video from anywhere. (2026-09-19 - Reel aggregate, draft/upload/publish, own visibility gated by the run it was shot at, author archives and moderators remove; rail on the home page and /reels; D41.)
 - [x] Community feed on the home page. (2026-09-19 - GET /feed merges published trail reports and run photos with a per-run cap, reusing the report and run visibility rules; kennels left to the directory; D42.)
-- [ ] Add the events Chapter 24 does not list yet: ReelPosted, ReelArchived, ReelRemoved (D41), HareOffered, HareOfferAccepted, HareOfferDeclined, HareOfferWithdrawn (D44), RunHareReminderIssued (D45), ProfileUpdated (profile view/edit, above). The code emits them and the chapter does not name them.
-- [ ] Signed-in home feed: the page is ISR-cached and anonymous, so a member sees only public items. The reels rail already re-asks from the browser; the feed needs the same pass (D42).
+- [x] Add the events Chapter 24 does not list yet. (2026-10-01 - 25 events the code emitted and the chapter did not name are now registered: reels, posts, follows and engagement in a new "Social & Content Events" section; hare offers and `RunHareReminderIssued` under Run; `AiDraftRequested`/`Accepted`/`Rejected` under Story; `PasswordReset`, `ProfileUpdated` under Identity; `MediaModerated` under Media. Checked against the emit sites, including that removals require a reason. Two naming quirks are documented rather than renamed: `HasherFollowed`/`HasherUnfollowed` also record kennel follows (`aggregateType: Kennel`), and `MediaModerated` / `AiDraftRequested` are what the code emits where the chapter had `MediaApproved`/`MediaRejected` / `TrailReportAIDraftGenerated`. Renaming them is a code change, not done here.)
+- [x] Signed-in home feed. (2026-10-01 - the page is ISR-cached and anonymous, so what it renders is the public view. `FeedTabs.tsx` now asks `/feed?scope=ALL` again once there is a session, the way the reels rail already did, and keeps the server-rendered list until that answers or if it fails; the no-JS render is unchanged. Promise-callback `setState` rather than a synchronous one, so it adds no new lint error. Verified live: a Lagos H3 member (`officer6@hcp.test`) sees the members-only "Lekki Lagoon Crawl" on the home page, an anonymous visitor does not, and the API agrees (1 item anonymous, 2 as the member). The Following tab was already authenticated. Still open from D42: paging past the first 12, which the footer calls "More as the hash keeps running" without a way to get there.)
 - [ ] Reel thumbnails: no transcoding or frame grab, so a reel with no poster shows a play icon (D41).
 - [ ] Reels on mobile, and reels in Run Capsules (D41).
 
@@ -94,7 +94,8 @@ Date: 2026-08-10
 - [x] Enforce FR-AUTH-002 email verification. (2026-09-17 - hard gate at login, hashed single-use 24h tokens, non-enumerating resend; D31.)
 - [x] Password reset. (2026-09-24 - same token machinery as email verification: random 32-byte token, SHA-256 hash stored, single-use, 1h TTL, 60s request throttle, non-enumerating; resetting revokes every existing refresh token and writes `PasswordReset` + an audit row. `POST /auth/password/forgot`, `POST /auth/password/reset`, web `/auth/forgot-password` and `/auth/reset-password`; "Forgot password?" link added to login. Mobile has no reset screen yet, matching the existing gap where mobile also has no register/verify screens of its own.)
 - [x] Mobile login handles `EMAIL_NOT_VERIFIED` with a resend action. (2026-09-17 - D31.) Opening the emailed link still lands on the web app, but mobile now has its own verify screen with a paste-the-token fallback (2026-09-28, see below).
-- [ ] Verify a Resend sending domain and set `EMAIL_FROM` to it. While it is `onboarding@resend.dev`, verification mail reaches only the Resend account owner, so nobody else can sign up.
+- [x] Verify a Resend sending domain and set `EMAIL_FROM` to it. (2026-10-01 - `shiggytrails.com` verified, `EMAIL_FROM=HCP <onboarding@shiggytrails.com>`; real mail sent and accepted for both templates below.)
+- [x] Branded email templates. (2026-10-01 - one shared shell for every mail (`email-templates.ts`): wordmark image with the footprint logo in Fredoka (an image, since mail clients do not load web fonts), tinted panel with a white card, a randomly chosen hash trail-mark sticker per send, brand landscape and an orange footer. Signup confirmation greets by public name only (D11); a new welcome email goes out after the verify transaction commits and can never fail a confirmation. Images are embedded in `email-assets.ts` and attached inline (`cid:`), so they work from `dist/` and without a public web URL. Not yet checked in a real inbox under dark mode.)
 - [x] Encrypt sensitive PersonProfile columns (medical notes, DOB, phone, emergency contacts) at the application layer (FR-ID-005). (2026-09-24 - AES-256-GCM in `utils/field-crypto.ts`, keyed by `PERSON_ENCRYPTION_KEY`; `dateOfBirth` moved from a typed `date` column to opaque ciphertext text since Postgres can no longer read it, which is the point. Registration and the seed encrypt on write; `prisma/encrypt-person-profile-fields.ts` re-encrypted all 42 existing rows and is idempotent for future deploys. Nothing outside registration reads these columns yet — the profile view/edit endpoint above is where `decryptField`/`decryptOptionalField` get their first caller.)
 - [x] Build the DomainEvent outbox publisher + the notification consumer. (2026-09-16 — in-process worker, in-app delivery, preferences; D26.)
 - [x] Outbox consumer: Hash Passport. (2026-09-16 — stamps, milestones, places, lifetime statistics, share link; D27.)
@@ -191,6 +192,35 @@ Date: 2026-08-10
 - [x] Mobile composer and post card (D51). (2026-09-29 - `components/feed/composer.tsx` replaced its long-standing disabled stub with a real create-draft-then-publish flow through a full-screen modal; text only for now — photos need the same R2 presign dance the web composer does, which is a separate follow-up, not a small addition to this one. The home tab (`(tabs)/index.tsx`) itself was rebuilt: it used to list kennels only, dated from before D41-D51 shipped. It now reads the real `GET /feed` with an All/Following scope switch (D50) and renders every kind through the new `components/feed/feed-card.tsx`, which mirrors `apps/web/components/feed/FeedCard.tsx`'s per-kind rendering and engagement-target mapping — run announcements, trail reports, photos, posts and reshares. `components/feed/kennel-post.tsx` (the old kennel-only card) is deleted, superseded by `KennelCard` (directory) and `FeedCard` (feed).)
 - [ ] Implement notifications and reminders.
 - [ ] Implement audit log for sensitive changes.
+
+---
+
+# QA pass (2026-10-01)
+
+Run against the heavy seed (`apps/api/prisma/seed-heavy`): ~560 API assertions across auth, kennels, membership, runs, trails, reports, capsules, social, search, media, passport, notifications, profile, officers, invitations and admin; 5,000 hostile-input requests; and a browser pass over every web route as anonymous, plain member and Grand Master, plus the admin app. Defects found and fixed:
+
+- [x] **Trail routes never drew on the map.** Two stacked causes: the web CSP had no `worker-src`, and MapLibre 6 derives its worker URL from `import.meta.url`, which the bundler turns into a `file://` path, so it called `new Worker('')`. Fixed with `worker-src 'self' blob:`, `setWorkerUrl()` in `TrailMap.tsx`, and `scripts/sync-maplibre-worker.mjs` (runs on `predev`/`prebuild`, copies the worker from `node_modules` into git-ignored `public/maplibre/`).
+- [x] **Reels could not play** and the in-browser recorder (D47) could not reach the camera: no `media-src` in the CSP, and `Permissions-Policy: camera=(), microphone=()`. Both fixed in `apps/web/next.config.ts`.
+- [x] `createTrail` silently dropped `routeGeoJson` and the start/finish coordinates the create schema accepts, so a trail made in one call could not be locked.
+- [x] Notifications said "liked your **reel**" for posts (`subjectWord` had no POST case), and a kennel follow crashed the outbox on a foreign-key error (`HasherFollowed` carries the kennel's id as its aggregate).
+- [x] `PUT /me/notification-preferences` rejected the SOCIAL category, and the web page had no row for it, so applause could not be muted (D50).
+- [x] The API accepted any text as a kennel brand colour (`red`, or CSS), which the web form already refuses. Now `#rgb`/`#rrggbb` only.
+- [x] Broken JSON, non-object JSON and oversized bodies answered **500**; now 400 `INVALID_JSON` / 413 `PAYLOAD_TOO_LARGE`.
+- [x] A failed AI draft showed the scribe the provider's raw JSON (request id, appeal URL). Now a plain sentence; the detail goes to the server log.
+- [x] Admin dashboard stat tiles did not refresh after activating a kennel.
+
+Confirmed working (no change needed): trail secrecy for every identity and release mode, the lazy and 60-second-sweeper releases attributed to SYSTEM, the 404-not-403 rule on hidden runs across like/comment/reshare/bookmark, D10 on verification level, biodata encrypted at rest, single-use hashed tokens, session revocation on reuse and on reset, guest-history claim only after verification, XSS payloads inert in every text surface, CORS, helmet, and 5,004 hostile path parameters with no 5xx.
+
+Still open from this pass:
+
+- [ ] **The Anthropic account behind `ANTHROPIC_API_KEY` is disabled** ("organization has been disabled", `organization_on_hold`). The key comes from the machine's environment, not `.env`. AI drafting cannot work until that is appealed or the key replaced (owner).
+- [ ] Mobile was typechecked and linted only; no device or emulator was available to run it.
+- [ ] A signed-in hasher can still open `/auth/login` and `/auth/register` (no redirect to home).
+- [ ] The kennel page shows "Trail reports (coming soon)" and "Photos (coming soon)" tabs although both exist elsewhere (`/reports`, the capsule gallery).
+- [ ] D10 gates the **verification level**, not activation: an admin can activate a kennel holding 2 of 4 offices (the dialog warns "this is early"). Confirm that is the intent.
+- [ ] `HasherFollowed` also records kennel follows (`aggregateType: Kennel`); renaming it is a code and Chapter 24 change.
+- [ ] The base seed (`prisma/seed.ts`) writes capsule timelines as `{type, at}`; the app reads `{at, kind, label}`. The heavy seed uses the right shape.
+- [ ] Lint baseline: web 9 errors, admin 5 (`react-hooks/set-state-in-effect`, `react-hooks/refs`), all in code this pass did not touch.
 
 ---
 

@@ -70,7 +70,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <PendingKennelQueue />
+      <PendingKennelQueue onChanged={load} />
     </div>
   );
 }

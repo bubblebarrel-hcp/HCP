@@ -31,3 +31,9 @@ Thumbs.db
 
 # Office lock files
 ~$*
+
+# Placeholder media drawn by the heavy seed (apps/api/prisma/seed-heavy); regenerated on demand
+apps/api/uploads/seed/
+
+# MapLibre worker, copied from node_modules by apps/web/scripts/sync-maplibre-worker.mjs
+apps/web/public/maplibre/

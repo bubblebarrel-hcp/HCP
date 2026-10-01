@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { logger } from '../utils/logger';
 
 // D7/D14: Claude is the platform's only AI provider. This is the one place
 // that talks to it — every caller goes through `draftTrailReport`, never the
@@ -55,14 +56,15 @@ export async function draftTrailReport(context: DraftContext): Promise<{ output:
       messages: [{ role: 'user', content: JSON.stringify(context, null, 2) }],
     });
   } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) {
-      throw new Error('The configured Anthropic API key was rejected.');
-    }
+    // What the provider said (account holds, key problems, request ids) is for
+    // whoever runs the platform, so it goes to the log. The scribe who pressed
+    // the button gets a plain sentence, not a pasted API response.
     if (err instanceof Anthropic.RateLimitError) {
-      throw new Error('Claude is rate-limited right now. Try again shortly.');
+      throw new Error('Claude is busy right now. Try again shortly.');
     }
     if (err instanceof Anthropic.APIError) {
-      throw new Error(`Claude request failed: ${err.message}`);
+      logger.error('Claude request failed', { status: err.status, message: err.message, requestId: err.requestID });
+      throw new Error("AI drafting isn't available right now. You can write the report yourself, or try again later.");
     }
     throw err;
   }

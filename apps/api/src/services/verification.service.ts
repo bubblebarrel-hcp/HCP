@@ -1,6 +1,7 @@
 import { TrustLevel } from '@prisma/client';
 import { env } from '../config/env';
 import prisma from '../config/prisma';
+import { displayName } from '../serializers/user';
 import { ApiError } from '../utils/http';
 import { hashToken, randomToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
@@ -20,6 +21,35 @@ const RESEND_INTERVAL_MS = 60 * 1000;
 
 function link(token: string) {
   return `/auth/verify?token=${token}`;
+}
+
+// The public name only (D11): the hash handle, or "Just <firstName>". Biodata
+// beyond first name is never put in a mail.
+async function greetingName(userId: string) {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { hashHandle: true, person: { select: { firstName: true } } },
+  });
+  return displayName(u?.hashHandle, u?.person?.firstName);
+}
+
+async function sendWelcome(user: { id: string; email: string }) {
+  try {
+    const result = await sendEmail({
+      to: user.email,
+      subject: 'Welcome to Shiggy Trails',
+      body: 'Your email is confirmed. Find your kennel and your first run.',
+      action: { label: 'Find your kennel', path: '/kennels' },
+      template: 'welcome',
+      name: await greetingName(user.id),
+    });
+    if (!result.sent && isEmailConfigured()) {
+      logger.error('Welcome email failed to send', { userId: user.id, error: result.error });
+    }
+  } catch (err) {
+    // Best-effort: being confirmed must never fail because a greeting did.
+    logger.error('Welcome email failed to send', { userId: user.id, error: String(err) });
+  }
 }
 
 export async function issueVerification(user: { id: string; email: string }) {
@@ -46,8 +76,9 @@ export async function issueVerification(user: { id: string; email: string }) {
     to: user.email,
     subject: 'Confirm your email to join Shiggy Trails',
     body: 'Confirm your email to get started with Shiggy Trails. This link is valid for 24 hours; after that, request a fresh one from the sign-in page.',
-    action: { label: 'Confirm my email', path: link(token) },
+    action: { label: 'Verify email', path: link(token) },
     template: 'signup-confirmation',
+    name: await greetingName(user.id),
   });
 
   if (!result.sent && isEmailConfigured()) {
@@ -117,6 +148,9 @@ export async function verifyEmail(token: string) {
     // stranger's history by typing their email in.
     await claimGuestHistory(tx, { id: record.userId, email: record.user.email });
   });
+
+  // After the commit, so a rolled-back confirmation never sends a welcome.
+  void sendWelcome({ id: record.userId, email: record.user.email });
 
   return { alreadyVerified: false };
 }

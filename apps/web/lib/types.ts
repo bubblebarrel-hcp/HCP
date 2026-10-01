@@ -453,6 +453,8 @@ export type NotificationCategory =
   | 'EVENT'
   | 'MEDIA'
   | 'SAFETY'
+  // Follows, likes, comments and reshares (D50).
+  | 'SOCIAL'
   | 'SYSTEM';
 
 export type NotificationPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
