@@ -51,11 +51,48 @@ export interface CommentThreadItem extends ContentComment {
   replies: ContentComment[];
 }
 
+// Who may see something a hasher made (D57): everybody, the people they have let
+// follow them, or only them. One scale for a whole profile and for each reel.
+export type Audience = 'PUBLIC' | 'FOLLOWERS' | 'ONLY_ME';
+
+// Where one hasher stands with another: nothing, a request waiting on their
+// approval, or following (D57). SELF on your own page.
+export type FollowRelation = 'NONE' | 'REQUESTED' | 'FOLLOWING' | 'SELF';
+
 export interface FollowState {
   targetId: string;
   followers: number;
   following: boolean;
+  relation: FollowRelation | null;
   isSelf: boolean;
+  followsOpen: boolean | null;
+  profileVisibility: Audience | null;
+}
+
+// One tile in the photo grid on a hasher's page (D57).
+export interface HasherPhoto {
+  id: string;
+  url: string;
+  thumbnailUrl: string | null;
+  width: number | null;
+  height: number | null;
+  caption: string | null;
+  takenAt: string;
+  source: { type: 'POST' | 'REEL' | 'RUN'; id: string };
+}
+
+export interface HasherPhotoPage extends Page<HasherPhoto> {
+  locked: boolean;
+}
+
+// Somebody waiting on a locked profile's yes.
+export interface FollowRequest {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  homeKennel: { slug: string; shortName: string; primaryColor: string | null } | null;
+  requestedAt: string | null;
 }
 
 export interface HasherProfile {
@@ -71,6 +108,12 @@ export interface HasherProfile {
   followers: number;
   following: number;
   isFollowing: boolean;
+  relation: FollowRelation;
+  profileVisibility: Audience;
+  // Whether this viewer may see their posts, photos and reels (D57).
+  canSeeContent: boolean;
+  followsOpen: boolean;
+  pendingRequests: number;
   isMe: boolean;
 }
 
@@ -193,6 +236,8 @@ export interface SessionUser {
   hashHandle: string | null;
   // hashHandle, or "Just <firstName>" (D11)
   displayName: string;
+  // Who sees what they make: posts, photos and reels (D57).
+  profileVisibility?: Audience;
   emailVerified: boolean;
   homeKennelId: string | null;
   createdAt: string;

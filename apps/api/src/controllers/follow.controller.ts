@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as follows from '../services/follow.service';
+import * as photos from '../services/hasher-photos.service';
 import { ApiError, ok } from '../utils/http';
 
 const actor = (req: Request) => {
@@ -61,4 +62,26 @@ export async function myFollowing(req: Request, res: Response) {
 
 export async function myFollowers(req: Request, res: Response) {
   return ok(res, await follows.listFollowers(viewer(req), actor(req).id, paging(req)));
+}
+
+// The photo grid on a hasher's page (D57).
+export async function hasherPhotos(req: Request, res: Response) {
+  return ok(res, await photos.listPhotos(viewer(req), req.params.id, paging(req)));
+}
+
+// Follow requests: people waiting on a locked profile's yes (D57).
+export async function requests(req: Request, res: Response) {
+  return ok(res, await follows.listRequests(actor(req), paging(req)));
+}
+
+export async function approveRequest(req: Request, res: Response) {
+  return ok(res, await follows.approveRequest(actor(req), req.params.followerId));
+}
+
+export async function declineRequest(req: Request, res: Response) {
+  return ok(res, await follows.declineRequest(actor(req), req.params.followerId));
+}
+
+export async function removeFollower(req: Request, res: Response) {
+  return ok(res, await follows.removeFollower(actor(req), req.params.followerId));
 }

@@ -6,11 +6,10 @@ import { ProfileBranding } from '@/components/profile/ProfileBranding';
 import { Card } from '@/components/ui/card';
 import { FeedLayout } from '@/components/layout/FeedLayout';
 import { LeftNav } from '@/components/layout/LeftNav';
-import { HasherSocial } from '@/components/social/HasherSocial';
+import { HasherBody } from '@/components/profile/HasherBody';
 import { publicGet } from '@/lib/server-api';
-import type { HasherProfile, Page, Reel } from '@/lib/types';
+import type { HasherPhotoPage, HasherProfile, Page, Reel } from '@/lib/types';
 import { brandColor, cn } from '@/lib/utils';
-import { ReelStrip } from '@/components/feed/ReelStrip';
 
 // The public face of a hasher (D50). Public identity only (D11): the hash
 // handle they were given, or "Just <firstName>" until the kennel names them —
@@ -39,9 +38,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function HasherPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [data, reels] = await Promise.all([
+  // The anonymous view of what they have made: all of it for a public profile,
+  // none of it for a locked one (D57). The browser asks again once it has a
+  // session, because a follower sees more.
+  const [data, reels, photos] = await Promise.all([
     load(id),
     publicGet<Page<Reel>>(`/reels?limit=15&authorId=${id}`).catch(() => null),
+    publicGet<HasherPhotoPage>(`/hashers/${id}/photos?limit=24`).catch(() => null),
   ]);
   if (!data) notFound();
   const hasher = data.hasher;
@@ -96,25 +99,23 @@ export default async function HasherPage({ params }: { params: Promise<{ id: str
               </ul>
             </div>
           )}
-          {/* The button, the counts and the two lists move together, so the
-              number beside "followers" is right the instant it is pressed. */}
-          <HasherSocial
+          {/* The button, the counts, the lists, and then their photos and
+              reels or the lock that keeps them back. They move together, so
+              the number beside "followers" is right the instant it is pressed. */}
+          <HasherBody
             hasherId={hasher.id}
+            name={hasher.name}
             followers={hasher.followers}
             following={hasher.following}
             joinedAt={hasher.joinedAt}
+            profileVisibility={hasher.profileVisibility}
+            canSeeContent={hasher.canSeeContent}
+            initialPhotos={photos && !photos.locked ? photos.items : []}
+            initialPhotoTotal={photos && !photos.locked ? photos.total : 0}
+            initialReels={hasher.canSeeContent ? (reels?.items ?? []) : []}
           />
         </div>
       </Card>
-
-      <div className="mt-4 space-y-4">
-        {(reels?.items.length ?? 0) > 0 && (
-          <section>
-            <h2 className="px-4 pb-2 text-sm font-semibold text-muted-foreground sm:px-0">Their reels</h2>
-            <ReelStrip initial={reels?.items ?? []} authorId={hasher.id} />
-          </section>
-        )}
-      </div>
     </FeedLayout>
   );
 }

@@ -7,7 +7,7 @@ const context = {
   kennelId: uuid.allow(null),
   runId: uuid.allow(null),
   eventId: uuid.allow(null),
-  visibility: Joi.string().valid('PUBLIC', 'KENNEL_ONLY'),
+  visibility: Joi.string().valid('PUBLIC', 'FOLLOWERS', 'ONLY_ME'),
   caption: Joi.string().trim().max(500).allow('', null),
 };
 

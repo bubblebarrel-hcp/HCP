@@ -38,6 +38,18 @@ function useUnreadCount(enabled: boolean) {
   return unread;
 }
 
+// Who is waiting on this hasher's yes (D57); zero unless the profile is locked.
+function usePendingRequests(enabled: boolean) {
+  const [pending, setPending] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    api<{ pendingRequests: number }>('/me/privacy')
+      .then((data) => setPending(data.pendingRequests))
+      .catch(() => {});
+  }, [enabled]);
+  return pending;
+}
+
 function PrimaryButton({ label, onPress, busy }: { label: string; onPress: () => void; busy?: boolean }) {
   const theme = useTheme();
   return (
@@ -275,6 +287,7 @@ function Menu() {
   const { preference, setPreference } = useThemePreference();
   const [memberships, setMemberships] = useState<MyMembership[] | null>(null);
   const unread = useUnreadCount(Boolean(user));
+  const pendingRequests = usePendingRequests(Boolean(user));
 
   useEffect(() => {
     if (!user) return;
@@ -296,6 +309,13 @@ function Menu() {
     },
     { label: 'Trail reports', icon: { ios: 'book', android: 'menu_book', web: 'menu_book' } },
     { label: 'Hash Passport', icon: { ios: 'person.text.rectangle', android: 'badge', web: 'badge' }, onPress: () => router.push('/passport') },
+    { label: 'Privacy', icon: { ios: 'lock', android: 'lock', web: 'lock' }, onPress: () => router.push('/privacy') },
+    {
+      label: 'Follow requests',
+      icon: { ios: 'person.badge.plus', android: 'person_add', web: 'person_add' },
+      onPress: () => router.push('/follow-requests'),
+      badge: pendingRequests,
+    },
   ];
 
   return (

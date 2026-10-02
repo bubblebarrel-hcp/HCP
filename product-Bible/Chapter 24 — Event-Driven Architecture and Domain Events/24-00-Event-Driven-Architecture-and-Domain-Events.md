@@ -57,6 +57,9 @@ Organized by Chapter 23 domain. "Consumers" lists which cross-cutting systems ca
 | `EmailVerified` | FR-AUTH-002 confirmation accepted; account becomes usable | Identity Service | Audit (trust level lifts to VERIFIED_EMAIL) |
 | `PasswordReset` | A reset token was redeemed; every refresh token for the user is revoked | Identity Service | Audit |
 | `ProfileUpdated` | FR-ID-005 profile view/edit; payload lists changed fields, never their values | Identity Service | Search Index, Audit |
+| `ProfileVisibilityChanged` | D57: who sees what the hasher made changed (PUBLIC, FOLLOWERS, ONLY_ME); payload has `from`, `to` and how many waiting requests were admitted | Identity Service | Feed, Audit |
+| `AccountDeactivated` / `AccountReactivated` | D57: the hasher stepped away, or signed back in | Identity Service | Feed, Search Index, Audit |
+| `AccountDeleted` | D57: the hasher deleted their account; the person is removed and the record kept; payload lists the kennels they left | Identity Service | Feed, Search Index, Passport, Audit |
 | `HashNameChanged` | New primary Hash name recorded | Identity Service | Search Index, Audit |
 | `TrustLevelChanged` | A.9 transition | Identity Service | Authorization, Audit, AI (context signal only) |
 | `MembershipRequested` | A.2 Applicant → Pending Review | Membership Service | Notification (officers), Audit |
@@ -190,10 +193,13 @@ D41 reels, D50 follows and engagement, D51 posts. A reel and a post belong to th
 | `ReelPosted` | D41: a reel is published (draft, upload, publish, as with D28) | Social Service | Feed, Search Index, Audit |
 | `ReelArchived` | D41: the author archives their own reel | Social Service | Feed, Search Index |
 | `ReelRemoved` | D41: a moderator removes a reel; reason required | Social Service | Feed, Search Index, Audit |
-| `PostPublished` | D51: a post is published; always public, so the event carries no audience | Social Service | Feed, Search Index, Audit |
+| `PostPublished` | D51: a post is published; its audience is its author's profile (D57), so the event carries none | Social Service | Feed, Search Index, Audit |
 | `PostArchived` | D51: the author archives their own post | Social Service | Feed, Search Index |
 | `PostRemoved` | D51: a moderator removes a post; reason required | Social Service | Feed, Search Index, Audit |
 | `HasherFollowed` / `HasherUnfollowed` | D50: a follow is toggled. Despite the name this also records kennel follows: `aggregateType` is `Kennel` and the payload `targetType` says which. A follow grants no membership, no vote and no authority | Social Service | Feed (Following scope), Audit |
+| `FollowRequested` / `FollowRequestCancelled` | D57: somebody asked to follow a locked profile, or withdrew the ask | Social Service | Notification (the person asked) |
+| `FollowRequestApproved` | D57: the hasher said yes, or opened their profile to everybody and let the waiting in (`actorId` null, `reason` `profile-opened`) | Social Service | Notification (the person who asked), Feed |
+| `FollowRequestDeclined` / `FollowerRemoved` | D57: a request was declined, or a follower removed. Nobody is told | Social Service | Audit |
 | `ContentLiked` / `ContentUnliked` | D50: a like is toggled on any `SubjectType` | Social Service | Feed (counts) |
 | `ContentCommented` | D50: a comment or reply is posted | Social Service | Notification (subject owner), Feed (counts) |
 | `ContentCommentWithdrawn` | D50: the author takes their own comment down | Social Service | Feed (counts) |

@@ -17,6 +17,7 @@ export const sessionUserSelect = {
   avatarPosition: true,
   bannerUrl: true,
   bannerPosition: true,
+  profileVisibility: true,
   emailVerifiedAt: true,
   homeKennelId: true,
   createdAt: true,
@@ -40,6 +41,8 @@ export function serializeSessionUser(user: SessionUserRow) {
     avatarPosition: user.avatarPosition,
     bannerUrl: user.bannerUrl,
     bannerPosition: user.bannerPosition,
+    // Who sees what they make: PUBLIC, FOLLOWERS or ONLY_ME (D57).
+    profileVisibility: user.profileVisibility,
     emailVerified: Boolean(user.emailVerifiedAt),
     homeKennelId: user.homeKennelId,
     createdAt: user.createdAt,

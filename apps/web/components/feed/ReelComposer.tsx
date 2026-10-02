@@ -7,9 +7,10 @@ import { ReelRecorder } from '@/components/feed/ReelRecorder';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Select, Textarea } from '@/components/ui/input';
+import { AudiencePicker } from '@/components/profile/AudiencePicker';
 import { Field } from '@/components/ui/label';
 import { ACCEPTED_IMAGES, ACCEPTED_VIDEOS, MAX_UPLOAD_BYTES, fileSize, uploadPhoto, uploadVideo } from '@/lib/media';
-import type { MyMembership, Page, Reel } from '@/lib/types';
+import type { Audience, MyMembership, Page, Reel } from '@/lib/types';
 import api, { errorMessage } from '@/services/api';
 
 // Posting a reel (D41), in the order the API expects: a draft carries the
@@ -41,7 +42,8 @@ export function ReelComposer({
   const [files, setFiles] = useState<File[]>([]);
   const [caption, setCaption] = useState('');
   const [kennelId, setKennelId] = useState(fixedKennelId ?? NONE);
-  const [membersOnly, setMembersOnly] = useState(false);
+  // Who may watch it (D57). Public until the hasher says otherwise.
+  const [audience, setAudience] = useState<Audience>('PUBLIC');
   const [kennels, setKennels] = useState<MyMembership[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   // A reel comes off the device one of two ways (D47): a file already on it, or
@@ -81,7 +83,7 @@ export function ReelComposer({
     setFiles([]);
     setRecording(false);
     setCaption('');
-    setMembersOnly(false);
+    setAudience('PUBLIC');
     if (!fixedKennelId) setKennelId(NONE);
     setBusy(null);
   }
@@ -109,7 +111,7 @@ export function ReelComposer({
         caption: caption.trim() || null,
         kennelId: kennelId || null,
         runId: fixedRunId ?? null,
-        visibility: membersOnly && kennelId ? 'KENNEL_ONLY' : 'PUBLIC',
+        visibility: audience,
       });
       const reel = draft.data.data.reel;
 
@@ -279,10 +281,7 @@ export function ReelComposer({
               <Select
                 id={`${id}-kennel`}
                 value={kennelId}
-                onChange={(event) => {
-                  setKennelId(event.target.value);
-                  if (!event.target.value) setMembersOnly(false);
-                }}
+                onChange={(event) => setKennelId(event.target.value)}
                 data-testid="reel-kennel"
               >
                 <option value={NONE}>On On — no kennel</option>
@@ -295,23 +294,13 @@ export function ReelComposer({
             </Field>
           )}
 
-          {kennelId && (
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={membersOnly}
-                onChange={(event) => setMembersOnly(event.target.checked)}
-                data-testid="reel-members-only"
-              />
-              <span>
-                Members only
-                <span className="block text-muted-foreground">
-                  Only members of that kennel see it. Otherwise anyone on HCP can.
-                </span>
-              </span>
-            </label>
-          )}
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium leading-none">Who can watch it</p>
+            <AudiencePicker kind="reel" value={audience} onChange={setAudience} disabled={Boolean(busy)} compact />
+            <p className="text-xs text-muted-foreground">
+              A locked profile narrows this further: only its followers see anything it posts.
+            </p>
+          </div>
 
           <div className="flex items-center justify-end gap-2">
             {busy && (

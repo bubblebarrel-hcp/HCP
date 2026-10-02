@@ -24,6 +24,8 @@ export interface SessionUser {
   bannerUrl: string | null;
   // CSS background-position pair for the banner's crop; null is centred.
   bannerPosition: string | null;
+  // Who sees what they make: posts, photos and reels (D57).
+  profileVisibility: Audience;
   emailVerified: boolean;
   homeKennelId: string | null;
   createdAt: string;
@@ -965,7 +967,10 @@ export interface KennelSettings {
 // ─── Reels (apps/api/src/services/reel.service.ts, D41) ───
 
 export type ReelStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | 'REMOVED';
-export type ReelVisibility = 'PUBLIC' | 'KENNEL_ONLY';
+// Who sees something a hasher made (D57): everybody, the people they have let
+// follow them, or only them. One scale for a whole profile and for each reel.
+export type Audience = 'PUBLIC' | 'FOLLOWERS' | 'ONLY_ME';
+export type ReelVisibility = Audience;
 
 export interface Reel {
   id: string;
@@ -1263,11 +1268,49 @@ export interface Bookmark {
   href: string | null;
 }
 
+// Where one hasher stands with another: nothing, a request waiting on their
+// approval, or following (D57). SELF on your own page.
+export type FollowRelation = 'NONE' | 'REQUESTED' | 'FOLLOWING' | 'SELF';
+
 export interface FollowState {
   targetId: string;
   followers: number;
   following: boolean;
+  // Null for a kennel, which has no approval step.
+  relation: FollowRelation | null;
   isSelf: boolean;
+  // False once the hasher has closed to new followers entirely.
+  followsOpen: boolean | null;
+  profileVisibility: Audience | null;
+}
+
+// One tile in the photo grid on a hasher's page (D57).
+export interface HasherPhoto {
+  id: string;
+  url: string;
+  thumbnailUrl: string | null;
+  width: number | null;
+  height: number | null;
+  caption: string | null;
+  takenAt: string;
+  // What it is on, so the tile can open the post, reel or run it belongs to.
+  source: { type: 'POST' | 'REEL' | 'RUN'; id: string };
+}
+
+export interface HasherPhotoPage extends Page<HasherPhoto> {
+  // True when this viewer is shut out by the hasher's profile setting.
+  locked: boolean;
+}
+
+// Somebody waiting on a locked profile's yes.
+export interface FollowRequest {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  avatarPosition: string | null;
+  bio: string | null;
+  homeKennel: { slug: string; shortName: string; primaryColor: string | null } | null;
+  requestedAt: string | null;
 }
 
 // The public face of a hasher (D11): handle, picture, words, kennels. Never
@@ -1287,6 +1330,14 @@ export interface HasherProfile {
   followers: number;
   following: number;
   isFollowing: boolean;
+  relation: FollowRelation;
+  profileVisibility: Audience;
+  // Whether this viewer may see their posts, photos and reels (D57).
+  canSeeContent: boolean;
+  // False once they have closed to new followers entirely.
+  followsOpen: boolean;
+  // How many are waiting on their yes; only filled in on your own page.
+  pendingRequests: number;
   isMe: boolean;
 }
 

@@ -1,10 +1,14 @@
 import { api } from '@/lib/api';
 import type {
+  Audience,
   CommentThreadItem,
   ContentComment,
   Engagement,
   EngagementDetail,
+  FollowRelation,
+  FollowRequest,
   FollowState,
+  HasherPhotoPage,
   HasherProfile,
   Page,
   SubjectSegment,
@@ -75,8 +79,50 @@ export async function followState(kind: 'hashers' | 'kennels', slugOrId: string)
   return api<FollowState>(`/${kind}/${slugOrId}/follow`);
 }
 
+// Following a hasher is not always immediate: a locked profile turns it into a
+// request (D57). The answer says which, so the button shows the truth.
 export async function followHasher(id: string, follow: boolean) {
-  return api(`/hashers/${id}/follow`, { method: follow ? 'POST' : 'DELETE' });
+  return api<{ relation: FollowRelation; counts: { followers: number; following: number } }>(
+    `/hashers/${id}/follow`,
+    { method: follow ? 'POST' : 'DELETE' },
+  );
+}
+
+// The photo grid on a hasher's page, gated by their profile (D57).
+export async function hasherPhotos(id: string, page = 1, limit = 24) {
+  return api<HasherPhotoPage>(`/hashers/${id}/photos?page=${page}&limit=${limit}`);
+}
+
+// Who sees what I make, stepping away, and leaving (D57).
+export async function getPrivacy() {
+  return api<{ profileVisibility: Audience; pendingRequests: number }>('/me/privacy');
+}
+
+export async function setPrivacy(profileVisibility: Audience) {
+  return api<{ profileVisibility: Audience; pendingRequests: number }>('/me/privacy', {
+    method: 'PATCH',
+    body: { profileVisibility },
+  });
+}
+
+export async function deactivateAccount(password: string) {
+  return api('/me/deactivate', { method: 'POST', body: { password } });
+}
+
+export async function deleteAccount(password: string) {
+  return api('/me/delete', { method: 'POST', body: { password, confirm: 'DELETE' } });
+}
+
+export async function listFollowRequests(page = 1) {
+  return api<Page<FollowRequest>>(`/me/follow-requests?page=${page}&limit=30`);
+}
+
+export async function approveFollowRequest(followerId: string) {
+  return api(`/me/follow-requests/${followerId}/approve`, { method: 'POST' });
+}
+
+export async function declineFollowRequest(followerId: string) {
+  return api(`/me/follow-requests/${followerId}/decline`, { method: 'POST' });
 }
 
 export async function followKennel(slug: string, follow: boolean) {

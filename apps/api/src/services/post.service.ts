@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
+import { canSeeContentOf, contentVisibleAuthors } from './audience.service';
 import { type Actor, assertKennelPermission, resolveKennelContext } from './permission.service';
 import { recordAudit, recordEvent } from './record.service';
 import { canView, getAccess, publicName, userPublicSelect } from './run.service';
@@ -19,8 +20,9 @@ import * as stats from './stats.service';
 // D48 refuses an empty one because it would be a broken player; a post is words
 // with optional photos, and a post with no photo is just a post.
 //
-// A post is always public. There is no audience to choose, so the composer does
-// not ask — it says so instead.
+// A post is as public as its author's profile (D57): everybody, their approved
+// followers, or only them. There is no audience on the post itself; the composer
+// says which it is rather than asking each time.
 //
 // Photos follow the ordinary upload path (D28): the post is created as a draft,
 // the browser PUTs each photo to storage against a POST target, and publishing
@@ -309,9 +311,8 @@ export async function remove(actor: Actor, postId: string, reason: string) {
 
 // ─── Reads ───
 
-// Published posts, newest first. A post is always public, so unlike reels there
-// is nothing to filter per viewer — which is the whole reason this list is one
-// query rather than an over-fetch-and-drop.
+// Published posts, newest first. A post is as visible as its author's profile
+// (D57), so the page is filtered to the authors this viewer may read.
 export async function listPublished(
   actor: Actor | undefined,
   opts: { page: number; limit: number; kennelSlug?: string; authorId?: string },
@@ -322,15 +323,21 @@ export async function listPublished(
     ...(opts.authorId ? { authorId: opts.authorId } : {}),
   };
 
+  // Who this viewer may read, decided up front so the query pages over exactly
+  // those authors and the total agrees with the items.
+  const candidates = await prisma.post.findMany({ where, distinct: ['authorId'], select: { authorId: true } });
+  const readable = await contentVisibleAuthors(actor, candidates.map((c) => c.authorId));
+  const readableWhere: Prisma.PostWhereInput = { ...where, authorId: { in: [...readable] } };
+
   const [rows, total] = await prisma.$transaction([
     prisma.post.findMany({
-      where,
+      where: readableWhere,
       select: postSelect,
       orderBy: { publishedAt: 'desc' },
       skip: (opts.page - 1) * opts.limit,
       take: opts.limit,
     }),
-    prisma.post.count({ where }),
+    prisma.post.count({ where: readableWhere }),
   ]);
 
   const [photos, engagement] = await Promise.all([
@@ -358,5 +365,6 @@ export async function detail(actor: Actor | undefined, postId: string) {
   // A draft is the author's alone; a removed post is nobody's.
   if (post.status === S.REMOVED) throw ApiError.notFound('Post not found');
   if (post.status !== S.PUBLISHED && !own) throw ApiError.notFound('Post not found');
+  if (!own && !(await canSeeContentOf(actor, post.authorId))) throw ApiError.notFound('Post not found');
   return serializeOne(post, actor?.id);
 }

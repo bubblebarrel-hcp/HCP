@@ -57,6 +57,8 @@ function PushedScreens() {
       <Stack.Screen name="kennels/[slug]/officers" options={{ title: 'Officers' }} />
       <Stack.Screen name="comments/[segment]/[id]" options={{ title: 'Comments' }} />
       <Stack.Screen name="hashers/[id]" options={{ title: 'Hasher' }} />
+      <Stack.Screen name="privacy" options={{ title: 'Privacy' }} />
+      <Stack.Screen name="follow-requests" options={{ title: 'Follow requests' }} />
       <Stack.Screen name="auth/register" options={{ title: 'Create account' }} />
       <Stack.Screen name="auth/verify" options={{ title: 'Confirm email' }} />
       <Stack.Screen name="auth/forgot-password" options={{ title: 'Forgot password' }} />

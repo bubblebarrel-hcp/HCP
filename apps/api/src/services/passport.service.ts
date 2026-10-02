@@ -339,8 +339,16 @@ export async function getMyPassport(actor: Actor) {
 // rotatable and never exposed on someone else's view.
 export async function getSharedPassport(shareToken: string) {
   if (!isUuid(shareToken)) throw ApiError.notFound('Passport not found');
-  const found = await prisma.hashPassport.findUnique({ where: { shareToken }, select: { userId: true } });
+  const found = await prisma.hashPassport.findUnique({
+    where: { shareToken },
+    select: { userId: true, user: { select: { status: true, deactivatedAt: true, deletedAt: true } } },
+  });
   if (!found) throw ApiError.notFound('Passport not found');
+  // Somebody who has stepped away or left has no public page, and a link to a
+  // passport is a public page (D57).
+  if (found.user.status !== 'ACTIVE' || found.user.deactivatedAt || found.user.deletedAt) {
+    throw ApiError.notFound('Passport not found');
+  }
   return serialize(await loadPassport(found.userId), { includePrivate: false });
 }
 

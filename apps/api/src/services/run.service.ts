@@ -53,12 +53,15 @@ export const statusWords: Record<RunStatus, string> = {
 export const userPublicSelect = {
   id: true,
   hashHandle: true,
+  // A deleted hasher is shown as "Deleted hasher" wherever their history remains (D57).
+  deletedAt: true,
   person: { select: { firstName: true } },
 } satisfies Prisma.UserSelect;
 
 type UserPublic = Prisma.UserGetPayload<{ select: typeof userPublicSelect }>;
 
 export function publicName(user: UserPublic) {
+  if (user.deletedAt) return 'Deleted hasher';
   return displayName(user.hashHandle, user.person?.firstName);
 }
 

@@ -3,6 +3,7 @@ import prisma from '../config/prisma';
 import { ApiError, isUuid } from '../utils/http';
 import { type Actor } from './permission.service';
 import { canSee as canSeeReel } from './reel.service';
+import { canSeeContentOf } from './audience.service';
 import { canView, getAccess } from './run.service';
 
 // Who may engage with what (D50).
@@ -79,8 +80,8 @@ async function resolveReel(actor: Actor | undefined, id: string): Promise<Subjec
   };
 }
 
-// A hasher's written post (D51). Always public once published, so there is no
-// audience to check — only whether it is still standing.
+// A hasher's written post (D51). It is as visible as its author's profile (D57),
+// and only while it is still standing.
 async function resolvePost(actor: Actor | undefined, id: string): Promise<SubjectContext> {
   const post = await prisma.post.findUnique({
     where: { id },
@@ -90,6 +91,7 @@ async function resolvePost(actor: Actor | undefined, id: string): Promise<Subjec
   const mine = actor?.id === post.authorId;
   if (post.status === 'REMOVED') throw ApiError.notFound('Post not found');
   if (post.status !== 'PUBLISHED' && !mine) throw ApiError.notFound('Post not found');
+  if (!mine && !(await canSeeContentOf(actor, post.authorId))) throw ApiError.notFound('Post not found');
   return {
     type: SubjectType.POST,
     id: post.id,
@@ -192,6 +194,12 @@ async function resolveMedia(actor: Actor | undefined, id: string): Promise<Subje
   if (!media) throw ApiError.notFound('Photo not found');
   if (media.uploadState !== UploadState.AVAILABLE) throw ApiError.notFound('Photo not found');
   if (media.moderationState === ModerationState.REJECTED) throw ApiError.notFound('Photo not found');
+
+  // A photo is a hasher's own thing as well as a run's: the person who took it
+  // can lock their profile, and then it is for their followers (D57).
+  if (media.uploaderId && actor?.id !== media.uploaderId && !(await canSeeContentOf(actor, media.uploaderId))) {
+    throw ApiError.notFound('Photo not found');
+  }
 
   const runLink = media.links.find((l) => l.targetType === MediaTargetType.RUN);
   if (runLink) {

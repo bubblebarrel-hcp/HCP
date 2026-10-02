@@ -28,9 +28,8 @@ import {
   PostStatus,
   Prisma,
   PrismaClient,
-  ProfileVisibility,
+  Audience,
   ReelStatus,
-  ReelVisibility,
   ReleaseMode,
   ReportContributorRole,
   RoleAssignmentStatus,
@@ -436,7 +435,7 @@ async function main() {
         userRows.push({
           id, email, passwordHash, hashHandle: handle, trustLevel: chance(0.6) ? TrustLevel.VERIFIED_MEMBER : TrustLevel.VERIFIED_EMAIL,
           emailVerifiedAt: createdAt, termsAcceptedAt: createdAt, bio: pick(BIOS), homeKennelId: kennel.id,
-          profileVisibility: weighted<ProfileVisibility>([[ProfileVisibility.PUBLIC, 5], [ProfileVisibility.MEMBERS_ONLY, 4], [ProfileVisibility.PRIVATE, 1]]),
+          profileVisibility: weighted<Audience>([[Audience.PUBLIC, 7], [Audience.FOLLOWERS, 2], [Audience.ONLY_ME, 1]]),
           lastLoginAt: daysAgo(int(0, 20)), createdAt,
         });
         personRows.push({
@@ -1116,7 +1115,7 @@ async function main() {
 
       // Reels
       const reelRows: Prisma.ReelCreateManyInput[] = [];
-      const reelMeta: { id: string; visibility: ReelVisibility; status: ReelStatus }[] = [];
+      const reelMeta: { id: string; visibility: Audience; status: ReelStatus }[] = [];
       for (const [i, v] of videos.entries()) {
         const author = pick(everyone);
         const home = people.find((p) => p.u.id === author.id)?.home;
@@ -1132,7 +1131,7 @@ async function main() {
           width: v.width, height: v.height, durationSec: v.durationSec, capturedAt: publishedAt, uploadState: UploadState.AVAILABLE, moderationState: ModerationState.APPROVED,
         });
         linkRows.push({ mediaId: mid, targetType: MediaTargetType.REEL, targetId: reelId });
-        const visibility = membersOnly ? ReelVisibility.KENNEL_ONLY : ReelVisibility.PUBLIC;
+        const visibility = membersOnly ? Audience.FOLLOWERS : Audience.PUBLIC;
         reelRows.push({
           id: reelId, authorId: author.id, kennelId: kennel?.id ?? null, runId: run?.id ?? null, caption: pick(REEL_CAPTIONS), status, visibility, mediaId: mid, publishedAt,
           viewCount: int(5, 400), createdAt: publishedAt,
@@ -1143,7 +1142,7 @@ async function main() {
       }
       // And a reel still being made.
       if (videos.length) {
-        reelRows.push({ authorId: pick(everyone).id, caption: 'Work in progress', status: ReelStatus.DRAFT, visibility: ReelVisibility.PUBLIC });
+        reelRows.push({ authorId: pick(everyone).id, caption: 'Work in progress', status: ReelStatus.DRAFT, visibility: Audience.PUBLIC });
       }
 
       // Kennel galleries: a featured set of photos each.
@@ -1187,7 +1186,7 @@ async function main() {
       interface Subject { type: SubjectType; id: string; pop: number }
       const subjects: Subject[] = [];
       for (const p of postMeta) if (p.status === PostStatus.PUBLISHED) subjects.push({ type: SubjectType.POST, id: p.id, pop: rnd() ** 2 });
-      for (const r of reelMeta) if (r.status === ReelStatus.PUBLISHED && r.visibility === ReelVisibility.PUBLIC) subjects.push({ type: SubjectType.REEL, id: r.id, pop: rnd() ** 2 });
+      for (const r of reelMeta) if (r.status === ReelStatus.PUBLISHED && r.visibility === Audience.PUBLIC) subjects.push({ type: SubjectType.REEL, id: r.id, pop: rnd() ** 2 });
       for (const { reportId, run } of reportSubjects) {
         if (run.visibility !== RunVisibility.PUBLIC) continue;
         if (run.reportPublished) subjects.push({ type: SubjectType.TRAIL_REPORT, id: reportId, pop: rnd() ** 2 });

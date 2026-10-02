@@ -1,4 +1,4 @@
-import { CapsuleStatus, Prisma, ProfileVisibility, TrailReportStatus } from '@prisma/client';
+import { CapsuleStatus, Prisma, TrailReportStatus } from '@prisma/client';
 import prisma from '../config/prisma';
 import type { Actor } from './permission.service';
 import { publicName, userPublicSelect, visibleRunsWhere } from './run.service';
@@ -65,12 +65,13 @@ async function searchHashers(actor: Actor | undefined, q: string, limit: number)
   // stable public name to type into a search box (D5/D11), and firstName
   // itself is private biodata, never queried here.
   const rows = await prisma.user.findMany({
-    where: { status: 'ACTIVE', deactivatedAt: null, hashHandle: contains(q) },
-    select: { ...userPublicSelect, avatarUrl: true, profileVisibility: true, homeKennel: { select: { slug: true, shortName: true, primaryColor: true } } },
+    where: { status: 'ACTIVE', deactivatedAt: null, deletedAt: null, hashHandle: contains(q) },
+    select: { ...userPublicSelect, avatarUrl: true, homeKennel: { select: { slug: true, shortName: true, primaryColor: true } } },
     take: limit * 2,
   });
+  // A locked profile is still findable, because finding it is how you ask to follow
+  // it (D57); what it keeps back is its content, not its name.
   return rows
-    .filter((u) => u.profileVisibility !== ProfileVisibility.PRIVATE || u.id === actor?.id)
     .slice(0, limit)
     .map((u) => ({ id: u.id, name: publicName(u), avatarUrl: u.avatarUrl, homeKennel: u.homeKennel }));
 }

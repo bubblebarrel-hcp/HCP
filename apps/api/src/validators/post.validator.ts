@@ -1,7 +1,7 @@
 import Joi from 'joi';
 import { uuid } from './common';
 
-// A hasher's written post (D51). A post is always public, so there is
+// A hasher's written post (D51). A post is as visible as its author's profile (D57), so there is
 // deliberately no visibility field to send.
 
 export const createPostSchema = Joi.object({

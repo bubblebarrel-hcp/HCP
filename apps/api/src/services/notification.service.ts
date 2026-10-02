@@ -573,6 +573,37 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         recipients: [event.aggregateId],
       };
     }
+    // Somebody asked to follow a locked profile (D57). Only the person being
+    // asked hears about it; approving it is what tells the other one.
+    case 'FollowRequested': {
+      if (!event.actorId || event.aggregateType !== 'User') return null;
+      const asker = await publicNameOf(event.actorId);
+      return {
+        category: C.SOCIAL,
+        priority: P.NORMAL,
+        title: `${asker} asked to follow you`,
+        body: 'Approve or decline it from your follow requests.',
+        contextType: 'User',
+        contextId: event.actorId,
+        kennelId: null,
+        recipients: [event.aggregateId],
+      };
+    }
+    case 'FollowRequestApproved': {
+      const followerId = str(payload, 'followerId');
+      if (!followerId) return null;
+      const who = await publicNameOf(event.aggregateId);
+      return {
+        category: C.SOCIAL,
+        priority: P.NORMAL,
+        title: `${who} approved your request`,
+        body: 'You are following them now and will see what they share.',
+        contextType: 'User',
+        contextId: event.aggregateId,
+        kennelId: null,
+        recipients: [followerId],
+      };
+    }
     case 'ContentLiked': {
       const authorId = str(payload, 'authorId');
       if (!authorId || !event.actorId || authorId === event.actorId) return null;

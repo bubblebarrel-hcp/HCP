@@ -4,6 +4,7 @@ import { type Actor } from './permission.service';
 import { canView, getAccess, publicName, userPublicSelect } from './run.service';
 import * as reports from './report.service';
 import * as follows from './follow.service';
+import { contentVisibleAuthors } from './audience.service';
 import * as stats from './stats.service';
 import { resolveVisible, segmentFor } from './subject.service';
 
@@ -183,6 +184,13 @@ async function recentPhotos(actor: Actor | undefined, limit: number): Promise<Fe
     },
   });
 
+  // The person who took a photo can lock their profile, and then it is for
+  // their followers wherever it would have shown up in the feed (D57).
+  const readable = await contentVisibleAuthors(
+    actor,
+    rows.map((r) => r.uploader?.id).filter((id): id is string => Boolean(id)),
+  );
+
   const items: FeedItem[] = [];
   // One run's photo dump must not become the whole feed. BR-CXP-012 asks for
   // meaningful participation over volume; the cheapest honest version of that
@@ -193,6 +201,7 @@ async function recentPhotos(actor: Actor | undefined, limit: number): Promise<Fe
     // A photo is visible exactly when the run it belongs to is.
     const link = row.links.find((l) => l.targetType === 'RUN');
     if (!link) continue;
+    if (row.uploader && !readable.has(row.uploader.id)) continue;
     if ((perRun.get(link.targetId) ?? 0) >= MAX_PHOTOS_PER_RUN) continue;
     const access = await getAccess(actor, link.targetId);
     if (!canView(access)) continue;
@@ -312,12 +321,18 @@ async function upcomingRuns(actor: Actor | undefined, limit: number): Promise<Fe
   return items;
 }
 
-// Posts (D51). A post is always public, so unlike every other source here
-// there is nothing to filter per viewer and no need to over-fetch — what the
-// query returns is what goes on the page.
-async function recentPosts(limit: number): Promise<FeedItem[]> {
-  const rows = await prisma.post.findMany({
+// Posts (D51). A post is as visible as its author's profile (D57), so the
+// authors this viewer may not read are left out of the query itself and what it
+// returns is what goes on the page.
+async function recentPosts(actor: Actor | undefined, limit: number): Promise<FeedItem[]> {
+  const candidates = await prisma.post.findMany({
     where: { status: 'PUBLISHED' },
+    distinct: ['authorId'],
+    select: { authorId: true },
+  });
+  const readable = await contentVisibleAuthors(actor, candidates.map((c) => c.authorId));
+  const rows = await prisma.post.findMany({
+    where: { status: 'PUBLISHED', authorId: { in: [...readable] } },
     orderBy: { publishedAt: 'desc' },
     take: limit,
     select: {
@@ -684,7 +699,7 @@ export async function list(actor: Actor | undefined, opts: { page: number; limit
     recentPhotos(actor, opts.limit),
     upcomingRuns(actor, opts.limit),
     recentReshares(actor, opts.limit),
-    recentPosts(opts.limit),
+    recentPosts(actor, opts.limit),
   ]);
 
   let merged = [...asReports, ...photos, ...runs, ...reshares, ...hasherPosts].sort(

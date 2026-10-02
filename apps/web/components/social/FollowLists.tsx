@@ -63,13 +63,16 @@ export function FollowLists({
   followers,
   following,
   flat = false,
+  initialTab = 'followers',
 }: {
   hasherId: string;
   followers: number;
   following: number;
   flat?: boolean;
+  // Which list opens first, so pressing "following" on a profile opens that one.
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>('followers');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [followerRows, setFollowerRows] = useState<FollowerSummary[] | null>(null);
   const [followingRows, setFollowingRows] = useState<FollowingEntry[] | null>(null);
   const [loading, setLoading] = useState(false);

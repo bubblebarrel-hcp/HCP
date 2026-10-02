@@ -65,11 +65,18 @@ export default function AccountPage() {
 
       <div className="grid gap-4 py-4 sm:px-4 md:grid-cols-[2fr_3fr] lg:px-8 xl:grid-cols-[1fr_2fr]">
         <Card className={bleedCard}>
-          <CardHeader className="flex-row items-center justify-between pb-3">
+          <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-3">
             <CardTitle>Details</CardTitle>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/account/profile">Edit profile</Link>
-            </Button>
+            <div className="flex gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/account/privacy" data-testid="to-privacy">
+                  Privacy
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/account/profile">Edit profile</Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <dl className="grid gap-y-3 text-sm sm:grid-cols-[8rem_1fr]">

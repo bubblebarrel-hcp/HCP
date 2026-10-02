@@ -28,6 +28,21 @@ export const updateProfileSchema = Joi.object({
   medicalNotes: text(2000).allow('', null),
 }).min(1);
 
+// D57. Who sees what a hasher makes, and leaving.
+export const privacySchema = Joi.object({
+  profileVisibility: Joi.string().valid('PUBLIC', 'FOLLOWERS', 'ONLY_ME').required(),
+});
+
+export const confirmPasswordSchema = Joi.object({
+  password: Joi.string().min(1).max(200).required(),
+});
+
+// Deleting cannot be undone, so it asks for the password and the word itself.
+export const deleteAccountSchema = Joi.object({
+  password: Joi.string().min(1).max(200).required(),
+  confirm: Joi.string().valid('DELETE').required(),
+});
+
 // D56. Media ids, never URLs: see profile.service#setProfileImages.
 // Same shape and reasoning as kennel.validator's bannerPosition: two
 // percentages, so it can only ever be written into a style attribute.

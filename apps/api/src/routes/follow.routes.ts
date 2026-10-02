@@ -20,12 +20,20 @@ router.post('/hashers/:id/follow', requireAuth, asyncHandler(controller.followHa
 router.delete('/hashers/:id/follow', requireAuth, asyncHandler(controller.unfollowHasher));
 router.get('/hashers/:id/followers', optionalAuth, paging, asyncHandler(controller.followers));
 router.get('/hashers/:id/following', optionalAuth, paging, asyncHandler(controller.following));
+// Their photos, gated by their profile and by what each photo is on (D57).
+router.get('/hashers/:id/photos', optionalAuth, paging, asyncHandler(controller.hasherPhotos));
 
 // Following a kennel is not joining it: no membership, no vote, no authority.
 router.get('/kennels/:slug/follow', optionalAuth, asyncHandler(controller.kennelFollowState));
 router.post('/kennels/:slug/follow', requireAuth, asyncHandler(controller.followKennel));
 router.delete('/kennels/:slug/follow', requireAuth, asyncHandler(controller.unfollowKennel));
 router.get('/kennels/:slug/followers', optionalAuth, paging, asyncHandler(controller.kennelFollowers));
+
+// A locked profile's follow requests (D57): approve, decline, or remove a follower.
+router.get('/me/follow-requests', requireAuth, paging, asyncHandler(controller.requests));
+router.post('/me/follow-requests/:followerId/approve', requireAuth, asyncHandler(controller.approveRequest));
+router.post('/me/follow-requests/:followerId/decline', requireAuth, asyncHandler(controller.declineRequest));
+router.delete('/me/followers/:followerId', requireAuth, asyncHandler(controller.removeFollower));
 
 router.get('/me/following', requireAuth, paging, asyncHandler(controller.myFollowing));
 router.get('/me/followers', requireAuth, paging, asyncHandler(controller.myFollowers));

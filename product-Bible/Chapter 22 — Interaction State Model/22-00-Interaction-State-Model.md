@@ -176,6 +176,18 @@ Pending → Community Verified → Officer Verified → Platform Verified
 
 This is a monotonically increasing trust indicator layered on top of A.1, not a separate lifecycle. It never regresses automatically; only a Platform Admin action can demote it, and that action is audited (see Chapter 24, `KennelVerificationLevelChanged`).
 
+## A.8b Follow (D50, D57)
+
+A follow is interest, not belonging: it grants no membership, no vote and no authority. Whether it is live depends on the profile followed.
+
+| State | Meaning | Enters from |
+|---|---|---|
+| Pending | A request waiting for the hasher's yes. Opens nothing and is not counted | Asking to follow a FOLLOWERS (locked) profile |
+| Active | A live follow: counted, listed, and what puts the hasher's things in a feed and opens a locked profile | Following a PUBLIC profile; Pending approved; a PUBLIC profile opened to everyone |
+| Ended | `unfollowedAt` set: unfollowed, a request withdrawn or declined, or a follower removed. The row is reused if they ask again | Active or Pending |
+
+A profile has an audience (`Audience`: PUBLIC, FOLLOWERS, ONLY_ME). FOLLOWERS makes a follow Pending; ONLY_ME takes no new follows. A kennel follow is always Active.
+
 ## A.9 Identity Trust Level (Sub-state of Identity, Cross-Cutting)
 
 Owning Domain: Annex 08M (FR-ID-010).

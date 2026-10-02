@@ -1,14 +1,16 @@
 import {
+  Audience,
   MediaTargetType,
   SubjectType,
   ModerationState,
   Prisma,
   ReelStatus,
-  ReelVisibility,
   UploadState,
 } from '@prisma/client';
 import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
+import { activeFollowSet, audienceAllows, contentVisibleAuthors } from './audience.service';
+import * as follows from './follow.service';
 import { type Actor, assertKennelPermission, resolveKennelContext } from './permission.service';
 import { recordAudit, recordEvent } from './record.service';
 import { canView, getAccess, publicName, userPublicSelect } from './run.service';
@@ -31,7 +33,7 @@ export interface ReelInput {
   kennelId?: string | null;
   runId?: string | null;
   eventId?: string | null;
-  visibility?: ReelVisibility;
+  visibility?: Audience;
 }
 
 const reelSelect = {
@@ -180,23 +182,34 @@ async function serializeOne(reel: ReelRow & { authorId: string }, viewerId?: str
 
 // ─── Who may see a reel ───
 
-// A reel carries its own audience, but it can never open a door the thing it
-// was shot at keeps shut: a reel of a members-only run stays with that run's
+type Visible = { visibility: Audience; kennelId: string | null; runId: string | null; authorId: string };
+
+// A reel carries its own audience (D57): everybody, the people the author has
+// let follow them, or only the author. It can narrow what the author's profile
+// allows but never widen it: a reel marked public on a locked profile is still
+// for that profile's followers. And it can never open a door the thing it was
+// shot at keeps shut: a reel of a members-only run stays with that run's
 // members, whatever the reel says.
-export async function canSee(actor: Actor | undefined, reel: { visibility: ReelVisibility; kennelId: string | null; runId: string | null; authorId: string }) {
+export async function canSee(actor: Actor | undefined, reel: Visible) {
   if (actor && actor.id === reel.authorId) return true;
+  const [profile, followed] = await Promise.all([
+    contentVisibleAuthors(actor, [reel.authorId]),
+    activeFollowSet(actor?.id, [reel.authorId]),
+  ]);
+  return canSeeWith(actor, reel, profile, followed);
+}
+
+// The same decision for a whole page, given the answers for its authors in one
+// pair of queries rather than one pair per reel.
+async function canSeeWith(actor: Actor | undefined, reel: Visible, profile: Set<string>, followed: Set<string>) {
+  if (actor && actor.id === reel.authorId) return true;
+  if (!profile.has(reel.authorId)) return false;
+  if (!audienceAllows(reel.visibility, { isSelf: false, follows: followed.has(reel.authorId) })) return false;
 
   if (reel.runId) {
     const access = await getAccess(actor, reel.runId);
     if (!canView(access)) return false;
   }
-
-  if (reel.visibility === ReelVisibility.KENNEL_ONLY) {
-    if (!actor || !reel.kennelId) return false;
-    const context = await resolveKennelContext(actor, reel.kennelId);
-    if (!context.isMember) return false;
-  }
-
   return true;
 }
 
@@ -225,10 +238,6 @@ export async function createDraft(actor: Actor, input: ReelInput) {
     const access = await getAccess(actor, input.runId);
     if (!canView(access)) throw ApiError.notFound('Run not found');
   }
-  if (input.visibility === ReelVisibility.KENNEL_ONLY && !input.kennelId) {
-    throw ApiError.badRequest('Choose the kennel a members-only reel belongs to.', 'KENNEL_REQUIRED');
-  }
-
   const reel = await prisma.reel.create({
     data: {
       authorId: actor.id,
@@ -238,7 +247,7 @@ export async function createDraft(actor: Actor, input: ReelInput) {
       // letting a reel claim one kennel and a run from another.
       runId: input.runId ?? null,
       eventId: input.eventId ?? null,
-      visibility: input.visibility ?? ReelVisibility.PUBLIC,
+      visibility: input.visibility ?? Audience.PUBLIC,
       status: S.DRAFT,
     },
     select: { ...reelSelect, authorId: true, kennelId: true, runId: true },
@@ -403,21 +412,39 @@ export async function remove(actor: Actor, reelId: string, reason: string) {
 
 // ─── Reads ───
 
-// The rail on the home page: what is up, newest first, filtered to what this
-// viewer may see. Over-fetch and filter, the same shape listPublished uses for
-// trail reports — reels are few enough that this stays cheap.
+// The rail on the home page and /reels (D57).
+//
+// Signed in, it is the reels of the hasher you follow and your own, and nothing
+// else: following is how a reel reaches you. Signed out there is nobody followed,
+// so the rail is the public reels. Either way a reel is shown only when its own
+// audience and its author's profile both allow this viewer, newest first.
+//
+// This is also where a platform-approved reel will join the rail when there are
+// any (an advertisement or a sponsored reel is not somebody's reel, so it will
+// be its own source merged in here, not a Reel row pretending to have an author).
+//
+// A profile page (`authorId`) and a kennel page (`kennelSlug`) are not the rail:
+// they list what they are about, narrowed by the same visibility rules.
+//
+// Over-fetch and filter, the same shape listPublished uses for trail reports —
+// reels are few enough that this stays cheap.
 export async function listPublished(
   actor: Actor | undefined,
   opts: { page: number; limit: number; kennelSlug?: string; authorId?: string },
 ) {
+  const isRail = !opts.authorId && !opts.kennelSlug;
+  const railAuthors =
+    actor && isRail ? [actor.id, ...(await follows.followedBy(actor.id)).userIds] : null;
+
   const where: Prisma.ReelWhereInput = {
     status: S.PUBLISHED,
     media: { uploadState: UploadState.AVAILABLE, moderationState: { not: ModerationState.REJECTED } },
     ...(opts.kennelSlug ? { kennel: { slug: opts.kennelSlug } } : {}),
     ...(opts.authorId ? { authorId: opts.authorId } : {}),
-    // Anonymous readers never see a kennel-only reel, so it is cheaper to say so
-    // in the query than to fetch and drop them.
-    ...(actor ? {} : { visibility: ReelVisibility.PUBLIC }),
+    ...(railAuthors ? { authorId: { in: railAuthors } } : {}),
+    // Nobody signed out can be a follower or the author, so only a public reel
+    // can reach them; cheaper to say so in the query than to fetch and drop.
+    ...(actor ? {} : { visibility: Audience.PUBLIC }),
   };
 
   const rows = await prisma.reel.findMany({
@@ -437,11 +464,16 @@ export async function listPublished(
     ),
   ]);
   const visible: SerializedReel[] = [];
+  const authors = rows.map((r) => r.authorId);
+  const [profile, followed] = await Promise.all([
+    contentVisibleAuthors(actor, authors),
+    activeFollowSet(actor?.id, authors),
+  ]);
   for (const row of rows) {
     // A reel whose media is gone is not a reel anybody can watch.
     const own = items.get(row.id) ?? [];
     if (own.length === 0) continue;
-    if (await canSee(actor, row)) {
+    if (await canSeeWith(actor, row, profile, followed)) {
       visible.push(
         serialize(row, actor?.id, own, engagement.get(stats.subjectKey(SubjectType.REEL, row.id)) ?? stats.EMPTY),
       );

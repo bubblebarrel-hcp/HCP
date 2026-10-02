@@ -6,7 +6,10 @@ import type {
   ContentComment,
   Engagement,
   EngagementDetail,
+  FollowRelation,
+  FollowRequest,
   FollowState,
+  HasherPhotoPage,
   FollowingEntry,
   FollowerSummary,
   HasherProfile,
@@ -129,12 +132,38 @@ export async function kennelFollowState(slug: string) {
   return unwrap(await api.get<Envelope<FollowState>>(`/kennels/${slug}/follow`));
 }
 
+// Following a hasher is not always immediate: a locked profile turns it into a
+// request (D57). The answer says which, so the button shows the truth.
 export async function setFollowingHasher(id: string, following: boolean) {
   const path = `/hashers/${id}/follow`;
-  const res = following
-    ? await api.post<Envelope<{ counts: { followers: number } }>>(path)
-    : await api.delete<Envelope<{ counts: { followers: number } }>>(path);
-  return unwrap(res).counts.followers;
+  type Answer = { counts: { followers: number }; relation: FollowRelation };
+  const res = following ? await api.post<Envelope<Answer>>(path) : await api.delete<Envelope<Answer>>(path);
+  const data = unwrap(res);
+  return { followers: data.counts.followers, relation: data.relation };
+}
+
+// The photo grid on a hasher's page, gated by their profile (D57).
+export async function listHasherPhotos(hasherId: string, page = 1, limit = 24) {
+  return unwrap(
+    await api.get<Envelope<HasherPhotoPage>>(`/hashers/${hasherId}/photos`, { params: { page, limit } }),
+  );
+}
+
+// Follow requests: who is waiting on this hasher's yes.
+export async function listFollowRequests(page = 1) {
+  return unwrap(await api.get<Envelope<Page<FollowRequest>>>('/me/follow-requests', { params: { page, limit: 30 } }));
+}
+
+export async function approveFollowRequest(followerId: string) {
+  return unwrap(await api.post<Envelope<{ approved: boolean }>>(`/me/follow-requests/${followerId}/approve`));
+}
+
+export async function declineFollowRequest(followerId: string) {
+  return unwrap(await api.post<Envelope<{ declined: boolean }>>(`/me/follow-requests/${followerId}/decline`));
+}
+
+export async function removeFollower(followerId: string) {
+  return unwrap(await api.delete<Envelope<{ removed: boolean }>>(`/me/followers/${followerId}`));
 }
 
 export async function setFollowingKennel(slug: string, following: boolean) {

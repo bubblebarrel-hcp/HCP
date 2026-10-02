@@ -1,13 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/ui/button';
 import { DialogContent } from '@/components/ui/dialog';
 import { ReelCarousel } from '@/components/feed/ReelCarousel';
 import { EngagementBar } from '@/components/social/EngagementBar';
-import type { Reel } from '@/lib/types';
+import { AudiencePicker } from '@/components/profile/AudiencePicker';
+import type { Audience, Reel } from '@/lib/types';
+import api, { errorMessage } from '@/services/api';
 
 // Watching a reel (D48). A reel is a post rather than a single clip — videos
 // and photos together, in the order they were added — so this is a carousel:
@@ -22,6 +26,25 @@ export function ReelViewer({
   onArchive: () => void;
   archiving: boolean;
 }) {
+  // Whoever posted it can change who sees it, any time after (D57).
+  const [audience, setAudience] = useState<Audience>(reel.visibility);
+  const [saving, setSaving] = useState(false);
+
+  async function changeAudience(next: Audience) {
+    const before = audience;
+    setAudience(next);
+    setSaving(true);
+    try {
+      await api.patch(`/reels/${reel.id}`, { visibility: next });
+      toast.success('Who can watch this reel is updated.');
+    } catch (err) {
+      setAudience(before);
+      toast.error(errorMessage(err, 'Could not change who can watch it'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (reel.items.length === 0) return null;
 
   return (
@@ -70,6 +93,13 @@ export function ReelViewer({
           )}
         </div>
         {reel.caption && <p className="text-sm">{reel.caption}</p>}
+
+        {reel.isMine && (
+          <div className="space-y-1.5" data-testid="reel-audience">
+            <p className="text-sm font-medium leading-none">Who can watch it</p>
+            <AudiencePicker kind="reel" value={audience} onChange={(next) => void changeAudience(next)} disabled={saving} compact />
+          </div>
+        )}
 
         {/* Likes, comments, reshares, saves and who has seen it (D50). The reel
             was fetched with a session, so its numbers already carry this

@@ -57,10 +57,21 @@ enum Gender {
   PREFER_NOT_TO_SAY
 }
 
-enum ProfileVisibility {
+// Who may see something a hasher made (D57). One scale for a whole profile and
+// for each reel: everybody, the people they have approved to follow them, or
+// only themself. FOLLOWERS is what a "locked" profile is; ONLY_ME is a profile
+// that has closed to followers as well.
+enum Audience {
   PUBLIC
-  MEMBERS_ONLY
-  PRIVATE
+  FOLLOWERS
+  ONLY_ME
+}
+
+// A follow is live (ACTIVE) or waiting on the person being followed (PENDING),
+// which only a profile that is not PUBLIC ever produces (D57).
+enum FollowStatus {
+  PENDING
+  ACTIVE
 }
 
 enum OrganizationType {
@@ -514,13 +525,6 @@ enum ReelStatus {
   REMOVED
 }
 
-// Who a reel is for. Deliberately short: a reel is a hasher's own post, not a
-// run with an invitation list (D41).
-enum ReelVisibility {
-  PUBLIC
-  KENNEL_ONLY
-}
-
 // MVP channels are group-scoped only (D8)
 enum ChannelType {
   KENNEL
@@ -674,13 +678,18 @@ model User {
   // the same as Kennel.bannerPosition (D37). Null is centred.
   bannerPosition    String?
   bio               String?
-  profileVisibility ProfileVisibility @default(MEMBERS_ONLY)
+  // Who sees what this hasher has made: posts, photos and reels (D57). A reel
+  // can narrow this further for itself; it can never widen it.
+  profileVisibility Audience          @default(PUBLIC)
   homeKennelId      String?           @db.Uuid
   preferredLanguage String            @default("en")
   timeZone          String?
   termsAcceptedAt   DateTime
   lastLoginAt       DateTime?
   deactivatedAt     DateTime?
+  // Set when the hasher deletes their account (D57): the person is gone, the
+  // row stays so runs, reports and capsules keep their history.
+  deletedAt         DateTime?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -2152,7 +2161,7 @@ model Reel {
   eventId    String?        @db.Uuid
   caption    String?
   status     ReelStatus     @default(DRAFT)
-  visibility ReelVisibility @default(PUBLIC)
+  visibility Audience       @default(PUBLIC)
   // The video itself, linked through MediaLink like all other media.
   mediaId    String?        @db.Uuid
   publishedAt DateTime?
@@ -2488,11 +2497,14 @@ model Follow {
   targetId     String           @db.Uuid
   followedAt   DateTime         @default(now())
   unfollowedAt DateTime?
+  // PENDING until the person being followed approves, when their profile is not
+  // public (D57). A kennel follow is always ACTIVE.
+  status       FollowStatus     @default(ACTIVE)
 
   follower User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, targetType, targetId])
-  @@index([targetType, targetId, unfollowedAt])
+  @@index([targetType, targetId, status, unfollowedAt])
   @@index([followerId, unfollowedAt])
 }
 

@@ -146,7 +146,12 @@ export async function login(emailInput: string, passwordInput: string) {
     throw ApiError.unauthorized('Invalid email or password', 'INVALID_CREDENTIALS');
   }
 
-  if (user.status === AccountStatus.SUSPENDED || user.status === AccountStatus.DEACTIVATED) {
+  // A deleted account has nobody left to sign in (D57).
+  if (user.deletedAt) throw ApiError.unauthorized('Invalid email or password', 'INVALID_CREDENTIALS');
+
+  // A suspension is the platform's decision. A deactivation is the hasher's own,
+  // and signing back in is how they undo it, below.
+  if (user.status === AccountStatus.SUSPENDED) {
     throw ApiError.forbidden('This account is not active.', 'ACCOUNT_INACTIVE');
   }
 
@@ -157,6 +162,29 @@ export async function login(emailInput: string, passwordInput: string) {
       'Confirm your email address first. Check your inbox for the link we sent when you registered.',
       'EMAIL_NOT_VERIFIED',
     );
+  }
+
+  if (user.status === AccountStatus.DEACTIVATED) {
+    // Welcome back: everything they had is still here (D57).
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { status: AccountStatus.ACTIVE, deactivatedAt: null } });
+      const event = await recordEvent(tx, {
+        eventType: 'AccountReactivated',
+        aggregateType: 'Identity',
+        aggregateId: user.id,
+        actorId: user.id,
+      });
+      await recordAudit(tx, {
+        actorId: user.id,
+        action: 'identity.account.reactivate',
+        resourceType: 'Identity',
+        resourceId: user.id,
+        previousState: { status: AccountStatus.DEACTIVATED },
+        newState: { status: AccountStatus.ACTIVE },
+        policyRef: 'self',
+        domainEventId: event.id,
+      });
+    });
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
