@@ -26,7 +26,10 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#F4F1E8",
-          "dark": { "backgroundColor": "#171717", "image": "./assets/images/splash-icon-dark.png" },
+          "dark": {
+            "backgroundColor": "#171717",
+            "image": "./assets/images/splash-icon-dark.png"
+          },
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 160
         }
@@ -38,7 +41,8 @@
           "color": "#F4511E",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

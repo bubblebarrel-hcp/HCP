@@ -1,7 +1,7 @@
 import { MediaTargetType, ModerationState, PostStatus, ReelStatus, UploadState } from '@prisma/client';
 import prisma from '../config/prisma';
 import { page } from '../utils/http';
-import { canSeeContentOf } from './audience.service';
+import { audienceAllows, canSeeContentOf, relationTo } from './audience.service';
 import { followableUser } from './follow.service';
 import { type Actor } from './permission.service';
 import { canSee as canSeeReel } from './reel.service';
@@ -74,15 +74,20 @@ export async function listPhotos(actor: Actor | undefined, userId: string, opts:
   const [posts, reels] = await Promise.all([
     prisma.post.findMany({
       where: { id: { in: idsOf(MediaTargetType.POST) }, authorId: user.id },
-      select: { id: true, status: true },
+      select: { id: true, status: true, visibility: true },
     }),
     prisma.reel.findMany({
       where: { id: { in: idsOf(MediaTargetType.REEL) }, authorId: user.id },
       select: { id: true, status: true, visibility: true, kennelId: true, runId: true, authorId: true },
     }),
   ]);
+  // A post's own audience counts as well as the profile's.
+  const follows = (await relationTo(actor?.id, user.id)) === 'FOLLOWING';
   const publishedPosts = new Set(
-    posts.filter((p) => p.status === PostStatus.PUBLISHED || (isMe && p.status !== PostStatus.REMOVED)).map((p) => p.id),
+    posts
+      .filter((p) => p.status === PostStatus.PUBLISHED || (isMe && p.status !== PostStatus.REMOVED))
+      .filter((p) => audienceAllows(p.visibility, { isSelf: isMe, follows }))
+      .map((p) => p.id),
   );
   const reelById = new Map(reels.map((r) => [r.id, r]));
   const reelOk = new Map<string, boolean>();

@@ -1,4 +1,5 @@
 import {
+  Audience,
   MediaTargetType,
   ModerationState,
   PostStatus,
@@ -8,7 +9,7 @@ import {
 } from '@prisma/client';
 import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
-import { canSeeContentOf, contentVisibleAuthors } from './audience.service';
+import { activeFollowSet, canSeeAudience, contentVisibleAuthors } from './audience.service';
 import { type Actor, assertKennelPermission, resolveKennelContext } from './permission.service';
 import { recordAudit, recordEvent } from './record.service';
 import { canView, getAccess, publicName, userPublicSelect } from './run.service';
@@ -36,6 +37,7 @@ export const MAX_BODY = 5000;
 
 export interface PostInput {
   body?: string;
+  visibility?: Audience;
   kennelId?: string | null;
   runId?: string | null;
 }
@@ -43,6 +45,7 @@ export interface PostInput {
 const postSelect = {
   id: true,
   body: true,
+  visibility: true,
   status: true,
   publishedAt: true,
   editedAt: true,
@@ -122,6 +125,8 @@ function serialize(
   return {
     id: post.id,
     body: post.body,
+    // Who may read it (D57): its own audience, narrowing its author's profile.
+    visibility: post.visibility,
     status: post.status,
     publishedAt: post.publishedAt,
     editedAt: post.editedAt,
@@ -185,6 +190,7 @@ export async function createDraft(actor: Actor, input: PostInput) {
     data: {
       authorId: actor.id,
       body: cleanBody(input.body),
+      visibility: input.visibility ?? Audience.PUBLIC,
       kennelId: input.kennelId ?? null,
       runId: input.runId ?? null,
       status: S.DRAFT,
@@ -204,6 +210,7 @@ export async function updateDraft(actor: Actor, postId: string, input: PostInput
     where: { id: post.id },
     data: {
       ...(body === undefined ? {} : { body }),
+      ...(input.visibility ? { visibility: input.visibility } : {}),
       // Editing after publication is marked; editing a draft is just writing.
       ...(body !== undefined && post.status === S.PUBLISHED ? { editedAt: new Date() } : {}),
     },
@@ -327,7 +334,22 @@ export async function listPublished(
   // those authors and the total agrees with the items.
   const candidates = await prisma.post.findMany({ where, distinct: ['authorId'], select: { authorId: true } });
   const readable = await contentVisibleAuthors(actor, candidates.map((c) => c.authorId));
-  const readableWhere: Prisma.PostWhereInput = { ...where, authorId: { in: [...readable] } };
+  const followed = await activeFollowSet(actor?.id, [...readable]);
+  // The profile lets this viewer in, and then each post's own audience decides:
+  // public to all of them, followers' posts to the ones they follow, and a
+  // viewer's own posts to themself whatever they say.
+  const readableWhere: Prisma.PostWhereInput = {
+    AND: [
+      where,
+      {
+        OR: [
+          ...(actor ? [{ authorId: actor.id }] : []),
+          { authorId: { in: [...readable] }, visibility: Audience.PUBLIC },
+          { authorId: { in: [...readable].filter((id) => followed.has(id)) }, visibility: Audience.FOLLOWERS },
+        ],
+      },
+    ],
+  };
 
   const [rows, total] = await prisma.$transaction([
     prisma.post.findMany({
@@ -365,6 +387,6 @@ export async function detail(actor: Actor | undefined, postId: string) {
   // A draft is the author's alone; a removed post is nobody's.
   if (post.status === S.REMOVED) throw ApiError.notFound('Post not found');
   if (post.status !== S.PUBLISHED && !own) throw ApiError.notFound('Post not found');
-  if (!own && !(await canSeeContentOf(actor, post.authorId))) throw ApiError.notFound('Post not found');
+  if (!own && !(await canSeeAudience(actor, post.authorId, post.visibility))) throw ApiError.notFound('Post not found');
   return serializeOne(post, actor?.id);
 }

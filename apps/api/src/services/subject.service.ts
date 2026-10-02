@@ -3,7 +3,7 @@ import prisma from '../config/prisma';
 import { ApiError, isUuid } from '../utils/http';
 import { type Actor } from './permission.service';
 import { canSee as canSeeReel } from './reel.service';
-import { canSeeContentOf } from './audience.service';
+import { canSeeAudience, canSeeContentOf } from './audience.service';
 import { canView, getAccess } from './run.service';
 
 // Who may engage with what (D50).
@@ -85,13 +85,13 @@ async function resolveReel(actor: Actor | undefined, id: string): Promise<Subjec
 async function resolvePost(actor: Actor | undefined, id: string): Promise<SubjectContext> {
   const post = await prisma.post.findUnique({
     where: { id },
-    select: { id: true, authorId: true, kennelId: true, status: true, body: true },
+    select: { id: true, authorId: true, kennelId: true, status: true, body: true, visibility: true },
   });
   if (!post) throw ApiError.notFound('Post not found');
   const mine = actor?.id === post.authorId;
   if (post.status === 'REMOVED') throw ApiError.notFound('Post not found');
   if (post.status !== 'PUBLISHED' && !mine) throw ApiError.notFound('Post not found');
-  if (!mine && !(await canSeeContentOf(actor, post.authorId))) throw ApiError.notFound('Post not found');
+  if (!mine && !(await canSeeAudience(actor, post.authorId, post.visibility))) throw ApiError.notFound('Post not found');
   return {
     type: SubjectType.POST,
     id: post.id,

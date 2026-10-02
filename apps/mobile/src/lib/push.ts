@@ -128,6 +128,17 @@ export function routeFor(data: Record<string, unknown> | undefined): string | nu
     case 'Run':
     case 'Trail':
       return `/run/${id}`;
+    // Somebody asked to follow a locked profile (D57): the thing to do is answer.
+    case 'FollowRequest':
+      return '/follow-requests';
+    // A like or a comment names the thing it was on (D50).
+    case 'Post':
+      return `/posts/${id}`;
+    case 'Reel':
+      return `/reels/${id}`;
+    // A social notice about a person (an approved request) opens them.
+    case 'User':
+      return `/hashers/${id}`;
     case 'Kennel':
     case 'Membership':
       return '/kennels';

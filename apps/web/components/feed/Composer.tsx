@@ -3,17 +3,19 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Footprints, Globe, ImagePlus, Loader2, Video, X } from 'lucide-react';
+import { BookOpen, Footprints, ImagePlus, Loader2, Video, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar } from '@/components/Avatar';
 import { ReelComposer } from '@/components/feed/ReelComposer';
+import { AudienceSelect } from '@/components/profile/AudienceSelect';
 import { FEED_REFRESH_EVENT } from '@/components/feed/PullToRefresh';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ACCEPTED_IMAGES, MAX_UPLOAD_BYTES, fileSize } from '@/lib/media';
 import { MAX_POST_BODY, MAX_POST_PHOTOS, post as sendPost } from '@/lib/posts';
 import { bleedCard, cn } from '@/lib/utils';
+import type { Audience } from '@/lib/types';
 import { errorMessage } from '@/services/api';
 
 // The composer at the top of the feed. "What's on trail?" is a real input now
@@ -21,8 +23,9 @@ import { errorMessage } from '@/services/api';
 // feed. Reels, trail reports and runs stay below it — a reel is a different
 // kind of thing (D41), and a report and a run belong to a kennel.
 //
-// A post is always public, and the composer says so rather than leaving the
-// hasher to guess.
+// A post has its own audience (D57): public, followers only, or only the hasher.
+// It can narrow what their profile allows and never widen it, and the composer
+// says which it is rather than leaving the hasher to guess.
 
 export function Composer() {
   const { user } = useAuth();
@@ -30,6 +33,9 @@ export function Composer() {
   const [reeling, setReeling] = useState(false);
   const [body, setBody] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
+  // Public until the hasher says otherwise; kept after posting, since somebody who
+  // posts to followers usually does so again.
+  const [audience, setAudience] = useState<Audience>('PUBLIC');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -64,7 +70,7 @@ export function Composer() {
     setBusy(true);
     setProgress(photos.length ? { done: 0, total: photos.length } : null);
     try {
-      await sendPost({ body: body.trim(), photos }, (done, total) => setProgress({ done, total }));
+      await sendPost({ body: body.trim(), photos, visibility: audience }, (done, total) => setProgress({ done, total }));
       setBody('');
       setPhotos([]);
       toast.success('Posted. On On!');
@@ -167,11 +173,12 @@ export function Composer() {
                 Photo
               </Button>
 
-              {/* Said out loud, because there is no audience to choose (D51). */}
-              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Globe className="h-3.5 w-3.5" aria-hidden />
-                Anyone can see this
-              </span>
+              <AudienceSelect
+                value={audience}
+                onChange={setAudience}
+                disabled={busy}
+                label="Who can read this post"
+              />
 
               <span className="ml-auto flex items-center gap-2">
                 {progress && (

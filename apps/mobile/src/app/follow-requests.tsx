@@ -91,6 +91,7 @@ export default function FollowRequestsScreen() {
                   name={request.name}
                   size={44}
                   src={request.avatarUrl}
+                  position={request.avatarPosition}
                   color={brandColor(request.homeKennel?.primaryColor)}
                 />
                 <View style={styles.text}>

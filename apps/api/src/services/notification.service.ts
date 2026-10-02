@@ -42,6 +42,14 @@ interface NotificationSpec {
   contextId: string | null;
   kennelId: string | null;
   recipients: string[];
+  // Channel defaults for this one notification, used when the hasher has not
+  // chosen for its category. A follow request needs an answer, so it reaches the
+  // phone and the inbox even though the rest of SOCIAL is in-app only; a
+  // hasher's own switch for the category still wins.
+  pushByDefault?: boolean;
+  emailByDefault?: boolean;
+  // Where the email button goes, when the context type has no page of its own.
+  link?: { label: string; path: string };
   // Guests hold no account and no in-app inbox, so they are reached by email
   // alone (D12). Only the events they could act on carry them.
   guests?: GuestRecipient[];
@@ -583,10 +591,15 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         priority: P.NORMAL,
         title: `${asker} asked to follow you`,
         body: 'Approve or decline it from your follow requests.',
-        contextType: 'User',
+        // Not the asker's profile: the thing to do is answer, and that is on the
+        // requests page.
+        contextType: 'FollowRequest',
         contextId: event.actorId,
         kennelId: null,
         recipients: [event.aggregateId],
+        pushByDefault: true,
+        emailByDefault: true,
+        link: { label: 'Review the request', path: '/account/follow-requests' },
       };
     }
     case 'FollowRequestApproved': {
@@ -602,6 +615,7 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         contextId: event.aggregateId,
         kennelId: null,
         recipients: [followerId],
+        pushByDefault: true,
       };
     }
     case 'ContentLiked': {
@@ -755,12 +769,14 @@ async function deliverEmail(notificationId: string, to: string, spec: Notificati
   const delivery = await prisma.notificationDelivery.create({
     data: { notificationId, channel: DeliveryChannel.EMAIL, status: DeliveryStatus.PENDING },
   });
-  const link = spec.contextId ? EMAIL_DEEP_LINKS[spec.contextType] : undefined;
+  // A link the notification names itself wins; otherwise one is made from what it is about.
+  const deep = spec.contextId ? EMAIL_DEEP_LINKS[spec.contextType] : undefined;
+  const link = spec.link ?? (deep ? { label: deep.label, path: deep.path(spec.contextId!) } : undefined);
   const result = await sendEmail({
     to,
     subject: spec.title,
     body: spec.body,
-    ...(link ? { action: { label: link.label, path: link.path(spec.contextId!) } } : {}),
+    ...(link ? { action: { label: link.label, path: link.path } } : {}),
   });
   await prisma.notificationDelivery.update({
     where: { id: delivery.id },
@@ -856,7 +872,7 @@ export async function fanOut(event: DomainEvent) {
         spec.category,
         DeliveryChannel.EMAIL,
         spec.kennelId,
-        EMAIL_BY_DEFAULT.has(spec.category),
+        spec.emailByDefault ?? EMAIL_BY_DEFAULT.has(spec.category),
       ));
     // Push is wanted only if the platform can send, this hasher owns a live
     // device, and they have not turned the channel off for this category.
@@ -868,7 +884,7 @@ export async function fanOut(event: DomainEvent) {
         spec.category,
         DeliveryChannel.PUSH,
         spec.kennelId,
-        PUSH_BY_DEFAULT.has(spec.category),
+        spec.pushByDefault ?? PUSH_BY_DEFAULT.has(spec.category),
       ));
 
     // FR-NOT-006. Only push is quietened: the in-app copy still lands and email

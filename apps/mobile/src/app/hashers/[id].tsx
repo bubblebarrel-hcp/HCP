@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
-  Linking,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,10 +17,17 @@ import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
-import { WEB_URL, errorMessage } from '@/lib/api';
+import { errorMessage } from '@/lib/api';
 import { brandColor, formatDate } from '@/lib/format';
-import { followHasher, hasherPhotos, hasherProfile } from '@/lib/social';
-import type { HasherPhoto, HasherProfile } from '@/lib/types';
+import {
+  followHasher,
+  hasherPhotos,
+  hasherProfile,
+  listHasherFollowers,
+  listHasherFollowing,
+  removeFollower,
+} from '@/lib/social';
+import type { FollowerRow, FollowingEntry, HasherPhoto, HasherProfile } from '@/lib/types';
 
 // The public face of a hasher (D11/D50): handle, picture, words, kennels, a
 // follow button, and the photos they have made (D57). Never biodata — that stays
@@ -31,6 +38,8 @@ import type { HasherPhoto, HasherProfile } from '@/lib/types';
 
 const PAGE = 24;
 const GAP = 2;
+
+type Tab = 'photos' | 'followers' | 'following';
 
 export default function HasherProfileScreen() {
   const theme = useTheme();
@@ -45,6 +54,12 @@ export default function HasherProfileScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Photos, Followers and Following, one list at a time (D57). The two lists load
+  // when first opened, not with the page.
+  const [tab, setTab] = useState<Tab>('photos');
+  const [followers, setFollowers] = useState<FollowerRow[] | null>(null);
+  const [followingList, setFollowingList] = useState<FollowingEntry[] | null>(null);
+  const [counts, setCounts] = useState<{ followers: number; following: number } | null>(null);
 
   // Three square tiles across, inside the same padding the rest of the screen uses.
   const gridWidth = Math.min(width, MaxContentWidth) - Spacing.three * 2;
@@ -55,6 +70,10 @@ export default function HasherProfileScreen() {
     try {
       const data = await hasherProfile(id);
       setHasher(data.hasher);
+      setCounts({ followers: data.hasher.followers, following: data.hasher.following });
+      // Following or being approved changes who may see the lists.
+      setFollowers(null);
+      setFollowingList(null);
       if (data.hasher.canSeeContent) {
         const grid = await hasherPhotos(id, 1, PAGE);
         setPhotos(grid.locked ? [] : grid.items);
@@ -73,6 +92,58 @@ export default function HasherProfileScreen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
+
+  // Open on first view, so a profile that is only looked at does not pay for lists
+  // nobody opened. A locked profile's lists come back empty, and the lock card is
+  // what is shown instead.
+  useEffect(() => {
+    if (!hasher?.canSeeContent) return;
+    let alive = true;
+    if (tab === 'followers' && followers === null) {
+      listHasherFollowers(id)
+        .then((page) => {
+          if (alive) setFollowers(page.items);
+        })
+        .catch(() => {
+          if (alive) setFollowers([]);
+        });
+    }
+    if (tab === 'following' && followingList === null) {
+      listHasherFollowing(id)
+        .then((page) => {
+          if (alive) setFollowingList(page.items);
+        })
+        .catch(() => {
+          if (alive) setFollowingList([]);
+        });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [tab, hasher?.canSeeContent, followers, followingList, id]);
+
+  function confirmRemove(follower: FollowerRow) {
+    Alert.alert(
+      `Remove ${follower.name}?`,
+      'They stop following you and, if your profile is locked, lose access to your photos, posts and reels. They are not told, and they can ask again.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove follower',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await removeFollower(follower.id);
+              setFollowers((current) => (current ?? []).filter((row) => row.id !== follower.id));
+              setCounts((current) => (current ? { ...current, followers: Math.max(0, current.followers - 1) } : current));
+            } catch (err) {
+              Alert.alert('Could not remove that follower', errorMessage(err, 'Try again in a moment.'));
+            }
+          },
+        },
+      ],
+    );
+  }
 
   async function toggleFollow() {
     if (!hasher) return;
@@ -106,10 +177,10 @@ export default function HasherProfileScreen() {
   }
 
   function openPhoto(photo: HasherPhoto) {
-    // A run has a screen of its own here; a post or a reel opens on the web,
-    // which is where they are read until mobile has pages for them.
+    // A photo has no page of its own: it opens what it is on.
     if (photo.source.type === 'RUN') router.push(`/run/${photo.source.id}`);
-    else Linking.openURL(`${WEB_URL}/${photo.source.type === 'POST' ? 'posts' : 'reels'}/${photo.source.id}`);
+    else if (photo.source.type === 'POST') router.push(`/posts/${photo.source.id}`);
+    else router.push(`/reels/${photo.source.id}`);
   }
 
   if (error) {
@@ -140,15 +211,29 @@ export default function HasherProfileScreen() {
           <Image source={{ uri: hasher.bannerUrl }} style={styles.banner} resizeMode="cover" accessibilityIgnoresInvertColors />
         ) : null}
         <View style={styles.header}>
-          <Avatar name={hasher.name} size={72} src={hasher.avatarUrl} />
+          <Avatar name={hasher.name} size={72} src={hasher.avatarUrl} position={hasher.avatarPosition} />
           <ThemedText type="title">{hasher.name}</ThemedText>
           {!hasher.isNamed && <ThemedText themeColor="textSecondary">Not yet named by a kennel</ThemedText>}
           {hasher.bio ? <ThemedText style={styles.bio}>{hasher.bio}</ThemedText> : null}
           <ThemedText themeColor="textSecondary">Hashing since {formatDate(hasher.joinedAt)}</ThemedText>
 
           <View style={styles.statsRow}>
-            <ThemedText type="smallBold">{hasher.followers} followers</ThemedText>
-            <ThemedText type="smallBold">{hasher.following} following</ThemedText>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${counts?.followers ?? hasher.followers} followers`}
+              disabled={!hasher.canSeeContent}
+              onPress={() => setTab('followers')}
+              style={styles.statButton}>
+              <ThemedText type="smallBold">{counts?.followers ?? hasher.followers} followers</ThemedText>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${counts?.following ?? hasher.following} following`}
+              disabled={!hasher.canSeeContent}
+              onPress={() => setTab('following')}
+              style={styles.statButton}>
+              <ThemedText type="smallBold">{counts?.following ?? hasher.following} following</ThemedText>
+            </Pressable>
           </View>
 
           {!hasher.isMe && !user && (
@@ -220,41 +305,174 @@ export default function HasherProfileScreen() {
 
         {hasher.canSeeContent ? (
           <View style={styles.section}>
-            <ThemedText type="smallBold" themeColor="textSecondary">Photos</ThemedText>
-            {photos.length === 0 ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                {hasher.name} has not posted any photos yet.
+            <View style={[styles.tabs, { borderBottomColor: theme.border }]} accessibilityRole="tablist">
+            <Pressable
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === 'photos' }}
+              onPress={() => setTab('photos')}
+              style={[styles.tab, { borderBottomColor: tab === 'photos' ? theme.primary : 'transparent' }]}>
+              <ThemedText type="smallBold" style={{ color: tab === 'photos' ? theme.primaryStrong : theme.textSecondary }}>
+                Photos
               </ThemedText>
-            ) : (
-              <View style={styles.grid} accessibilityLabel="Photos">
-                {photos.map((photo) => (
-                  <Pressable
-                    key={photo.id}
-                    accessibilityRole="imagebutton"
-                    accessibilityLabel={photo.caption ?? 'A photo'}
-                    onPress={() => openPhoto(photo)}
-                    style={({ pressed }) => [
-                      { width: tile, height: tile, backgroundColor: theme.backgroundElement, opacity: pressed ? 0.85 : 1 },
-                    ]}>
-                    <Image
-                      source={{ uri: photo.thumbnailUrl ?? photo.url }}
-                      style={{ width: tile, height: tile }}
-                      resizeMode="cover"
-                      accessibilityIgnoresInvertColors
-                    />
-                  </Pressable>
-                ))}
-              </View>
+            </Pressable>
+            <Pressable
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === 'followers' }}
+              onPress={() => setTab('followers')}
+              style={[styles.tab, { borderBottomColor: tab === 'followers' ? theme.primary : 'transparent' }]}>
+              <ThemedText type="smallBold" style={{ color: tab === 'followers' ? theme.primaryStrong : theme.textSecondary }}>
+                {counts?.followers ?? hasher.followers} Followers
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              accessibilityRole="tab"
+              accessibilityState={{ selected: tab === 'following' }}
+              onPress={() => setTab('following')}
+              style={[styles.tab, { borderBottomColor: tab === 'following' ? theme.primary : 'transparent' }]}>
+              <ThemedText type="smallBold" style={{ color: tab === 'following' ? theme.primaryStrong : theme.textSecondary }}>
+                {counts?.following ?? hasher.following} Following
+              </ThemedText>
+            </Pressable>
+            </View>
+
+            {tab === 'photos' && (
+              <View style={styles.section}>
+              {photos.length === 0 ? (
+                <ThemedText type="small" themeColor="textSecondary">
+                  {hasher.name} has not posted any photos yet.
+                </ThemedText>
+              ) : (
+                <View style={styles.grid} accessibilityLabel="Photos">
+                  {photos.map((photo) => (
+                    <Pressable
+                      key={photo.id}
+                      accessibilityRole="imagebutton"
+                      accessibilityLabel={photo.caption ?? 'A photo'}
+                      onPress={() => openPhoto(photo)}
+                      style={({ pressed }) => [
+                        { width: tile, height: tile, backgroundColor: theme.backgroundElement, opacity: pressed ? 0.85 : 1 },
+                      ]}>
+                      <Image
+                        source={{ uri: photo.thumbnailUrl ?? photo.url }}
+                        style={{ width: tile, height: tile }}
+                        resizeMode="cover"
+                        accessibilityIgnoresInvertColors
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              {photos.length < total && (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={loadingMore}
+                  onPress={more}
+                  style={({ pressed }) => [styles.moreButton, { backgroundColor: theme.backgroundElement, opacity: pressed || loadingMore ? 0.7 : 1 }]}>
+                  {loadingMore ? <ActivityIndicator color={theme.primary} /> : <ThemedText type="smallBold">Show more</ThemedText>}
+                </Pressable>
+              )}
+                </View>
             )}
-            {photos.length < total && (
-              <Pressable
-                accessibilityRole="button"
-                disabled={loadingMore}
-                onPress={more}
-                style={({ pressed }) => [styles.moreButton, { backgroundColor: theme.backgroundElement, opacity: pressed || loadingMore ? 0.7 : 1 }]}>
-                {loadingMore ? <ActivityIndicator color={theme.primary} /> : <ThemedText type="smallBold">Show more</ThemedText>}
-              </Pressable>
-            )}
+
+            {tab === 'followers' &&
+              (followers === null ? (
+                <ActivityIndicator color={theme.primary} />
+              ) : followers.length === 0 ? (
+                <ThemedText type="small" themeColor="textSecondary">Nobody yet.</ThemedText>
+              ) : (
+                followers.map((row) => (
+                  <View key={row.id} style={[styles.personRow, { backgroundColor: theme.card }]}>
+                    <Pressable
+                      accessibilityRole="link"
+                      accessibilityLabel={`${row.name}'s profile`}
+                      onPress={() => router.push(`/hashers/${row.id}`)}
+                      style={styles.personMain}>
+                      <Avatar
+                        name={row.name}
+                        size={40}
+                        src={row.avatarUrl}
+                        position={row.avatarPosition}
+                        color={brandColor(row.homeKennel?.primaryColor)}
+                      />
+                      <View style={styles.personText}>
+                        <ThemedText type="smallBold" numberOfLines={1}>{row.name}</ThemedText>
+                        {row.homeKennel && (
+                          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                            {row.homeKennel.shortName}
+                          </ThemedText>
+                        )}
+                      </View>
+                    </Pressable>
+                    {hasher.isMe && (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${row.name} as a follower`}
+                        onPress={() => confirmRemove(row)}
+                        style={({ pressed }) => [styles.removeButton, { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.8 : 1 }]}>
+                        <ThemedText type="smallBold">Remove</ThemedText>
+                      </Pressable>
+                    )}
+                  </View>
+                ))
+              ))}
+
+            {tab === 'following' &&
+              (followingList === null ? (
+                <ActivityIndicator color={theme.primary} />
+              ) : followingList.length === 0 ? (
+                <ThemedText type="small" themeColor="textSecondary">Not following anybody yet.</ThemedText>
+              ) : (
+                followingList.map((entry) =>
+                  entry.kind === 'HASHER' ? (
+                    <Pressable
+                      key={`h-${entry.hasher.id}`}
+                      accessibilityRole="link"
+                      accessibilityLabel={`${entry.hasher.name}'s profile`}
+                      onPress={() => router.push(`/hashers/${entry.hasher.id}`)}
+                      style={[styles.personRow, { backgroundColor: theme.card }]}>
+                      <View style={styles.personMain}>
+                        <Avatar
+                          name={entry.hasher.name}
+                          size={40}
+                          src={entry.hasher.avatarUrl}
+                          position={entry.hasher.avatarPosition}
+                          color={brandColor(entry.hasher.homeKennel?.primaryColor)}
+                        />
+                        <View style={styles.personText}>
+                          <ThemedText type="smallBold" numberOfLines={1}>{entry.hasher.name}</ThemedText>
+                          {entry.hasher.homeKennel && (
+                            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                              {entry.hasher.homeKennel.shortName}
+                            </ThemedText>
+                          )}
+                        </View>
+                      </View>
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      key={`k-${entry.kennel.id}`}
+                      accessibilityRole="link"
+                      accessibilityLabel={entry.kennel.name}
+                      onPress={() => router.push(`/kennels/${entry.kennel.slug}`)}
+                      style={[styles.personRow, { backgroundColor: theme.card }]}>
+                      <View style={styles.personMain}>
+                        <Avatar
+                          name={entry.kennel.shortName}
+                          size={40}
+                          src={entry.kennel.logoUrl}
+                          color={brandColor(entry.kennel.primaryColor)}
+                        />
+                        <View style={styles.personText}>
+                          <ThemedText type="smallBold" numberOfLines={1}>{entry.kennel.shortName}</ThemedText>
+                          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                            {entry.kennel.city}, {entry.kennel.country}
+                          </ThemedText>
+                        </View>
+                      </View>
+                    </Pressable>
+                  ),
+                )
+              ))}
           </View>
         ) : (
           <View style={[styles.lock, { backgroundColor: theme.card }]} accessibilityRole="summary">
@@ -286,6 +504,13 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', gap: Spacing.one, paddingVertical: Spacing.three },
   bio: { textAlign: 'center' },
   statsRow: { flexDirection: 'row', gap: Spacing.four, marginTop: Spacing.two },
+  statButton: { minHeight: 44, justifyContent: 'center' },
+  tabs: { flexDirection: 'row', borderBottomWidth: 1 },
+  tab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2 },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.three, borderRadius: Spacing.three, minHeight: 64 },
+  personMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.three, minWidth: 0 },
+  personText: { flex: 1, minWidth: 0 },
+  removeButton: { minHeight: 44, paddingHorizontal: Spacing.three, borderRadius: Spacing.two, alignItems: 'center', justifyContent: 'center' },
   followButton: { marginTop: Spacing.two, minHeight: 44, paddingHorizontal: Spacing.five, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
   section: { gap: Spacing.two },
   kennelRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.three, borderRadius: 12, minHeight: 56 },

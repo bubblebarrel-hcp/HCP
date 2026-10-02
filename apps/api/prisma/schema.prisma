@@ -2652,9 +2652,10 @@ enum PostStatus {
 // two are siblings: a reel is media with a caption, a post is words with
 // optional photos, and both belong to the hasher rather than to a kennel (D41).
 //
-// A post is always public (D51). There is no visibility column, because a
-// column with one value is a promise the schema cannot keep — adding audiences
-// later means adding the column then, with the migration that admits it.
+// A post's audience is its own (D57) and can only narrow its author's profile.
+// D51 said a post is always public and so had no column, because a column with
+// one value is a promise the schema cannot keep; adding audiences meant adding
+// the column then, with the migration that admits it, and this is that.
 model Post {
   id            String     @id @default(uuid()) @db.Uuid
   authorId      String     @db.Uuid
@@ -2662,6 +2663,9 @@ model Post {
   kennelId      String?    @db.Uuid
   runId         String?    @db.Uuid
   body          String
+  // Who may read this post (D57). It can narrow its author's profile and never
+  // widen it, exactly as a reel's audience does.
+  visibility    Audience   @default(PUBLIC)
   status        PostStatus @default(DRAFT)
   publishedAt   DateTime?
   editedAt      DateTime?

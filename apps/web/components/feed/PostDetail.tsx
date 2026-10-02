@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Avatar } from '@/components/Avatar';
 import { Card } from '@/components/ui/card';
+import { AudienceControl } from '@/components/profile/AudienceControl';
 import { EngagementBar } from '@/components/social/EngagementBar';
 import type { HasherPost } from '@/lib/types';
 import { brandColor, cn, formatDate } from '@/lib/utils';
@@ -72,6 +73,8 @@ export function PostDetail({ post }: { post: HasherPost }) {
           </Link>
         </p>
       )}
+
+      <AudienceControl kind="post" id={post.id} authorId={post.author.id} initial={post.visibility} />
 
       <EngagementBar
         segment="posts"

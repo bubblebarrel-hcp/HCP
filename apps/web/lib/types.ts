@@ -1397,6 +1397,8 @@ export interface PostPhoto {
 export interface HasherPost {
   id: string;
   body: string;
+  // Who may read it (D57): its own audience, narrowing its author's profile.
+  visibility: Audience;
   status: PostStatus;
   publishedAt: string | null;
   editedAt: string | null;

@@ -5,6 +5,8 @@ import type {
   ContentComment,
   Engagement,
   EngagementDetail,
+  FollowerPage,
+  FollowingPage,
   FollowRelation,
   FollowRequest,
   FollowState,
@@ -111,6 +113,21 @@ export async function deactivateAccount(password: string) {
 
 export async function deleteAccount(password: string) {
   return api('/me/delete', { method: 'POST', body: { password, confirm: 'DELETE' } });
+}
+
+// Who follows a hasher and who they follow (D50). A locked profile's lists are for
+// its approved followers; anyone else gets an empty page that says so (D57).
+export async function listHasherFollowers(id: string, page = 1) {
+  return api<FollowerPage>(`/hashers/${id}/followers?page=${page}&limit=30`);
+}
+
+export async function listHasherFollowing(id: string, page = 1) {
+  return api<FollowingPage>(`/hashers/${id}/following?page=${page}&limit=30`);
+}
+
+// Take somebody off your followers. They are not told, and can ask again (D57).
+export async function removeFollower(followerId: string) {
+  return api(`/me/followers/${followerId}`, { method: 'DELETE' });
 }
 
 export async function listFollowRequests(page = 1) {

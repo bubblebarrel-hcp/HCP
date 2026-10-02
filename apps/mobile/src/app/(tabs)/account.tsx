@@ -323,7 +323,7 @@ function Menu() {
       <ThemedText style={styles.heading} accessibilityRole="header">Menu</ThemedText>
 
       <View style={[styles.profile, { backgroundColor: theme.card }]}>
-        <Avatar name={user.displayName} size={48} />
+        <Avatar name={user.displayName} size={48} src={user.avatarUrl} position={user.avatarPosition} />
         <View style={styles.profileText}>
           <ThemedText type="smallBold" style={styles.profileName} numberOfLines={1}>{user.displayName}</ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>{user.email}</ThemedText>

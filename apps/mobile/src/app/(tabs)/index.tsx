@@ -103,7 +103,12 @@ export default function HomeScreen() {
                 ItemSeparatorComponent={() => <View style={styles.separator} />}
                 ListHeaderComponent={
                   <View style={styles.headerStack}>
-                    {user ? <Composer name={user.displayName} onPosted={() => load(scope)} /> : <WelcomeCard onLogin={() => router.push('/account')} />}
+                    {user ? <Composer
+                        name={user.displayName}
+                        avatarUrl={user.avatarUrl}
+                        avatarPosition={user.avatarPosition}
+                        onPosted={() => load(scope)}
+                      /> : <WelcomeCard onLogin={() => router.push('/account')} />}
                     {kennels.length > 0 && (
                       <View style={{ backgroundColor: theme.card }}>
                         <KennelStrip kennels={kennels} />

@@ -4,7 +4,7 @@ import { type Actor } from './permission.service';
 import { canView, getAccess, publicName, userPublicSelect } from './run.service';
 import * as reports from './report.service';
 import * as follows from './follow.service';
-import { contentVisibleAuthors } from './audience.service';
+import { activeFollowSet, contentVisibleAuthors } from './audience.service';
 import * as stats from './stats.service';
 import { resolveVisible, segmentFor } from './subject.service';
 
@@ -331,8 +331,17 @@ async function recentPosts(actor: Actor | undefined, limit: number): Promise<Fee
     select: { authorId: true },
   });
   const readable = await contentVisibleAuthors(actor, candidates.map((c) => c.authorId));
+  const followed = await activeFollowSet(actor?.id, [...readable]);
   const rows = await prisma.post.findMany({
-    where: { status: 'PUBLISHED', authorId: { in: [...readable] } },
+    where: {
+      status: 'PUBLISHED',
+      // The profile lets the viewer in; then each post's own audience decides (D57).
+      OR: [
+        ...(actor ? [{ authorId: actor.id }] : []),
+        { authorId: { in: [...readable] }, visibility: 'PUBLIC' },
+        { authorId: { in: [...readable].filter((id) => followed.has(id)) }, visibility: 'FOLLOWERS' },
+      ],
+    },
     orderBy: { publishedAt: 'desc' },
     take: limit,
     select: {

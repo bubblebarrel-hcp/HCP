@@ -44,6 +44,17 @@ export function notificationHref(item: NotificationItem) {
       return `/runs/${item.contextId}`;
     case 'Trail':
       return `/trails/${item.contextId}`;
+    // A like or a comment names the thing it was on (D50).
+    case 'Post':
+      return `/posts/${item.contextId}`;
+    case 'Reel':
+      return `/reels/${item.contextId}`;
+    // Somebody asked to follow a locked profile (D57): the thing to do is answer.
+    case 'FollowRequest':
+      return '/account/follow-requests';
+    // A social notice about a person (an approved request, a follow) opens them.
+    case 'User':
+      return `/hashers/${item.contextId}`;
     // A membership has no page of its own; "Your kennels" is the closest thing.
     case 'Membership':
       return '/account';

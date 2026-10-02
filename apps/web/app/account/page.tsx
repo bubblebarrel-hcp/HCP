@@ -89,6 +89,25 @@ export default function AccountPage() {
               <dt className="text-muted-foreground">Member since</dt>
               <dd>{new Date(user.createdAt).toLocaleDateString()}</dd>
             </dl>
+            {/* Who follows you and who you follow live on your profile page,
+                which opens on the right list (D57). */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/hashers/${user.id}?tab=followers`} data-testid="account-followers">
+                  Followers
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/hashers/${user.id}?tab=following`} data-testid="account-following">
+                  Following
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/hashers/${user.id}`} data-testid="account-view-profile">
+                  View my profile
+                </Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

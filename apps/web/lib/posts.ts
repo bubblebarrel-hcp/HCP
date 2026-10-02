@@ -1,7 +1,7 @@
 'use client';
 import api from '@/services/api';
 import { uploadPhoto } from '@/lib/media';
-import type { HasherPost, Page } from '@/lib/types';
+import type { Audience, HasherPost, Page } from '@/lib/types';
 
 // A hasher's written post (D51).
 //
@@ -19,7 +19,12 @@ interface Envelope<T> {
 
 const unwrap = <T,>(res: { data: Envelope<T> }): T => res.data.data;
 
-export async function createDraft(input: { body: string; kennelId?: string | null; runId?: string | null }) {
+export async function createDraft(input: {
+  body: string;
+  visibility?: Audience;
+  kennelId?: string | null;
+  runId?: string | null;
+}) {
   return unwrap(await api.post<Envelope<{ post: HasherPost }>>('/posts', input)).post;
 }
 
@@ -43,10 +48,14 @@ export async function listPosts(params: { page?: number; limit?: number; authorI
 // `onProgress` reports which photo is going up, because a slow upload with no
 // sign of life reads as a hang.
 export async function post(
-  input: { body: string; photos: File[]; kennelId?: string | null },
+  input: { body: string; photos: File[]; visibility?: Audience; kennelId?: string | null },
   onProgress?: (uploaded: number, total: number) => void,
 ): Promise<HasherPost> {
-  const draft = await createDraft({ body: input.body, kennelId: input.kennelId ?? null });
+  const draft = await createDraft({
+    body: input.body,
+    visibility: input.visibility,
+    kennelId: input.kennelId ?? null,
+  });
 
   for (const [index, file] of input.photos.entries()) {
     onProgress?.(index, input.photos.length);

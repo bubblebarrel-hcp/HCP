@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Avatar } from '@/components/Avatar';
 import { Card } from '@/components/ui/card';
 import { ReelCarousel } from '@/components/feed/ReelCarousel';
+import { AudienceControl } from '@/components/profile/AudienceControl';
 import { EngagementBar } from '@/components/social/EngagementBar';
 import type { Reel } from '@/lib/types';
 import { brandColor, formatDate } from '@/lib/utils';
@@ -50,6 +51,8 @@ export function ReelDetail({ reel }: { reel: Reel }) {
       {/* The carousel is the one client part: a post holds several items and
           moving between them needs the browser (D48). */}
       <ReelCarousel items={reel.items} alt={reel.caption ?? `Reel by ${reel.author.name}`} />
+
+      <AudienceControl kind="reel" id={reel.id} authorId={reel.author.id} initial={reel.visibility} />
 
       <EngagementBar
         segment="reels"

@@ -126,7 +126,18 @@ function RunAnnouncement({ item }: { item: Extract<FeedItem, { kind: 'RUN' }> })
 
 function Reshare({ item }: { item: Extract<FeedItem, { kind: 'RESHARE' }> }) {
   const theme = useTheme();
+  const router = useRouter();
   const original = item.original;
+
+  // What has a screen of its own opens there; the rest (a report, a capsule)
+  // still reads on the web.
+  function openOriginal() {
+    if (!original) return;
+    if (original.type === 'POST') router.push(`/posts/${original.id}`);
+    else if (original.type === 'REEL') router.push(`/reels/${original.id}`);
+    else if (original.type === 'RUN') router.push(`/run/${original.id}`);
+    else Linking.openURL(`${WEB_URL}${original.href}`);
+  }
   return (
     <View style={styles.padded}>
       <Attribution name={item.sharer.name} authorId={item.sharer.id} kennel={null} at={item.at} iconName={{ ios: 'arrow.2.squarepath', android: 'repeat', web: 'repeat' }} />
@@ -134,7 +145,7 @@ function Reshare({ item }: { item: Extract<FeedItem, { kind: 'RESHARE' }> }) {
       {original ? (
         <Pressable
           accessibilityRole="link"
-          onPress={() => Linking.openURL(`${WEB_URL}${original.href}`)}
+          onPress={openOriginal}
           style={[styles.quoteCard, { borderColor: theme.border }]}>
           {original.imageUrl ? <Image source={{ uri: original.imageUrl }} style={styles.quoteImage} /> : null}
           <View style={styles.quotePad}>
@@ -161,8 +172,10 @@ function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> })
     <>
       <View style={styles.padded}>
         <Attribution name={item.author} authorId={item.authorId} kennel={item.kennel} at={item.at} iconName={{ ios: 'bubble.left', android: 'chat_bubble', web: 'chat_bubble' }} />
-        <ThemedText style={{ marginTop: Spacing.two }}>{item.body}</ThemedText>
-        {item.edited ? <ThemedText type="small" themeColor="textSecondary">edited</ThemedText> : null}
+        <Pressable accessibilityRole="link" accessibilityLabel="Open this post" onPress={() => router.push(`/posts/${item.id}`)}>
+          <ThemedText style={{ marginTop: Spacing.two }}>{item.body}</ThemedText>
+          {item.edited ? <ThemedText type="small" themeColor="textSecondary">edited</ThemedText> : null}
+        </Pressable>
       </View>
       {item.photos.length > 0 && (
         <View style={many ? styles.photoGrid : undefined}>

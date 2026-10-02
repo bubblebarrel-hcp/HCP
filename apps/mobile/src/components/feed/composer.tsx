@@ -6,16 +6,35 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
+import type { Audience } from '@/lib/types';
 
 // A hasher's own words, straight from the composer (D51): create-draft,
 // publish — the photo-upload step in between is not built here yet (the
 // composer stays text-only on mobile; attaching photos is still web-only,
 // same split as everywhere else media touches R2 presigning).
 
-export function Composer({ name, onPosted }: { name: string; onPosted: () => void }) {
+// Who may read the post (D57): it can narrow the hasher's profile, never widen it.
+const AUDIENCES: { value: Audience; label: string; hint: string }[] = [
+  { value: 'PUBLIC', label: 'Public', hint: 'Anyone can read it.' },
+  { value: 'FOLLOWERS', label: 'Followers', hint: 'Only people who follow you.' },
+  { value: 'ONLY_ME', label: 'Only me', hint: 'Only you.' },
+];
+
+export function Composer({
+  name,
+  avatarUrl,
+  avatarPosition,
+  onPosted,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  avatarPosition?: string | null;
+  onPosted: () => void;
+}) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState('');
+  const [audience, setAudience] = useState<Audience>('PUBLIC');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +44,10 @@ export function Composer({ name, onPosted }: { name: string; onPosted: () => voi
     setBusy(true);
     setError(null);
     try {
-      const draft = await api<{ post: { id: string } }>('/posts', { method: 'POST', body: { body: value } });
+      const draft = await api<{ post: { id: string } }>('/posts', {
+        method: 'POST',
+        body: { body: value, visibility: audience },
+      });
       await api(`/posts/${draft.post.id}/publish`, { method: 'POST' });
       setBody('');
       setOpen(false);
@@ -41,7 +63,7 @@ export function Composer({ name, onPosted }: { name: string; onPosted: () => voi
     <>
       <View style={[styles.card, { backgroundColor: theme.card }]}>
         <View style={styles.row}>
-          <Avatar name={name} />
+          <Avatar name={name} src={avatarUrl} position={avatarPosition} />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Write a post"
@@ -77,9 +99,33 @@ export function Composer({ name, onPosted }: { name: string; onPosted: () => voi
           </View>
           <View style={styles.modalBody}>
             <View style={styles.row}>
-              <Avatar name={name} />
+              <Avatar name={name} src={avatarUrl} position={avatarPosition} />
               <ThemedText type="smallBold">{name}</ThemedText>
             </View>
+            <View style={styles.audience} accessibilityRole="radiogroup">
+              {AUDIENCES.map((option) => {
+                const selected = audience === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="radio"
+                    accessibilityLabel={`${option.label}. ${option.hint}`}
+                    accessibilityState={{ selected }}
+                    onPress={() => setAudience(option.value)}
+                    style={[
+                      styles.chip,
+                      { borderColor: selected ? theme.primary : theme.border, backgroundColor: theme.card },
+                    ]}>
+                    <ThemedText type="smallBold" style={{ color: selected ? theme.primaryStrong : theme.textSecondary }}>
+                      {option.label}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <ThemedText type="small" themeColor="textSecondary">
+              {AUDIENCES.find((a) => a.value === audience)?.hint}
+            </ThemedText>
             <TextInput
               value={body}
               onChangeText={setBody}
@@ -139,4 +185,6 @@ const styles = StyleSheet.create({
   headerButton: { minHeight: 44, minWidth: 60, justifyContent: 'center' },
   modalBody: { flex: 1, padding: Spacing.three, gap: Spacing.two },
   input: { flex: 1, fontSize: 18, textAlignVertical: 'top' },
+  audience: { flexDirection: 'row', gap: Spacing.two },
+  chip: { minHeight: 36, paddingHorizontal: Spacing.three, borderRadius: 18, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
 });

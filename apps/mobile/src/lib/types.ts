@@ -86,10 +86,48 @@ export interface HasherPhotoPage extends Page<HasherPhoto> {
 }
 
 // Somebody waiting on a locked profile's yes.
+// A hasher in a followers or following list (D50).
+export interface FollowerRow {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  avatarPosition: string | null;
+  bio: string | null;
+  homeKennel: { slug: string; shortName: string; primaryColor: string | null } | null;
+  isFollowing: boolean;
+  isMe: boolean;
+}
+
+export interface FollowedKennelRow {
+  id: string;
+  slug: string;
+  name: string;
+  shortName: string;
+  city: string;
+  country: string;
+  logoUrl: string | null;
+  primaryColor: string | null;
+  isFollowing: boolean;
+}
+
+// "Who do they follow" is one list, because it is one question to a reader.
+export type FollowingEntry =
+  | { kind: 'HASHER'; followedAt: string; hasher: FollowerRow; kennel: null }
+  | { kind: 'KENNEL'; followedAt: string; hasher: null; kennel: FollowedKennelRow };
+
+// A locked profile's lists come back empty and say why (D57).
+export interface FollowerPage extends Page<FollowerRow> {
+  locked?: boolean;
+}
+export interface FollowingPage extends Page<FollowingEntry> {
+  locked?: boolean;
+}
+
 export interface FollowRequest {
   id: string;
   name: string;
   avatarUrl: string | null;
+  avatarPosition: string | null;
   bio: string | null;
   homeKennel: { slug: string; shortName: string; primaryColor: string | null } | null;
   requestedAt: string | null;
@@ -100,6 +138,8 @@ export interface HasherProfile {
   name: string;
   isNamed: boolean;
   avatarUrl: string | null;
+  // CSS "x% y%" crop for the round picture; null is centred.
+  avatarPosition: string | null;
   bannerUrl: string | null;
   bio: string | null;
   homeKennel: { slug: string; shortName: string; primaryColor: string | null } | null;
@@ -136,6 +176,53 @@ export interface PostPhoto {
   thumbnailUrl: string | null;
   width: number | null;
   height: number | null;
+}
+
+// One post, as its own screen shows it (D51, D57).
+export interface HasherPost {
+  id: string;
+  body: string;
+  // Who may read it: its own audience, narrowing its author's profile.
+  visibility: Audience;
+  status: string;
+  publishedAt: string | null;
+  editedAt: string | null;
+  createdAt: string;
+  author: { id: string; name: string; avatarUrl: string | null };
+  kennel: { id: string; slug: string; shortName: string; primaryColor: string | null } | null;
+  run: { id: string; runNumber: number | null; title: string | null } | null;
+  photos: PostPhoto[];
+  engagement: Engagement;
+  isMine: boolean;
+}
+
+// What a reel is made of (D48): videos and photos in the order they were added.
+export interface ReelItem {
+  id: string;
+  kind: 'PHOTO' | 'VIDEO';
+  url: string;
+  posterUrl: string | null;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  durationSec: number | null;
+}
+
+export interface Reel {
+  id: string;
+  caption: string | null;
+  status: string;
+  visibility: Audience;
+  publishedAt: string | null;
+  createdAt: string;
+  viewCount: number;
+  engagement: Engagement;
+  author: { id: string; name: string; avatarUrl: string | null };
+  kennel: { id: string; slug: string; shortName: string; primaryColor: string | null } | null;
+  run: { id: string; runNumber: number | null; title: string | null } | null;
+  items: ReelItem[];
+  itemCount: number;
+  isMine: boolean;
 }
 
 export interface SubjectPreview {
@@ -236,6 +323,8 @@ export interface SessionUser {
   hashHandle: string | null;
   // hashHandle, or "Just <firstName>" (D11)
   displayName: string;
+  avatarUrl?: string | null;
+  avatarPosition?: string | null;
   // Who sees what they make: posts, photos and reels (D57).
   profileVisibility?: Audience;
   emailVerified: boolean;

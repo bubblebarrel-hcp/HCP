@@ -208,6 +208,85 @@ async function main() {
   r = await call('PATCH', `/reels/${mine[0]?.id ?? '00000000-0000-4000-8000-000000000000'}`, owner.token, { visibility: 'KENNEL_ONLY' });
   check('the old kennel-only value is refused', r.status === 400, r);
 
+  // ── Per-post audience: a post can narrow its author's profile, never widen it ──
+  await call('PATCH', '/me/privacy', owner.token, { profileVisibility: 'PUBLIC' });
+  await call('DELETE', `/hashers/${owner.id}/follow`, fan.token);
+  const mkPost = async (visibility: string) => {
+    const d = await call('POST', '/posts', owner.token, { body: `privacy-check ${visibility}`, visibility });
+    const id = (d.data.post?.id ?? d.data.id) as string;
+    await call('POST', `/posts/${id}/publish`, owner.token);
+    return { id, visibility: d.data.post?.visibility };
+  };
+  const pPublic = await mkPost('PUBLIC');
+  const pFollowers = await mkPost('FOLLOWERS');
+  const pOnlyMe = await mkPost('ONLY_ME');
+  check('post carries its audience', pFollowers.visibility === 'FOLLOWERS' && pOnlyMe.visibility === 'ONLY_ME', [pFollowers, pOnlyMe]);
+  const open = async (id: string, token?: string) => (await call('GET', `/posts/${id}`, token)).status;
+  check('owner opens all three posts', (await open(pPublic.id, owner.token)) === 200 && (await open(pFollowers.id, owner.token)) === 200 && (await open(pOnlyMe.id, owner.token)) === 200);
+  check('a stranger reads only the public post', (await open(pPublic.id, stranger.token)) === 200 && (await open(pFollowers.id, stranger.token)) === 404 && (await open(pOnlyMe.id, stranger.token)) === 404);
+  check('anonymous reads only the public post', (await open(pPublic.id)) === 200 && (await open(pFollowers.id)) === 404 && (await open(pOnlyMe.id)) === 404);
+  const postIds = async (token?: string) => items(await call('GET', `/posts?authorId=${owner.id}&limit=30`, token)).map((x) => x.id as string);
+  const asStranger = await postIds(stranger.token);
+  check('list for a stranger: public only', asStranger.includes(pPublic.id) && !asStranger.includes(pFollowers.id) && !asStranger.includes(pOnlyMe.id), asStranger);
+  await call('POST', `/hashers/${owner.id}/follow`, fan.token);
+  check('a follower opens the followers post, not the only-me one', (await open(pFollowers.id, fan.token)) === 200 && (await open(pOnlyMe.id, fan.token)) === 404);
+  const asFan = await postIds(fan.token);
+  check('list for a follower: public and followers', asFan.includes(pPublic.id) && asFan.includes(pFollowers.id) && !asFan.includes(pOnlyMe.id), asFan);
+  const asOwner = await postIds(owner.token);
+  check('list for the owner holds all three', [pPublic, pFollowers, pOnlyMe].every((x) => asOwner.includes(x.id)), asOwner);
+  // The audience can be changed after posting.
+  const widened = await call('PATCH', `/posts/${pOnlyMe.id}`, owner.token, { visibility: 'PUBLIC' });
+  check('the owner can change the audience of a post', widened.status === 200 && (await open(pOnlyMe.id, stranger.token)) === 200, widened);
+  r = await call('PATCH', `/posts/${pOnlyMe.id}`, stranger.token, { visibility: 'PUBLIC' });
+  check('only the author changes it', r.status === 403, r);
+  // A locked profile still narrows a public post.
+  await call('PATCH', '/me/privacy', owner.token, { profileVisibility: 'FOLLOWERS' });
+  check('a locked profile narrows a public post', (await open(pPublic.id, stranger.token)) === 404 && (await open(pPublic.id, fan.token)) === 200);
+  await call('PATCH', '/me/privacy', owner.token, { profileVisibility: 'PUBLIC' });
+  r = await call('POST', '/posts', owner.token, { body: 'x', visibility: 'KENNEL_ONLY' });
+  check('an unknown audience is refused', r.status === 400, r);
+  for (const post of [pPublic, pFollowers, pOnlyMe]) await call('POST', `/posts/${post.id}/archive`, owner.token);
+  await call('DELETE', `/hashers/${owner.id}/follow`, fan.token);
+
+  // ── A follow request tells the person asked, on more than the inbox ──
+  await call('PATCH', '/me/privacy', owner.token, { profileVisibility: 'FOLLOWERS' });
+  await call('POST', `/hashers/${owner.id}/follow`, stranger.token);
+  // The outbox publishes in batches a few seconds after the event, so wait for it.
+  const note = await eventually(() =>
+    prisma.notification.findFirst({
+      where: { recipientUserId: owner.id, contextType: 'FollowRequest', contextId: stranger.id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, title: true, evaluationReason: true, deliveries: { select: { channel: true } } },
+    }),
+  );
+  check('the request notifies the person asked', Boolean(note), note);
+  check('the request links to the requests page, not a profile', note?.title.includes('asked to follow you') === true);
+  // Whichever channels this hasher has on, it reaches at least one: the request
+  // defaults to email and push, where the rest of SOCIAL is in-app only.
+  check('the request is delivered somewhere', (note?.deliveries.length ?? 0) > 0, note);
+  if (process.env.RESEND_API_KEY) {
+    check('the request also goes by email', note?.deliveries.some((d) => d.channel === 'EMAIL') === true, note);
+  }
+  await call('POST', `/me/follow-requests/${stranger.id}/approve`, owner.token);
+  const approved = await eventually(() =>
+    prisma.notification.findFirst({
+      where: { recipientUserId: stranger.id, contextType: 'User', contextId: owner.id, title: { contains: 'approved' } },
+      orderBy: { createdAt: 'desc' },
+    }),
+  );
+  check('the approval notifies the person who asked', Boolean(approved));
+
+  // ── Removing a follower ──
+  r = await call('DELETE', `/me/followers/${stranger.id}`, owner.token);
+  check('the owner removes a follower', r.status === 200 && r.data.removed === true, r);
+  profile = (await call('GET', `/hashers/${owner.id}`, stranger.token)).data.hasher;
+  check('a removed follower is shut out again', profile.relation === 'NONE' && profile.canSeeContent === false, profile);
+  r = await call('DELETE', `/me/followers/${stranger.id}`, owner.token);
+  check('removing someone who is not a follower is a 404', r.status === 404, r);
+  r = await call('DELETE', `/me/followers/${owner.id}`, stranger.token);
+  check('you cannot remove somebody who does not follow you', r.status === 404, r);
+  await call('PATCH', '/me/privacy', owner.token, { profileVisibility: 'PUBLIC' });
+
   // ── Deactivate and reactivate, then delete, a throwaway hasher ──
   const email = `privacy-check-${Date.now()}@hcp.test`;
   const reg = await call('POST', '/auth/register', undefined, {
@@ -275,6 +354,16 @@ async function main() {
   console.log(`\n${passed} passed, ${failed} failed`);
   await prisma.$disconnect();
   process.exit(failed ? 1 : 0);
+}
+
+// Polls for something the outbox writes after the request has returned.
+async function eventually<T>(read: () => Promise<T | null>, seconds = 25): Promise<T | null> {
+  for (let i = 0; i < seconds * 2; i++) {
+    const found = await read();
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return null;
 }
 
 async function followersNow(userId: string) {

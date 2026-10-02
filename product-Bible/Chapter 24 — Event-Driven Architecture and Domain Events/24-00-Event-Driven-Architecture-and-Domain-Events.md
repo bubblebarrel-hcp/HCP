@@ -193,7 +193,7 @@ D41 reels, D50 follows and engagement, D51 posts. A reel and a post belong to th
 | `ReelPosted` | D41: a reel is published (draft, upload, publish, as with D28) | Social Service | Feed, Search Index, Audit |
 | `ReelArchived` | D41: the author archives their own reel | Social Service | Feed, Search Index |
 | `ReelRemoved` | D41: a moderator removes a reel; reason required | Social Service | Feed, Search Index, Audit |
-| `PostPublished` | D51: a post is published; its audience is its author's profile (D57), so the event carries none | Social Service | Feed, Search Index, Audit |
+| `PostPublished` | D51: a post is published; its audience (D57) is its own `visibility` narrowed by its author's profile, and is not carried on the event | Social Service | Feed, Search Index, Audit |
 | `PostArchived` | D51: the author archives their own post | Social Service | Feed, Search Index |
 | `PostRemoved` | D51: a moderator removes a post; reason required | Social Service | Feed, Search Index, Audit |
 | `HasherFollowed` / `HasherUnfollowed` | D50: a follow is toggled. Despite the name this also records kennel follows: `aggregateType` is `Kennel` and the payload `targetType` says which. A follow grants no membership, no vote and no authority | Social Service | Feed (Following scope), Audit |
