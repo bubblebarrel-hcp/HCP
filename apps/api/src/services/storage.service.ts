@@ -107,6 +107,18 @@ export async function writeLocalObject(storageKey: string, body: Buffer) {
   return destination;
 }
 
+// For small objects the API itself produces or receives, such as a video's
+// poster frame. Anything large still goes browser to storage by presigned PUT.
+export async function putObject(storageKey: string, body: Buffer, mimeType: string) {
+  if (client) {
+    await client.send(
+      new PutObjectCommand({ Bucket: env.r2.bucket, Key: storageKey, Body: body, ContentType: mimeType }),
+    );
+    return;
+  }
+  await writeLocalObject(storageKey, body);
+}
+
 export const localRoot = LOCAL_ROOT;
 
 export async function deleteObject(storageKey: string) {

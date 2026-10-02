@@ -84,7 +84,66 @@ async function uploadFile(
 
   const measured = opts.kind === 'VIDEO' ? await readVideo(file) : await readDimensions(file);
   const confirmed = await api.post<{ data: { media: MediaAsset } }>(`/media/${media.id}/confirm`, measured);
-  return confirmed.data.data.media;
+  const done = confirmed.data.data.media;
+
+  // A clip has no picture of its own, so grab one frame for its cover (D41).
+  // Same rule as measuring: worth having, never worth failing an upload over.
+  if (opts.kind === 'VIDEO') {
+    try {
+      const image = await grabFrame(file);
+      if (image) {
+        const posted = await api.post<{ data: { media: MediaAsset } }>(`/media/${media.id}/poster`, { image });
+        return posted.data.data.media;
+      }
+    } catch {
+      // The reel still plays; its tile just keeps the icon.
+    }
+  }
+  return done;
+}
+
+// The first moment of the clip, as a small JPEG data URL. A hair in, not frame
+// zero: a clip that fades up from black would otherwise get a black cover.
+const POSTER_WIDTH = 480;
+const POSTER_TIMEOUT_MS = 8000;
+
+function grabFrame(file: File) {
+  return new Promise<string | null>((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    let settled = false;
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      URL.revokeObjectURL(url);
+      video.removeAttribute('src');
+      video.load();
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), POSTER_TIMEOUT_MS);
+
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.onerror = () => finish(null);
+    video.onloadeddata = () => {
+      const length = Number.isFinite(video.duration) ? video.duration : 0;
+      video.currentTime = length > 0 ? Math.min(0.2, length / 2) : 0;
+    };
+    video.onseeked = () => {
+      const { videoWidth: w, videoHeight: h } = video;
+      if (!w || !h) return finish(null);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.min(POSTER_WIDTH, w);
+      canvas.height = Math.round((canvas.width / w) * h);
+      const context = canvas.getContext('2d');
+      if (!context) return finish(null);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      finish(canvas.toDataURL('image/jpeg', 0.75));
+    };
+    video.src = url;
+  });
 }
 
 // A video's size and length come from the element that will play it. Same rule

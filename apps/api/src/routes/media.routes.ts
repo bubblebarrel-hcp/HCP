@@ -8,6 +8,7 @@ import {
   confirmUploadSchema,
   listMediaQuery,
   moderateMediaSchema,
+  posterSchema,
   requestUploadSchema,
 } from '../validators/media.validator';
 
@@ -18,6 +19,7 @@ const router = Router();
 router.get('/media', optionalAuth, validate(listMediaQuery, 'query'), asyncHandler(controller.list));
 router.post('/media/uploads', requireAuth, validate(requestUploadSchema), asyncHandler(controller.requestUpload));
 router.post('/media/:id/confirm', requireAuth, validate(confirmUploadSchema), asyncHandler(controller.confirmUpload));
+router.post('/media/:id/poster', requireAuth, validate(posterSchema), asyncHandler(controller.setPoster));
 router.post('/media/:id/moderate', requireAuth, validate(moderateMediaSchema), asyncHandler(controller.moderate));
 router.get('/media/:id', requireAuth, asyncHandler(controller.detail));
 

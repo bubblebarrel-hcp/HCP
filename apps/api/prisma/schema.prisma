@@ -664,6 +664,9 @@ model User {
   // the hasher has not been named yet.
   hashHandle        String?
   avatarUrl         String?
+  // Which part of the picture the round crop shows, a CSS object-position pair
+  // ("50% 30%"), like bannerPosition. Null is centred.
+  avatarPosition    String?
   // The wide picture across the top of their public page (D56). Like avatarUrl
   // it only ever holds the URL of a MediaAsset this hasher uploaded.
   bannerUrl         String?

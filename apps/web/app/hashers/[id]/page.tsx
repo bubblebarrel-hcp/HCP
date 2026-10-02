@@ -56,6 +56,7 @@ export default async function HasherPage({ params }: { params: Promise<{ id: str
           name={hasher.name}
           color={hasher.homeKennel?.primaryColor}
           avatarUrl={hasher.avatarUrl}
+          avatarPosition={hasher.avatarPosition}
           bannerUrl={hasher.bannerUrl}
           bannerPosition={hasher.bannerPosition}
           bannerClassName="h-32 sm:h-48"

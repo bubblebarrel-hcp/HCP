@@ -12,7 +12,7 @@ import { ApiError, isUuid, page } from '../utils/http';
 import { type Actor, assertKennelPermission, resolveKennelContext } from './permission.service';
 import { recordAudit, recordEvent } from './record.service';
 import { canView, getAccess, publicName, userPublicSelect } from './run.service';
-import { buildStorageKey, createUploadTarget, publicUrlFor, storageDriver } from './storage.service';
+import { buildStorageKey, createUploadTarget, publicUrlFor, putObject, storageDriver } from './storage.service';
 
 // Media (Ch.23 Part F, Ch.22 B.2). The client asks for an upload target, PUTs
 // the file straight to storage, then confirms; the API never carries the bytes.
@@ -356,6 +356,59 @@ export async function confirmUpload(
     return row;
   });
 
+  return serialize(updated);
+}
+
+// ─── Poster frame ───
+
+// A video has no picture of its own, so a reel tile showed a play icon (D41).
+// The browser already has the clip open to read its length, so it grabs a frame
+// there and sends it here; nothing on the server needs ffmpeg. The frame is a
+// few tens of kilobytes, so it travels as JSON through the same-origin proxy and
+// the API writes it to storage itself rather than handing out a second target.
+const POSTER_TYPES: Record<string, string> = { 'image/jpeg': 'jpeg', 'image/webp': 'webp', 'image/png': 'png' };
+const MAX_POSTER_BYTES = 600 * 1024;
+
+export async function setPoster(actor: Actor, mediaId: string, dataUrl: string) {
+  if (!isUuid(mediaId)) throw ApiError.notFound('Media not found');
+  const media = await prisma.mediaAsset.findUnique({
+    where: { id: mediaId },
+    select: { id: true, uploaderId: true, kind: true, storageKey: true, uploadState: true },
+  });
+  if (!media) throw ApiError.notFound('Media not found');
+  if (media.uploaderId !== actor.id) throw ApiError.forbidden('Only the uploader sets a poster.', 'NOT_UPLOADER');
+  if (media.kind !== MediaKind.VIDEO) {
+    throw ApiError.badRequest('Only a video has a poster frame.', 'UNSUPPORTED_MEDIA_TYPE');
+  }
+
+  const match = /^data:(image\/[a-z]+);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if (!match || !POSTER_TYPES[match[1]]) {
+    throw ApiError.badRequest('The poster must be a JPEG, WebP or PNG image.', 'UNSUPPORTED_MEDIA_TYPE');
+  }
+  const mimeType = match[1];
+  const bytes = Buffer.from(match[2], 'base64');
+  if (bytes.length === 0 || bytes.length > MAX_POSTER_BYTES) {
+    throw ApiError.badRequest('The poster is empty or too large.', 'FILE_TOO_LARGE');
+  }
+  // The type came from the client, so check the bytes say the same thing.
+  const signatures: Record<string, (b: Buffer) => boolean> = {
+    'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8,
+    'image/png': (b) => b.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47])),
+    'image/webp': (b) => b.subarray(0, 4).toString('ascii') === 'RIFF' && b.subarray(8, 12).toString('ascii') === 'WEBP',
+  };
+  if (!signatures[mimeType](bytes)) {
+    throw ApiError.badRequest('The poster is not a valid image.', 'UNSUPPORTED_MEDIA_TYPE');
+  }
+
+  // Beside the clip, under its own random key, so replacing it never overwrites.
+  const posterKey = buildStorageKey(`${media.storageKey.split('/').slice(0, -3).join('/')}/poster`, mimeType);
+  await putObject(posterKey, bytes, mimeType);
+
+  const updated = await prisma.mediaAsset.update({
+    where: { id: mediaId },
+    data: { thumbnailUrl: publicUrlFor(posterKey) },
+    select: mediaSelect,
+  });
   return serialize(updated);
 }
 

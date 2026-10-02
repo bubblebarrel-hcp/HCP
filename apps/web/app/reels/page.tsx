@@ -43,11 +43,13 @@ export default async function ReelsPage() {
             <li key={reel.id} className="overflow-hidden rounded-xl border border-border bg-card">
               {reel.items[0]?.kind === 'VIDEO' ? (
                 <video
-                  src={reel.items[0].url}
+                  // No stored poster (a clip posted before frame grabs): fetch just
+                  // enough of the clip to show its first moment, not a black box.
+                  src={reel.items[0].posterUrl ? reel.items[0].url : `${reel.items[0].url}#t=0.2`}
                   poster={reel.items[0].posterUrl ?? undefined}
                   controls
                   playsInline
-                  preload="none"
+                  preload={reel.items[0].posterUrl ? 'none' : 'metadata'}
                   className="aspect-[3/4] w-full bg-black object-cover"
                 />
               ) : reel.items[0] ? (

@@ -168,7 +168,8 @@ export interface ProfileImagesInput {
   // A MediaAsset id, or null to remove the picture. Absent leaves it alone.
   avatarMediaId?: string | null;
   bannerMediaId?: string | null;
-  // A CSS background-position pair, or ''/null for centred.
+  // A CSS position pair, or ''/null for centred.
+  avatarPosition?: string | null;
   bannerPosition?: string | null;
 }
 
@@ -201,10 +202,17 @@ async function ownProfileImageUrl(userId: string, mediaId: string) {
 }
 
 export async function setProfileImages(userId: string, input: ProfileImagesInput) {
-  const data: { avatarUrl?: string | null; bannerUrl?: string | null; bannerPosition?: string | null } = {};
+  const data: {
+    avatarUrl?: string | null;
+    avatarPosition?: string | null;
+    bannerUrl?: string | null;
+    bannerPosition?: string | null;
+  } = {};
   if (input.avatarMediaId !== undefined) {
     data.avatarUrl = input.avatarMediaId === null ? null : await ownProfileImageUrl(userId, input.avatarMediaId);
+    data.avatarPosition = null;
   }
+  if (input.avatarPosition !== undefined) data.avatarPosition = input.avatarPosition || null;
   if (input.bannerMediaId !== undefined) {
     data.bannerUrl = input.bannerMediaId === null ? null : await ownProfileImageUrl(userId, input.bannerMediaId);
     // A different picture is cropped differently, so a new (or removed) banner
@@ -218,7 +226,7 @@ export async function setProfileImages(userId: string, input: ProfileImagesInput
     const row = await tx.user.update({
       where: { id: userId },
       data,
-      select: { avatarUrl: true, bannerUrl: true, bannerPosition: true },
+      select: { avatarUrl: true, avatarPosition: true, bannerUrl: true, bannerPosition: true },
     });
     // The previous picture's MediaAsset is kept: attribution and history are
     // permanent here, and a removed picture is simply no longer pointed at.

@@ -23,7 +23,7 @@ export function LeftNav() {
         <li>
           {user ? (
             <Link href="/account" className={cn(row, 'hover:bg-foreground/5')}>
-              <Avatar name={user.displayName} size="sm" src={user.avatarUrl} />
+              <Avatar name={user.displayName} size="sm" src={user.avatarUrl} position={user.avatarPosition} />
               <span className="truncate font-semibold">{user.displayName}</span>
             </Link>
           ) : (

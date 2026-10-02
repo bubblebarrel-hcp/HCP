@@ -59,14 +59,15 @@ function CountRing({ count }: { count: number }) {
 }
 
 function Tile({ reel, onOpen }: { reel: Reel; onOpen: () => void }) {
-  // A photo is its own cover. A video has no frame grab yet (D41), so a post
-  // that opens on one borrows the first photo in it rather than showing a grey
-  // box; failing that, the kennel colour and a play icon.
+  // A photo is its own cover. A video's cover is the frame grabbed when it was
+  // posted (D41); a post that opens on a clip without one borrows the first photo
+  // in it, then the clip's own first frame, and only then the play icon.
   const first = reel.items[0];
   const cover =
     first?.kind === 'PHOTO'
       ? first.url
       : (first?.posterUrl ?? reel.items.find((item) => item.kind === 'PHOTO')?.url ?? null);
+  const firstVideo = cover ? null : (first?.kind === 'VIDEO' ? first.url : null);
   const where = reel.run
     ? `Run #${reel.run.runNumber ?? '—'}`
     : reel.event
@@ -96,6 +97,20 @@ function Tile({ reel, onOpen }: { reel: Reel; onOpen: () => void }) {
             // deployment's domain configured up front.
             // eslint-disable-next-line @next/next/no-img-element
             <img src={cover} alt="" className="h-full w-full object-cover" loading="lazy" />
+          ) : firstVideo ? (
+            // A clip posted before poster frames existed has none stored, but the
+            // browser can still show its first moment: metadata only, parked a
+            // hair in so a fade from black does not become a black cover.
+            <video
+              src={`${firstVideo}#t=0.2`}
+              preload="metadata"
+              muted
+              playsInline
+              aria-hidden
+              tabIndex={-1}
+              className="pointer-events-none h-full w-full object-cover"
+              data-testid="reel-tile-frame"
+            />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-primary-foreground">
               <Video className="h-6 w-6" aria-hidden />

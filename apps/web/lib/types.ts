@@ -18,6 +18,8 @@ export interface SessionUser {
   // hashHandle, or "Just <firstName>" (D11)
   displayName: string;
   avatarUrl: string | null;
+  // CSS object-position pair for the round crop; null is centred.
+  avatarPosition: string | null;
   // The wide picture across the top of their public page (D56).
   bannerUrl: string | null;
   // CSS background-position pair for the banner's crop; null is centred.
@@ -1275,6 +1277,7 @@ export interface HasherProfile {
   name: string;
   isNamed: boolean;
   avatarUrl: string | null;
+  avatarPosition: string | null;
   bannerUrl: string | null;
   bannerPosition: string | null;
   bio: string | null;

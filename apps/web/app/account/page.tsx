@@ -34,6 +34,7 @@ export default function AccountPage() {
           hasherId={user.id}
           name={user.displayName}
           avatarUrl={user.avatarUrl}
+          avatarPosition={user.avatarPosition}
           bannerUrl={user.bannerUrl}
           bannerPosition={user.bannerPosition}
         >

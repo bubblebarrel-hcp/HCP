@@ -30,6 +30,7 @@ export async function followableUser(actor: Actor | undefined, userId: string) {
       id: true,
       hashHandle: true,
       avatarUrl: true,
+      avatarPosition: true,
       bannerUrl: true,
       bannerPosition: true,
       bio: true,
@@ -383,6 +384,7 @@ export async function hasherProfile(actor: Actor | undefined, userId: string) {
     // rather than pretending "Just Chidi" is a hash handle.
     isNamed: Boolean(user.hashHandle),
     avatarUrl: user.avatarUrl,
+    avatarPosition: user.avatarPosition,
     bannerUrl: user.bannerUrl,
     bannerPosition: user.bannerPosition,
     bio: user.bio,

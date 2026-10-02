@@ -37,6 +37,7 @@ export function ProfileBranding({
   name,
   color,
   avatarUrl,
+  avatarPosition,
   bannerUrl,
   bannerPosition,
   bannerClassName = 'h-40 sm:h-64',
@@ -46,6 +47,7 @@ export function ProfileBranding({
   name: string;
   color?: string | null;
   avatarUrl: string | null;
+  avatarPosition: string | null;
   bannerUrl: string | null;
   bannerPosition: string | null;
   // Pages differ in how much banner they want; the controls follow it.
@@ -64,6 +66,14 @@ export function ProfileBranding({
   // worked on, kept apart from the saved one so Cancel is a real cancel.
   const [dragging, setDragging] = useState<{ x: number; y: number } | null>(null);
   const [savingPosition, setSavingPosition] = useState(false);
+  // The same, for the round picture.
+  const [editedAvatarPosition, setEditedAvatarPosition] = useState<string | null | undefined>(undefined);
+  const [avatarDragging, setAvatarDragging] = useState<{ x: number; y: number } | null>(null);
+  const [savingAvatarPosition, setSavingAvatarPosition] = useState(false);
+  const avatarCropRef = useRef<HTMLDivElement>(null);
+  const avatarGrab = useRef<{ pointerId: number; startX: number; startY: number; from: { x: number; y: number } } | null>(
+    null,
+  );
   const inputs = { avatar: useRef<HTMLInputElement>(null), banner: useRef<HTMLInputElement>(null) };
   const bannerRef = useRef<HTMLDivElement>(null);
   const grab = useRef<{ pointerId: number; startX: number; startY: number; from: { x: number; y: number } } | null>(
@@ -81,10 +91,16 @@ export function ProfileBranding({
   // What is on screen: the drag in progress, or what is saved.
   const shown = dragging ?? savedPosition;
   const repositioning = dragging !== null;
+  const savedAvatarPosition = parsePosition(
+    editedAvatarPosition !== undefined ? editedAvatarPosition : avatarPosition,
+  );
+  const shownAvatar = avatarDragging ?? savedAvatarPosition;
+  const repositioningAvatar = avatarDragging !== null;
 
   async function save(slot: Slot, mediaId: string | null, url: string | null) {
     await api.patch('/me/profile-images', { [FIELD[slot]]: mediaId });
     setEdited((current) => ({ ...current, [slot]: url }));
+    if (slot === 'avatar') setEditedAvatarPosition(null);
     // A different picture is cropped differently, so a new banner starts centred
     // rather than inheriting a position chosen for the one before it (the API
     // resets it the same way).
@@ -164,6 +180,77 @@ export function ProfileBranding({
       toast.error(errorMessage(err, 'Could not save the banner position'));
     } finally {
       setSavingPosition(false);
+    }
+  }
+
+  // ─── Repositioning the picture ───
+  // The same gesture as the banner, inside the circle: the position moves
+  // against the pointer, and a drag across the whole circle covers the picture.
+
+  function onAvatarPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (!avatarDragging) return;
+    event.preventDefault();
+    avatarGrab.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      from: avatarDragging,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onAvatarPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const held = avatarGrab.current;
+    if (!held || held.pointerId !== event.pointerId) return;
+    const box = avatarCropRef.current?.getBoundingClientRect();
+    if (!box) return;
+    setAvatarDragging({
+      x: clamp(held.from.x - ((event.clientX - held.startX) / box.width) * 100),
+      y: clamp(held.from.y - ((event.clientY - held.startY) / box.height) * 100),
+    });
+  }
+
+  function onAvatarPointerUp(event: React.PointerEvent<HTMLDivElement>) {
+    if (avatarGrab.current?.pointerId !== event.pointerId) return;
+    avatarGrab.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function onAvatarKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!avatarDragging) return;
+    const steps: Record<string, [number, number]> = {
+      ArrowUp: [0, -KEY_STEP],
+      ArrowDown: [0, KEY_STEP],
+      ArrowLeft: [-KEY_STEP, 0],
+      ArrowRight: [KEY_STEP, 0],
+    };
+    const step = steps[event.key];
+    if (step) {
+      event.preventDefault();
+      setAvatarDragging((c) => (c ? { x: clamp(c.x + step[0]), y: clamp(c.y + step[1]) } : c));
+      return;
+    }
+    if (event.key === 'Escape') setAvatarDragging(null);
+    if (event.key === 'Enter') void saveAvatarPosition();
+  }
+
+  async function saveAvatarPosition() {
+    if (!avatarDragging) return;
+    const value = formatPosition(avatarDragging);
+    setSavingAvatarPosition(true);
+    try {
+      await api.patch('/me/profile-images', { avatarPosition: value });
+      setEditedAvatarPosition(value);
+      setAvatarDragging(null);
+      await refreshUser();
+      router.refresh();
+      toast.success('Picture position saved.');
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not save the picture position'));
+    } finally {
+      setSavingAvatarPosition(false);
     }
   }
 
@@ -370,10 +457,89 @@ export function ProfileBranding({
 
       <div className="flex flex-col items-center gap-3 px-4 pb-4 sm:flex-row sm:items-end sm:gap-5 lg:px-8">
         <div className="relative -mt-16 sm:-mt-12">
-          <Avatar name={name} size="xl" color={brandColor(color)} src={pictures.avatar} />
-          {canManage && (
+          <Avatar
+            name={name}
+            size="xl"
+            color={brandColor(color)}
+            src={pictures.avatar}
+            position={formatPosition(shownAvatar)}
+          />
+          {canManage && repositioningAvatar && (
+            <>
+              {/* Covers the circle so a drag anywhere on it moves the crop. */}
+              <div
+                ref={avatarCropRef}
+                role="application"
+                aria-label="Drag to choose what the picture shows, or use the arrow keys"
+                tabIndex={0}
+                onPointerDown={onAvatarPointerDown}
+                onPointerMove={onAvatarPointerMove}
+                onPointerUp={onAvatarPointerUp}
+                onPointerCancel={onAvatarPointerUp}
+                onKeyDown={onAvatarKeyDown}
+                className="absolute inset-0 cursor-grab touch-none rounded-full ring-2 ring-inset ring-primary active:cursor-grabbing"
+                data-testid="profile-avatar-crop"
+                data-avatar-position={formatPosition(shownAvatar)}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-1 left-1 h-9 w-9 rounded-full shadow-md"
+                onClick={() => setAvatarDragging(null)}
+                disabled={savingAvatarPosition}
+                title="Cancel"
+                data-testid="profile-avatar-reposition-cancel"
+              >
+                <X className="h-4 w-4" aria-hidden />
+                <span className="sr-only">Cancel</span>
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                className="absolute bottom-1 right-1 h-9 w-9 rounded-full shadow-md"
+                onClick={() => void saveAvatarPosition()}
+                disabled={savingAvatarPosition}
+                title="Save position"
+                data-testid="profile-avatar-reposition-save"
+              >
+                {savingAvatarPosition ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Check className="h-4 w-4" aria-hidden />
+                )}
+                <span className="sr-only">Save position</span>
+              </Button>
+              <p
+                className="pointer-events-none absolute left-0 top-full z-10 mt-1 w-max rounded-full bg-background/90 px-3 py-1 text-xs font-medium shadow-md"
+                data-testid="profile-avatar-reposition-hint"
+              >
+                Drag the picture. Arrow keys nudge it.
+              </p>
+            </>
+          )}
+          {canManage && !repositioningAvatar && (
             <>
               {picker('avatar')}
+              {pictures.avatar && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  className="absolute right-1 top-1 h-8 w-8 rounded-full shadow-md"
+                  disabled={busy !== null}
+                  onClick={() => {
+                    setAvatarDragging(savedAvatarPosition);
+                    // Focus follows the handle so the arrow keys work without a click.
+                    requestAnimationFrame(() => avatarCropRef.current?.focus());
+                  }}
+                  title="Reposition picture"
+                  data-testid="profile-avatar-reposition"
+                >
+                  <Move className="h-4 w-4" aria-hidden />
+                  <span className="sr-only">Reposition picture</span>
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="secondary"

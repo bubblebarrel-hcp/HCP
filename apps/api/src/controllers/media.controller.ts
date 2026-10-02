@@ -18,6 +18,10 @@ export async function confirmUpload(req: Request, res: Response) {
   return ok(res, { media: await media.confirmUpload(actor(req), req.params.id, req.body) });
 }
 
+export async function setPoster(req: Request, res: Response) {
+  return ok(res, { media: await media.setPoster(actor(req), req.params.id, req.body.image) });
+}
+
 export async function list(req: Request, res: Response) {
   const { targetType, targetId, page, limit } = req.query as unknown as {
     targetType: MediaTargetType;

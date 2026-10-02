@@ -18,6 +18,7 @@ export function Avatar({
   size = 'md',
   color,
   src,
+  position,
   className,
 }: {
   name: string;
@@ -26,6 +27,9 @@ export function Avatar({
   color?: string | null;
   // Logo or avatar image. Initials show until it exists.
   src?: string | null;
+  // Which part of the picture the round crop shows, a CSS object-position pair
+  // ("50% 30%"). Absent is centred.
+  position?: string | null;
   className?: string;
 }) {
   return (
@@ -42,7 +46,12 @@ export function Avatar({
         // Storage is an arbitrary host (R2 or the dev API), so next/image would
         // need every deployment's domain configured up front.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" className="h-full w-full object-cover" />
+        <img
+          src={src}
+          alt=""
+          className="h-full w-full object-cover"
+          style={position ? { objectPosition: position } : undefined}
+        />
       ) : (
         initials(name)
       )}

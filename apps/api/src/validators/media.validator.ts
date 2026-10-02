@@ -28,6 +28,11 @@ export const confirmUploadSchema = Joi.object({
   durationSec: Joi.number().min(0).max(86400).allow(null),
 });
 
+// A single frame as a data URL; the service checks the type, the bytes and the size.
+export const posterSchema = Joi.object({
+  image: Joi.string().max(900 * 1024).required(),
+});
+
 export const listMediaQuery = Joi.object({
   targetType: Joi.string().valid(...TARGET_TYPES).required(),
   targetId: uuid.required(),
