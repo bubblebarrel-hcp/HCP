@@ -667,6 +667,9 @@ model User {
   // The wide picture across the top of their public page (D56). Like avatarUrl
   // it only ever holds the URL of a MediaAsset this hasher uploaded.
   bannerUrl         String?
+  // Where the banner's crop sits, a CSS background-position pair ("50% 30%"),
+  // the same as Kennel.bannerPosition (D37). Null is centred.
+  bannerPosition    String?
   bio               String?
   profileVisibility ProfileVisibility @default(MEMBERS_ONLY)
   homeKennelId      String?           @db.Uuid

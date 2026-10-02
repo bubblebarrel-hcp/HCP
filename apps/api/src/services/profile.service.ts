@@ -168,6 +168,8 @@ export interface ProfileImagesInput {
   // A MediaAsset id, or null to remove the picture. Absent leaves it alone.
   avatarMediaId?: string | null;
   bannerMediaId?: string | null;
+  // A CSS background-position pair, or ''/null for centred.
+  bannerPosition?: string | null;
 }
 
 // The picture on a hasher's public page is part of their public identity (D11),
@@ -199,19 +201,24 @@ async function ownProfileImageUrl(userId: string, mediaId: string) {
 }
 
 export async function setProfileImages(userId: string, input: ProfileImagesInput) {
-  const data: { avatarUrl?: string | null; bannerUrl?: string | null } = {};
+  const data: { avatarUrl?: string | null; bannerUrl?: string | null; bannerPosition?: string | null } = {};
   if (input.avatarMediaId !== undefined) {
     data.avatarUrl = input.avatarMediaId === null ? null : await ownProfileImageUrl(userId, input.avatarMediaId);
   }
   if (input.bannerMediaId !== undefined) {
     data.bannerUrl = input.bannerMediaId === null ? null : await ownProfileImageUrl(userId, input.bannerMediaId);
+    // A different picture is cropped differently, so a new (or removed) banner
+    // starts centred, as a kennel's does.
+    data.bannerPosition = null;
   }
+  // An explicit position, sent alone or alongside a banner, wins over the reset.
+  if (input.bannerPosition !== undefined) data.bannerPosition = input.bannerPosition || null;
 
   const user = await prisma.$transaction(async (tx) => {
     const row = await tx.user.update({
       where: { id: userId },
       data,
-      select: { avatarUrl: true, bannerUrl: true },
+      select: { avatarUrl: true, bannerUrl: true, bannerPosition: true },
     });
     // The previous picture's MediaAsset is kept: attribution and history are
     // permanent here, and a removed picture is simply no longer pointed at.

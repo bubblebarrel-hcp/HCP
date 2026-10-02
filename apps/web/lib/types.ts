@@ -20,6 +20,8 @@ export interface SessionUser {
   avatarUrl: string | null;
   // The wide picture across the top of their public page (D56).
   bannerUrl: string | null;
+  // CSS background-position pair for the banner's crop; null is centred.
+  bannerPosition: string | null;
   emailVerified: boolean;
   homeKennelId: string | null;
   createdAt: string;
@@ -1274,6 +1276,7 @@ export interface HasherProfile {
   isNamed: boolean;
   avatarUrl: string | null;
   bannerUrl: string | null;
+  bannerPosition: string | null;
   bio: string | null;
   homeKennel: { slug: string; shortName: string; primaryColor: string | null } | null;
   kennels: { slug: string; shortName: string; name: string; primaryColor: string | null }[];

@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ProfileImages } from '@/components/profile/ProfileImages';
 
 // D5/FR-ID-005: the same biodata shape as registration (apps/web/app/auth/register/page.tsx),
 // editable after the fact. Mirrors apps/api/src/validators/profile.validator.ts — change both together.
@@ -172,14 +171,12 @@ export default function EditProfilePage() {
       <Link href="/account" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" aria-hidden /> Back to account
       </Link>
-      <div className="mb-6">
-        <ProfileImages />
-      </div>
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">Your profile</CardTitle>
           <CardDescription>
             Private biodata. Other hashers only ever see your hash handle — this stays between you and HCP (D5).
+            Your picture and banner are changed on your account page, right on the picture.
           </CardDescription>
         </CardHeader>
         <CardContent>

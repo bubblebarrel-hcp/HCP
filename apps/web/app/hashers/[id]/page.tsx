@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { Avatar } from '@/components/Avatar';
+import { ProfileBranding } from '@/components/profile/ProfileBranding';
 import { Card } from '@/components/ui/card';
 import { FeedLayout } from '@/components/layout/FeedLayout';
 import { LeftNav } from '@/components/layout/LeftNav';
@@ -48,41 +49,30 @@ export default async function HasherPage({ params }: { params: Promise<{ id: str
   return (
     <FeedLayout left={<LeftNav />}>
       <Card className="overflow-hidden rounded-none border-x-0 sm:rounded-xl sm:border-x">
-        <div
-          className="h-24 w-full overflow-hidden sm:h-40"
-          style={
-            hasher.bannerUrl
-              ? undefined
-              : { background: `linear-gradient(135deg, var(--primary), color-mix(in oklab, var(--primary) 45%, black))` }
-          }
+        {/* Picture and banner, with their editing controls for the hasher
+            themself: the same top as a kennel page (D37, D56). */}
+        <ProfileBranding
+          hasherId={hasher.id}
+          name={hasher.name}
+          color={hasher.homeKennel?.primaryColor}
+          avatarUrl={hasher.avatarUrl}
+          bannerUrl={hasher.bannerUrl}
+          bannerPosition={hasher.bannerPosition}
+          bannerClassName="h-32 sm:h-48"
         >
-          {hasher.bannerUrl && (
-            // Storage is an arbitrary host, so next/image would need every
-            // deployment's domain configured up front.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={hasher.bannerUrl} alt="" className="h-full w-full object-cover" data-testid="hasher-banner" />
-          )}
-        </div>
-        <div className="px-4 pb-4">
-          <div className="-mt-12 flex flex-wrap items-end justify-between gap-4">
-            <Avatar
-              name={hasher.name}
-              size="xl"
-              src={hasher.avatarUrl}
-              color={brandColor(hasher.homeKennel?.primaryColor)}
-            />
+          <div className="min-w-0 flex-1 text-center sm:pb-2 sm:text-left">
+            <h1 className="text-2xl font-semibold" data-testid="hasher-name">
+              {hasher.name}
+            </h1>
+            {!hasher.isNamed && (
+              // "Just <firstName>" is not a hash name; saying so is kinder than
+              // letting it read as one (D11).
+              <p className="text-sm text-muted-foreground">Not named yet — the kennel does that, in its own time.</p>
+            )}
           </div>
-
-          <h1 className="mt-3 text-2xl font-semibold" data-testid="hasher-name">
-            {hasher.name}
-          </h1>
-          {!hasher.isNamed && (
-            // "Just <firstName>" is not a hash name; saying so is kinder than
-            // letting it read as one (D11).
-            <p className="text-sm text-muted-foreground">Not named yet — the kennel does that, in its own time.</p>
-          )}
-          {hasher.bio && <p className="mt-2 whitespace-pre-line leading-relaxed text-[15px]">{hasher.bio}</p>}
-
+        </ProfileBranding>
+        <div className="px-4 pb-4">
+          {hasher.bio && <p className="whitespace-pre-line leading-relaxed text-[15px]">{hasher.bio}</p>}
 
           {hasher.kennels.length > 0 && (
             <div className="mt-4">

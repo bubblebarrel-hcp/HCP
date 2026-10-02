@@ -32,4 +32,11 @@ export const updateProfileSchema = Joi.object({
 export const profileImagesSchema = Joi.object({
   avatarMediaId: Joi.string().uuid().allow(null),
   bannerMediaId: Joi.string().uuid().allow(null),
+  // Same shape and reasoning as kennel.validator's bannerPosition: two
+  // percentages, so it can only ever be written into a style attribute.
+  bannerPosition: Joi.string()
+    .trim()
+    .pattern(/^\d{1,3}(\.\d+)?% \d{1,3}(\.\d+)?%$/)
+    .message('Banner position must be two percentages, e.g. "50% 30%"')
+    .allow('', null),
 }).min(1);
