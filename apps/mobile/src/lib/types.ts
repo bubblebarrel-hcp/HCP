@@ -215,6 +215,9 @@ export interface Reel {
   visibility: Audience;
   publishedAt: string | null;
   createdAt: string;
+  // A reel lasts 24 hours unless it is pinned to its author's profile (D58).
+  pinned: boolean;
+  expiresAt: string | null;
   viewCount: number;
   engagement: Engagement;
   author: { id: string; name: string; avatarUrl: string | null };

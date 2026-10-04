@@ -11,7 +11,9 @@ const context = {
   caption: Joi.string().trim().max(500).allow('', null),
 };
 
-export const createReelSchema = Joi.object(context);
+// `pinned` on create is "profile only" (D58): the reel is published already
+// pinned, so it never reaches the rail or a feed and never expires.
+export const createReelSchema = Joi.object({ ...context, pinned: Joi.boolean() });
 
 export const updateReelSchema = Joi.object({
   caption: context.caption,

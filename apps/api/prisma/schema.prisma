@@ -523,6 +523,8 @@ enum ReelStatus {
   PUBLISHED
   ARCHIVED
   REMOVED
+  // The author deleted it (D58). Terminal, and the row stays as history.
+  DELETED
 }
 
 // MVP channels are group-scoped only (D8)
@@ -2166,6 +2168,13 @@ model Reel {
   mediaId    String?        @db.Uuid
   publishedAt DateTime?
   archivedAt  DateTime?
+  // A reel is live for 24 hours from publishedAt and then leaves every surface
+  // (D58). Pinning is the exception: a pinned reel never expires, and it is shown
+  // only on its author's profile, never in the rail, a feed or a kennel page.
+  // Publishing a reel "profile only" is just publishing it already pinned.
+  pinnedAt    DateTime?
+  // Set when the author deletes it (D58); the row stays (append-only history).
+  deletedAt   DateTime?
   // Set when a moderator takes it down; the row stays (append-only history).
   removedAt   DateTime?
   removedById String?       @db.Uuid
@@ -2181,6 +2190,7 @@ model Reel {
   media  MediaAsset? @relation(fields: [mediaId], references: [id])
 
   @@index([status, publishedAt])
+  @@index([authorId, pinnedAt])
   @@index([authorId])
   @@index([kennelId])
   @@index([runId])

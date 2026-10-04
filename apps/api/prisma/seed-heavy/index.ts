@@ -1125,7 +1125,16 @@ async function main() {
         const mid = randomUUID();
         const reelId = randomUUID();
         const status = i === videos.length - 1 ? ReelStatus.REMOVED : i === videos.length - 2 ? ReelStatus.ARCHIVED : ReelStatus.PUBLISHED;
-        const publishedAt = daysAgo(rnd() * 25);
+        // A reel lives 24 hours unless it is pinned (D58). So that every surface
+        // has something on it: about half are still inside their day, about one
+        // in six is pinned to its author's profile (and shows nowhere else), and
+        // the rest have expired and appear on no list at all.
+        const lifeRoll = rnd();
+        const lifeSpan = rnd();
+        const pinned = status === ReelStatus.PUBLISHED && lifeRoll >= 0.85;
+        const expired = !pinned && lifeRoll >= 0.5;
+        const publishedAt =
+          pinned || expired ? daysAgo(2 + lifeSpan * 23) : new Date(now.getTime() - lifeSpan * 22 * 60 * 60 * 1000);
         mediaRows.push({
           id: mid, uploaderId: author.id, kind: MediaKind.VIDEO, storageKey: v.storageKey, url: mediaUrl(v.storageKey), mimeType: 'video/mp4', sizeBytes: BigInt(v.sizeBytes),
           width: v.width, height: v.height, durationSec: v.durationSec, capturedAt: publishedAt, uploadState: UploadState.AVAILABLE, moderationState: ModerationState.APPROVED,
@@ -1135,6 +1144,7 @@ async function main() {
         reelRows.push({
           id: reelId, authorId: author.id, kennelId: kennel?.id ?? null, runId: run?.id ?? null, caption: pick(REEL_CAPTIONS), status, visibility, mediaId: mid, publishedAt,
           viewCount: int(5, 400), createdAt: publishedAt,
+          ...(pinned ? { pinnedAt: publishedAt } : {}),
           ...(status === ReelStatus.ARCHIVED ? { archivedAt: daysAgo(3) } : {}),
           ...(status === ReelStatus.REMOVED ? { removedAt: daysAgo(1), removedById: admin.id, removedReason: 'Contained copyrighted music' } : {}),
         });

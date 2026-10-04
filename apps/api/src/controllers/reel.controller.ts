@@ -44,6 +44,18 @@ export async function archive(req: Request, res: Response) {
   return ok(res, { reel: await reels.archive(actor(req), req.params.id) });
 }
 
+export async function deleteOwn(req: Request, res: Response) {
+  return ok(res, await reels.deleteOwn(actor(req), req.params.id));
+}
+
+export async function pin(req: Request, res: Response) {
+  return ok(res, { reel: await reels.setPinned(actor(req), req.params.id, true) });
+}
+
+export async function unpin(req: Request, res: Response) {
+  return ok(res, { reel: await reels.setPinned(actor(req), req.params.id, false) });
+}
+
 export async function remove(req: Request, res: Response) {
   return ok(res, { reel: await reels.remove(actor(req), req.params.id, req.body.reason) });
 }

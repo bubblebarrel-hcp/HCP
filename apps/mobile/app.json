@@ -42,7 +42,15 @@
           "defaultChannel": "default"
         }
       ],
-      "expo-video"
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Shiggy Trails reads the photos and videos you choose to post in a reel.",
+          "cameraPermission": "Shiggy Trails uses the camera to record a reel.",
+          "microphonePermission": "Shiggy Trails records sound with the video in a reel."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

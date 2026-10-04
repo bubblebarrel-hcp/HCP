@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Video } from 'lucide-react';
+import { Pin, Plus, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar } from '@/components/Avatar';
@@ -88,6 +88,16 @@ function Tile({ reel, onOpen }: { reel: Reel; onOpen: () => void }) {
         data-item-count={reel.itemCount}
       >
         <CountRing count={reel.itemCount} />
+        {/* On a profile, the reels the hasher pinned (D58) say so. */}
+        {reel.pinned && (
+          <span
+            className="absolute -right-0.5 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow ring-2 ring-card"
+            data-testid="reel-tile-pinned"
+            title="Pinned to the profile"
+          >
+            <Pin className="h-3.5 w-3.5" aria-hidden />
+          </span>
+        )}
         <span
           className="absolute inset-[6px] block overflow-hidden rounded-full bg-muted"
           style={reel.kennel?.primaryColor ? { backgroundColor: brandColor(reel.kennel.primaryColor) ?? undefined } : undefined}
@@ -135,7 +145,6 @@ export function ReelStrip({ initial, authorId }: { initial: Reel[]; authorId?: s
   const [open, setOpen] = useState<Reel | null>(null);
   const [composing, setComposing] = useState(false);
   const [busy, setBusy] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   const path = authorId ? `/reels?limit=15&authorId=${authorId}` : '/reels?limit=15';
 
@@ -177,15 +186,36 @@ export function ReelStrip({ initial, authorId }: { initial: Reel[]; authorId?: s
     api.post(`/reels/${open.id}/views`).catch(() => undefined);
   }, [open]);
 
-  async function archive(reel: Reel) {
+  // The author's own two acts on a reel (D58). Both change what the rail and
+  // the profile show, so both reload it.
+  async function remove(reel: Reel) {
     setBusy(true);
     try {
-      await api.post(`/reels/${reel.id}/archive`);
-      toast.success('Reel archived.');
+      await api.delete(`/reels/${reel.id}`);
+      toast.success('Reel deleted.');
       setOpen(null);
       await load();
     } catch (err) {
-      toast.error(errorMessage(err, 'Could not archive that reel'));
+      toast.error(errorMessage(err, 'Could not delete that reel'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pin(reel: Reel, pinned: boolean) {
+    setBusy(true);
+    try {
+      const res = pinned
+        ? await api.post<{ data: { reel: Reel } }>(`/reels/${reel.id}/pin`)
+        : await api.delete<{ data: { reel: Reel } }>(`/reels/${reel.id}/pin`);
+      toast.success(pinned ? 'Pinned to your profile. It will not show in the rail.' : 'Unpinned.');
+      // An unpinned reel past its day is gone, so there is nothing left to show.
+      const after = res.data.data.reel;
+      const spent = !after.pinned && after.expiresAt !== null && new Date(after.expiresAt).getTime() <= Date.now();
+      setOpen(spent ? null : after);
+      await load();
+    } catch (err) {
+      toast.error(errorMessage(err, pinned ? 'Could not pin that reel' : 'Could not unpin that reel'));
     } finally {
       setBusy(false);
     }
@@ -230,7 +260,16 @@ export function ReelStrip({ initial, authorId }: { initial: Reel[]; authorId?: s
       </div>
 
       <Dialog open={Boolean(open)} onOpenChange={(next) => !next && setOpen(null)}>
-        {open && <ReelViewer key={open.id} reel={open} archiving={busy} onArchive={() => void archive(open)} />}
+        {open && (
+          <ReelViewer
+            key={`${open.id}:${open.pinned}`}
+            reel={open}
+            deleting={busy}
+            onDelete={() => void remove(open)}
+            pinning={busy}
+            onPin={(pinned) => void pin(open, pinned)}
+          />
+        )}
       </Dialog>
 
       <ReelComposer

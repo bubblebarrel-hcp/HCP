@@ -82,6 +82,14 @@ export async function revalidatePost(postId: string, authorId: string | null) {
   await revalidatePaths(['/', `/posts/${postId}`, authorId ? `/hashers/${authorId}` : null]);
 }
 
+// A reel is on the home rail, the reels page, its author's profile and its own
+// address. Expiry is the clock's job and nothing writes an event for it, so the
+// 60-second window covers that; what this evicts at once is the author's own
+// act (D58): deleting a reel, pinning it off the rail, posting a new one.
+export async function revalidateReel(reelId: string, authorId: string | null) {
+  await revalidatePaths(['/', '/reels', `/reels/${reelId}`, authorId ? `/hashers/${authorId}` : null]);
+}
+
 // D35 follow-up. `/runs/[id]`, `/reports/[id]` and `/capsules/[id]` are Client
 // Components — only fetch fresh — but each has a server shell around it
 // purely for `generateMetadata` (Open Graph title/image for a shared link),
@@ -134,6 +142,14 @@ export async function applyRevalidation(event: DomainEvent) {
         select: { authorId: true },
       });
       await revalidatePost(event.aggregateId, post?.authorId ?? null);
+      return;
+    }
+    if (event.aggregateType === 'Reel') {
+      const reel = await prisma.reel.findUnique({
+        where: { id: event.aggregateId },
+        select: { authorId: true },
+      });
+      await revalidateReel(event.aggregateId, reel?.authorId ?? null);
       return;
     }
     if (event.aggregateType === 'TrailReport') {

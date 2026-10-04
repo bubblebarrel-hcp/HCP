@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Avatar } from '@/components/feed/avatar';
+import { ReelComposer } from '@/components/feed/reel-composer';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -9,9 +10,9 @@ import { api, errorMessage } from '@/lib/api';
 import type { Audience } from '@/lib/types';
 
 // A hasher's own words, straight from the composer (D51): create-draft,
-// publish — the photo-upload step in between is not built here yet (the
-// composer stays text-only on mobile; attaching photos is still web-only,
-// same split as everywhere else media touches R2 presigning).
+// publish. The post stays text-only on mobile (photos on a post are still
+// web-only). A reel is the media one, and has its own composer: the "Reel"
+// button beside the pill opens it.
 
 // Who may read the post (D57): it can narrow the hasher's profile, never widen it.
 const AUDIENCES: { value: Audience; label: string; hint: string }[] = [
@@ -33,6 +34,7 @@ export function Composer({
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
+  const [reeling, setReeling] = useState(false);
   const [body, setBody] = useState('');
   const [audience, setAudience] = useState<Audience>('PUBLIC');
   const [busy, setBusy] = useState(false);
@@ -73,8 +75,17 @@ export function Composer({
               What&apos;s on trail, {name}?
             </ThemedText>
           </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Post a reel"
+            onPress={() => setReeling(true)}
+            style={[styles.reelButton, { borderColor: theme.primary }]}>
+            <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>Reel</ThemedText>
+          </Pressable>
         </View>
       </View>
+
+      <ReelComposer visible={reeling} onClose={() => setReeling(false)} onPosted={onPosted} />
 
       <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
         <View style={[styles.modal, { backgroundColor: theme.canvas }]}>
@@ -138,7 +149,7 @@ export function Composer({
             />
             {error && <ThemedText style={{ color: theme.danger }}>{error}</ThemedText>}
             <ThemedText type="small" themeColor="textSecondary">
-              Words only for now — photos and reels still come from the composer on the web.
+              Words only here. For a video or photos, post a reel.
             </ThemedText>
           </View>
         </View>
@@ -178,6 +189,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     justifyContent: 'center',
   },
+  reelButton: { minHeight: 40, paddingHorizontal: Spacing.three, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   welcomeTitle: { fontSize: 20, lineHeight: 26, fontWeight: '700' },
   button: { marginTop: Spacing.one, minHeight: 44, borderRadius: Spacing.two, alignItems: 'center', justifyContent: 'center' },
   modal: { flex: 1 },

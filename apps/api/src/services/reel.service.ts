@@ -28,12 +28,49 @@ import * as stats from './stats.service';
 
 const S = ReelStatus;
 
+// A reel lives for a day (D58). After that it is gone from the rail, the feed,
+// kennel pages, its own page and the photo grid, for its author too. The row and
+// its history stay; nothing is deleted by the clock, so expiry is a question
+// asked at read time (`reelIsLive`, `liveReelWhere`) and there is no sweeper to
+// run. A pinned reel is the exception and never expires.
+export const REEL_LIFETIME_MS = 24 * 60 * 60 * 1000;
+
+type Lifespan = { status: ReelStatus; publishedAt: Date | null; pinnedAt: Date | null };
+
+// Published, and either pinned or still inside its day.
+export function reelIsLive(reel: Lifespan, now = new Date()) {
+  if (reel.status !== S.PUBLISHED) return false;
+  if (reel.pinnedAt) return true;
+  return reel.publishedAt !== null && reel.publishedAt.getTime() > now.getTime() - REEL_LIFETIME_MS;
+}
+
+// The same rule as a query, for a hasher's own profile: what is still inside its
+// day, plus everything pinned.
+export function liveReelWhere(now = new Date()): Prisma.ReelWhereInput {
+  return {
+    status: S.PUBLISHED,
+    OR: [{ pinnedAt: { not: null } }, { publishedAt: { gt: new Date(now.getTime() - REEL_LIFETIME_MS) } }],
+  };
+}
+
+// What the rail, a kennel page and the community feed may show: unpinned, and
+// inside its day. A pinned reel belongs to its author's profile alone.
+export function feedReelWhere(now = new Date()): Prisma.ReelWhereInput {
+  return {
+    status: S.PUBLISHED,
+    pinnedAt: null,
+    publishedAt: { gt: new Date(now.getTime() - REEL_LIFETIME_MS) },
+  };
+}
+
 export interface ReelInput {
   caption?: string | null;
   kennelId?: string | null;
   runId?: string | null;
   eventId?: string | null;
   visibility?: Audience;
+  // "Profile only": publish it already pinned, so it never reaches a feed.
+  pinned?: boolean;
 }
 
 const reelSelect = {
@@ -42,6 +79,7 @@ const reelSelect = {
   status: true,
   visibility: true,
   publishedAt: true,
+  pinnedAt: true,
   createdAt: true,
   viewCount: true,
   // The picture is public identity like the handle (D11), so the rail can show a face.
@@ -145,6 +183,11 @@ function serialize(
     visibility: reel.visibility,
     publishedAt: reel.publishedAt,
     createdAt: reel.createdAt,
+    // Pinned reels sit on the author's profile and do not expire; the rest
+    // disappear at `expiresAt` (D58).
+    pinned: reel.pinnedAt !== null,
+    expiresAt:
+      reel.pinnedAt || !reel.publishedAt ? null : new Date(reel.publishedAt.getTime() + REEL_LIFETIME_MS),
     // Unique signed-in viewers plus anonymous opens (D50). `Reel.viewCount` is
     // still written as a mirror so nothing that reads the column breaks, but
     // this is the number, and it is the deduped one.
@@ -248,6 +291,9 @@ export async function createDraft(actor: Actor, input: ReelInput) {
       runId: input.runId ?? null,
       eventId: input.eventId ?? null,
       visibility: input.visibility ?? Audience.PUBLIC,
+      // Profile only: pinned from the first moment, so publishing it never puts
+      // it in a feed. Nobody sees a draft, so the time it is stamped is moot.
+      pinnedAt: input.pinned ? new Date() : null,
       status: S.DRAFT,
     },
     select: { ...reelSelect, authorId: true, kennelId: true, runId: true },
@@ -296,6 +342,8 @@ export async function publish(actor: Actor, reelId: string) {
         kennelId: reel.kennelId,
         runId: reel.runId,
         visibility: row.visibility,
+        // Published already pinned means "profile only" (D58).
+        pinned: row.pinnedAt !== null,
         mediaId: cover.media.id,
         itemCount: ready.length,
       },
@@ -320,6 +368,7 @@ export async function updateDraft(actor: Actor, reelId: string, input: ReelInput
   const reel = await findReel(reelId);
   if (reel.authorId !== actor.id) throw ApiError.forbidden('Only the author edits their reel.', 'NOT_THE_AUTHOR');
   if (reel.status === S.REMOVED) throw ApiError.badRequest('That reel was taken down.', 'REEL_REMOVED');
+  if (reel.status === S.DELETED) throw ApiError.notFound('Reel not found');
 
   const updated = await prisma.reel.update({
     where: { id: reel.id },
@@ -367,6 +416,92 @@ export async function archive(actor: Actor, reelId: string) {
     return row;
   });
   return serializeOne(archived, actor.id);
+}
+
+// The author deletes their own reel (D58). Unlike `archive`, which is how an
+// account's reels are retired when it is deactivated, this is the hasher's own
+// "delete": the reel is gone for everyone at once, its page, its comments and
+// its photos in the grid included. The row stays (append-only history), so
+// there is no un-delete and no way to find it by link; `findReel` still sees it
+// so a second delete is a quiet no-op rather than a 404.
+export async function deleteOwn(actor: Actor, reelId: string) {
+  const reel = await findReel(reelId);
+  // 404, not 403, for somebody else's reel: this endpoint must not confirm
+  // that a reel exists (D50).
+  if (reel.authorId !== actor.id) throw ApiError.notFound('Reel not found');
+  if (reel.status === S.DELETED) return { id: reel.id, deleted: true };
+  if (reel.status === S.REMOVED) throw ApiError.badRequest('That reel was taken down.', 'REEL_REMOVED');
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.reel.update({
+      where: { id: reel.id },
+      // Unpinned on the way out so a deleted reel can never read as pinned.
+      data: { status: S.DELETED, deletedAt: now, pinnedAt: null },
+    });
+    const event = await recordEvent(tx, {
+      eventType: 'ReelDeleted',
+      aggregateType: 'Reel',
+      aggregateId: reel.id,
+      actorId: actor.id,
+      payload: { kennelId: reel.kennelId, wasStatus: reel.status },
+    });
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: 'reel.delete',
+      resourceType: 'Reel',
+      resourceId: reel.id,
+      kennelId: reel.kennelId,
+      previousState: { status: reel.status },
+      newState: { status: S.DELETED },
+      policyRef: 'self',
+      domainEventId: event.id,
+    });
+  });
+  return { id: reel.id, deleted: true };
+}
+
+// Pin a reel to the author's profile, or let it go back to the clock (D58). A
+// pinned reel never expires and shows only on the profile, so pinning also takes
+// it out of the rail and every feed. Unpinning hands it back to the 24 hours it
+// started with, which is already spent for an old reel: it expires at once.
+// Only the author, and only a reel that is a draft or still live; one that has
+// already expired or been deleted is gone and cannot be brought back.
+export async function setPinned(actor: Actor, reelId: string, pinned: boolean) {
+  const reel = await findReel(reelId);
+  if (reel.authorId !== actor.id) throw ApiError.notFound('Reel not found');
+  const standing = reel.status === S.DRAFT || reelIsLive(reel);
+  if (!standing) throw ApiError.notFound('Reel not found');
+  const alreadyPinned = reel.pinnedAt !== null;
+  if (alreadyPinned === pinned) return serializeOne(reel, actor.id);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.reel.update({
+      where: { id: reel.id },
+      data: { pinnedAt: pinned ? new Date() : null },
+      select: { ...reelSelect, authorId: true, kennelId: true, runId: true },
+    });
+    const event = await recordEvent(tx, {
+      eventType: pinned ? 'ReelPinned' : 'ReelUnpinned',
+      aggregateType: 'Reel',
+      aggregateId: reel.id,
+      actorId: actor.id,
+      payload: { kennelId: reel.kennelId },
+    });
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: pinned ? 'reel.pin' : 'reel.unpin',
+      resourceType: 'Reel',
+      resourceId: reel.id,
+      kennelId: reel.kennelId,
+      previousState: { pinned: !pinned },
+      newState: { pinned },
+      policyRef: 'self',
+      domainEventId: event.id,
+    });
+    return row;
+  });
+  return serializeOne(updated, actor.id);
 }
 
 // A moderator takes it down (BR-RUN-012 applied to reels): a kennel's media
@@ -426,6 +561,10 @@ export async function remove(actor: Actor, reelId: string, reason: string) {
 // A profile page (`authorId`) and a kennel page (`kennelSlug`) are not the rail:
 // they list what they are about, narrowed by the same visibility rules.
 //
+// Lifespan (D58): the rail and a kennel page show only reels still inside their
+// 24 hours, and never a pinned one. A profile shows its pinned reels first, then
+// whatever is still inside its day. Anything older and unpinned is on no list.
+//
 // Over-fetch and filter, the same shape listPublished uses for trail reports —
 // reels are few enough that this stays cheap.
 export async function listPublished(
@@ -436,8 +575,9 @@ export async function listPublished(
   const railAuthors =
     actor && isRail ? [actor.id, ...(await follows.followedBy(actor.id)).userIds] : null;
 
+  const now = new Date();
   const where: Prisma.ReelWhereInput = {
-    status: S.PUBLISHED,
+    ...(opts.authorId && !opts.kennelSlug ? liveReelWhere(now) : feedReelWhere(now)),
     media: { uploadState: UploadState.AVAILABLE, moderationState: { not: ModerationState.REJECTED } },
     ...(opts.kennelSlug ? { kennel: { slug: opts.kennelSlug } } : {}),
     ...(opts.authorId ? { authorId: opts.authorId } : {}),
@@ -450,7 +590,8 @@ export async function listPublished(
   const rows = await prisma.reel.findMany({
     where,
     select: { ...reelSelect, authorId: true, kennelId: true, runId: true },
-    orderBy: { publishedAt: 'desc' },
+    // Pinned first on a profile; on the rail nothing is pinned so it is a no-op.
+    orderBy: [{ pinnedAt: { sort: 'desc', nulls: 'last' } }, { publishedAt: 'desc' }],
     skip: (opts.page - 1) * opts.limit,
     take: opts.limit,
   });
@@ -488,6 +629,10 @@ export async function detail(actor: Actor | undefined, reelId: string) {
   const own = actor?.id === reel.authorId;
   if (reel.status === S.REMOVED && !own) throw ApiError.notFound('Reel not found');
   if (reel.status === S.DRAFT && !own) throw ApiError.notFound('Reel not found');
+  // Deleted, or published and past its day without a pin (D58): gone for
+  // everyone, the author included.
+  if (reel.status === S.DELETED) throw ApiError.notFound('Reel not found');
+  if (reel.status === S.PUBLISHED && !reelIsLive(reel)) throw ApiError.notFound('Reel not found');
   if (!(await canSee(actor, reel))) throw ApiError.notFound('Reel not found');
   return serializeOne(reel, actor?.id);
 }

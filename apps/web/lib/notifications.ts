@@ -1,5 +1,8 @@
 import type { NotificationCategory, NotificationItem, NotificationPriority } from '@/lib/types';
 
+// Fired when the notifications page changes read state, so the bell's badge follows without waiting for its poll.
+export const NOTIFICATIONS_CHANGED = 'hcp:notifications-changed';
+
 export const notificationCategoryLabel: Record<NotificationCategory, string> = {
   MEMBERSHIP: 'Membership',
   RUN: 'Runs',

@@ -2,7 +2,7 @@ import { MediaTargetType, ModerationState, SubjectType, UploadState } from '@pri
 import prisma from '../config/prisma';
 import { ApiError, isUuid } from '../utils/http';
 import { type Actor } from './permission.service';
-import { canSee as canSeeReel } from './reel.service';
+import { canSee as canSeeReel, reelIsLive } from './reel.service';
 import { canSeeAudience, canSeeContentOf } from './audience.service';
 import { canView, getAccess } from './run.service';
 
@@ -62,13 +62,27 @@ export function segmentFor(type: SubjectType): string {
 async function resolveReel(actor: Actor | undefined, id: string): Promise<SubjectContext> {
   const reel = await prisma.reel.findUnique({
     where: { id },
-    select: { id: true, authorId: true, kennelId: true, runId: true, visibility: true, status: true, caption: true },
+    select: {
+      id: true,
+      authorId: true,
+      kennelId: true,
+      runId: true,
+      visibility: true,
+      status: true,
+      caption: true,
+      publishedAt: true,
+      pinnedAt: true,
+    },
   });
   if (!reel) throw ApiError.notFound('Reel not found');
-  // A draft is the author's alone, and a removed reel is nobody's to applaud.
+  // A draft is the author's alone, and a removed or deleted reel is nobody's to
+  // applaud.
   const mine = actor?.id === reel.authorId;
-  if (reel.status === 'REMOVED') throw ApiError.notFound('Reel not found');
+  if (reel.status === 'REMOVED' || reel.status === 'DELETED') throw ApiError.notFound('Reel not found');
   if (reel.status !== 'PUBLISHED' && !mine) throw ApiError.notFound('Reel not found');
+  // Past its 24 hours and not pinned (D58): gone, so it cannot be liked,
+  // commented on, reshared or saved by link, its author included.
+  if (reel.status === 'PUBLISHED' && !reelIsLive(reel)) throw ApiError.notFound('Reel not found');
   if (!(await canSeeReel(actor, reel))) throw ApiError.notFound('Reel not found');
   return {
     type: SubjectType.REEL,

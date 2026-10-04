@@ -44,6 +44,9 @@ export function ReelComposer({
   const [kennelId, setKennelId] = useState(fixedKennelId ?? NONE);
   // Who may watch it (D57). Public until the hasher says otherwise.
   const [audience, setAudience] = useState<Audience>('PUBLIC');
+  // Profile only (D58): pinned from the start, so it never reaches the rail or a
+  // feed and never expires. Otherwise a reel lasts 24 hours.
+  const [profileOnly, setProfileOnly] = useState(false);
   const [kennels, setKennels] = useState<MyMembership[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   // A reel comes off the device one of two ways (D47): a file already on it, or
@@ -84,6 +87,7 @@ export function ReelComposer({
     setRecording(false);
     setCaption('');
     setAudience('PUBLIC');
+    setProfileOnly(false);
     if (!fixedKennelId) setKennelId(NONE);
     setBusy(null);
   }
@@ -112,6 +116,7 @@ export function ReelComposer({
         kennelId: kennelId || null,
         runId: fixedRunId ?? null,
         visibility: audience,
+        pinned: profileOnly,
       });
       const reel = draft.data.data.reel;
 
@@ -301,6 +306,26 @@ export function ReelComposer({
               A locked profile narrows this further: only its followers see anything it posts.
             </p>
           </div>
+
+          <label className="flex items-start gap-3 rounded-lg border border-border p-3" htmlFor={`${id}-profile-only`}>
+            <input
+              id={`${id}-profile-only`}
+              type="checkbox"
+              className="mt-0.5 h-5 w-5 shrink-0 accent-primary"
+              checked={profileOnly}
+              onChange={(event) => setProfileOnly(event.target.checked)}
+              disabled={Boolean(busy)}
+              data-testid="reel-profile-only"
+            />
+            <span className="space-y-0.5 text-sm">
+              <span className="block font-medium">Only on my profile</span>
+              <span className="block text-xs text-muted-foreground">
+                {profileOnly
+                  ? 'Pinned to your profile. It stays up, and it never shows in the reel rail or a feed.'
+                  : 'Otherwise it shows in the reel rail for 24 hours, then disappears.'}
+              </span>
+            </span>
+          </label>
 
           <div className="flex items-center justify-end gap-2">
             {busy && (

@@ -966,7 +966,7 @@ export interface KennelSettings {
 
 // ─── Reels (apps/api/src/services/reel.service.ts, D41) ───
 
-export type ReelStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | 'REMOVED';
+export type ReelStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | 'REMOVED' | 'DELETED';
 // Who sees something a hasher made (D57): everybody, the people they have let
 // follow them, or only them. One scale for a whole profile and for each reel.
 export type Audience = 'PUBLIC' | 'FOLLOWERS' | 'ONLY_ME';
@@ -979,6 +979,10 @@ export interface Reel {
   visibility: ReelVisibility;
   publishedAt: string | null;
   createdAt: string;
+  // A reel lasts 24 hours unless it is pinned (D58). Pinned reels sit on their
+  // author's profile only and never expire, so `expiresAt` is null for them.
+  pinned: boolean;
+  expiresAt: string | null;
   // Unique signed-in viewers plus anonymous opens (D50).
   viewCount: number;
   engagement: Engagement;

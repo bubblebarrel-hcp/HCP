@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -33,6 +34,16 @@ import type { Audience, Reel, ReelItem } from '@/lib/types';
 // follower and answers "not available" for anybody else (D57), the same as the
 // web page. The API says 404 for "private" and "never existed" alike.
 
+// How long a reel has left (D58), in the unit a person would say it in.
+function timeLeft(expiresAt: string) {
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return 'any moment now';
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+}
+
 function VideoItem({ item, size, active }: { item: ReelItem; size: { width: number; height: number }; active: boolean }) {
   const player = useVideoPlayer(item.url, (p) => {
     p.loop = false;
@@ -64,6 +75,8 @@ export default function ReelScreen() {
   const [reel, setReel] = useState<Reel | null>(null);
   const [audience, setAudience] = useState<Audience>('PUBLIC');
   const [saving, setSaving] = useState(false);
+  // Pin and delete are the author's own acts on a reel (D58).
+  const [working, setWorking] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [state, setState] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading');
@@ -111,6 +124,67 @@ export default function ReelScreen() {
     } finally {
       setSaving(false);
     }
+  }
+
+  // A reel lasts 24 hours unless it is pinned to the profile, where it stays and
+  // shows nowhere else (D58). Unpinning one that is already a day old ends it.
+  async function setPinned(next: boolean) {
+    setWorking(true);
+    setNote(null);
+    try {
+      const data = await api<{ reel: Reel }>(`/reels/${id}/pin`, { method: next ? 'POST' : 'DELETE' });
+      const spent = !data.reel.pinned && data.reel.expiresAt !== null && new Date(data.reel.expiresAt).getTime() <= Date.now();
+      if (spent) {
+        setState('unavailable');
+        return;
+      }
+      setReel(data.reel);
+      setNote(next ? 'Pinned to your profile. It will not show in the reel rail.' : 'Unpinned.');
+    } catch (err) {
+      setNote(errorMessage(err, next ? 'Could not pin that reel' : 'Could not unpin that reel'));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function confirmUnpin() {
+    if (!reel?.publishedAt || Date.now() - new Date(reel.publishedAt).getTime() <= 24 * 60 * 60 * 1000) {
+      void setPinned(false);
+      return;
+    }
+    Alert.alert(
+      'Unpin this reel?',
+      'It was posted more than 24 hours ago. Once unpinned it expires and disappears for everyone.',
+      [
+        { text: 'Keep it pinned', style: 'cancel' },
+        { text: 'Unpin and expire', style: 'destructive', onPress: () => void setPinned(false) },
+      ],
+    );
+  }
+
+  function confirmDelete() {
+    Alert.alert(
+      'Delete this reel?',
+      'It disappears for everyone, along with its likes and comments. This cannot be undone.',
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Delete reel',
+          style: 'destructive',
+          onPress: async () => {
+            setWorking(true);
+            try {
+              await api(`/reels/${id}`, { method: 'DELETE' });
+              if (router.canGoBack()) router.back();
+              else router.replace('/');
+            } catch (err) {
+              setWorking(false);
+              Alert.alert('Could not delete that reel', errorMessage(err, 'Try again in a moment.'));
+            }
+          },
+        },
+      ],
+    );
   }
 
   if (state === 'loading') {
@@ -216,6 +290,33 @@ export default function ReelScreen() {
 
         {reel.isMine && (
           <View style={styles.owner}>
+            <ThemedText type="small" style={{ color: reel.pinned ? theme.primaryStrong : theme.textSecondary }}>
+              {reel.pinned
+                ? 'Pinned to your profile. It stays up and shows only there.'
+                : reel.expiresAt
+                  ? `Disappears in ${timeLeft(reel.expiresAt)}. Pin it to keep it on your profile.`
+                  : ''}
+            </ThemedText>
+            <View style={styles.actions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={reel.pinned ? 'Unpin from profile' : 'Pin to profile'}
+                accessibilityState={{ disabled: working }}
+                disabled={working}
+                onPress={() => (reel.pinned ? confirmUnpin() : void setPinned(true))}
+                style={[styles.action, { borderColor: theme.border, backgroundColor: theme.card, opacity: working ? 0.6 : 1 }]}>
+                <ThemedText type="smallBold">{reel.pinned ? 'Unpin' : 'Pin to profile'}</ThemedText>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete reel"
+                accessibilityState={{ disabled: working }}
+                disabled={working}
+                onPress={confirmDelete}
+                style={[styles.action, { borderColor: theme.danger, backgroundColor: theme.card, opacity: working ? 0.6 : 1 }]}>
+                <ThemedText type="smallBold" style={{ color: theme.danger }}>Delete</ThemedText>
+              </Pressable>
+            </View>
             <AudienceChips what="reel" value={audience} onChange={(next) => void changeAudience(next)} disabled={saving} />
             {note && <ThemedText type="small" themeColor="textSecondary">{note}</ThemedText>}
           </View>
@@ -239,5 +340,14 @@ const styles = StyleSheet.create({
   black: { backgroundColor: '#000000' },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: Spacing.two },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  owner: { gap: Spacing.one, paddingHorizontal: Spacing.one },
+  owner: { gap: Spacing.two, paddingHorizontal: Spacing.one },
+  actions: { flexDirection: 'row', gap: Spacing.two },
+  action: {
+    minHeight: 44,
+    paddingHorizontal: Spacing.three,
+    borderRadius: 22,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

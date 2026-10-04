@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Pin, PinOff, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/ui/button';
@@ -11,21 +11,42 @@ import { ReelCarousel } from '@/components/feed/ReelCarousel';
 import { EngagementBar } from '@/components/social/EngagementBar';
 import { AudiencePicker } from '@/components/profile/AudiencePicker';
 import type { Audience, Reel } from '@/lib/types';
+import { cn } from '@/lib/utils';
 import api, { errorMessage } from '@/services/api';
 
 // Watching a reel (D48). A reel is a post rather than a single clip — videos
 // and photos together, in the order they were added — so this is a carousel:
 // arrows, dots, arrow keys, and one item on screen at a time.
 
+// How long a reel has left (D58), in the unit a person would say it in.
+function timeLeft(expiresAt: string) {
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return 'any moment now';
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+}
+
 export function ReelViewer({
   reel,
-  onArchive,
-  archiving,
+  onDelete,
+  deleting,
+  onPin,
+  pinning,
 }: {
   reel: Reel;
-  onArchive: () => void;
-  archiving: boolean;
+  onDelete: () => void;
+  deleting: boolean;
+  // Pin it to the profile (and off the feeds), or hand it back to the 24 hours.
+  onPin: (pinned: boolean) => void;
+  pinning: boolean;
 }) {
+  // Deleting is final and unpinning an old reel ends it on the spot, so both ask
+  // first, in the viewer rather than in a browser prompt.
+  const [confirming, setConfirming] = useState<'delete' | 'unpin' | null>(null);
+  const spent = !reel.pinned || !reel.publishedAt ? false : Date.now() - new Date(reel.publishedAt).getTime() > 24 * 60 * 60 * 1000;
+  const working = deleting || pinning;
   // Whoever posted it can change who sees it, any time after (D57).
   const [audience, setAudience] = useState<Audience>(reel.visibility);
   const [saving, setSaving] = useState(false);
@@ -86,13 +107,88 @@ export function ReelViewer({
             </p>
           </div>
           {reel.isMine && (
-            <Button variant="outline" size="sm" disabled={archiving} onClick={onArchive}>
-              {archiving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-              Archive
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={working}
+                onClick={() => (reel.pinned ? (spent ? setConfirming('unpin') : onPin(false)) : onPin(true))}
+                data-testid={reel.pinned ? 'reel-unpin' : 'reel-pin'}
+              >
+                {pinning ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : reel.pinned ? (
+                  <PinOff className="h-4 w-4" aria-hidden />
+                ) : (
+                  <Pin className="h-4 w-4" aria-hidden />
+                )}
+                {reel.pinned ? 'Unpin' : 'Pin to profile'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={working}
+                onClick={() => setConfirming('delete')}
+                data-testid="reel-delete"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden />
+                Delete
+              </Button>
+            </div>
           )}
         </div>
+
+        {confirming && (
+          <div
+            className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm"
+            role="alertdialog"
+            aria-label={confirming === 'delete' ? 'Delete this reel?' : 'Unpin this reel?'}
+            data-testid="reel-confirm"
+          >
+            <p>
+              {confirming === 'delete'
+                ? 'Delete this reel? It disappears for everyone, along with its likes and comments. This cannot be undone.'
+                : 'This reel was posted more than 24 hours ago. Once unpinned it expires and disappears for everyone.'}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setConfirming(null)} disabled={working}>
+                Keep it
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={working}
+                onClick={() => {
+                  const which = confirming;
+                  setConfirming(null);
+                  if (which === 'delete') onDelete();
+                  else onPin(false);
+                }}
+                data-testid="reel-confirm-yes"
+              >
+                {confirming === 'delete' ? 'Delete reel' : 'Unpin and expire'}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {reel.caption && <p className="text-sm">{reel.caption}</p>}
+
+        {/* The reel's lifespan (D58), told to the person who made it. */}
+        {reel.isMine && (
+          <p
+            className={cn('flex items-center gap-1.5 text-xs', reel.pinned ? 'text-primary-strong' : 'text-muted-foreground')}
+            data-testid="reel-lifespan"
+          >
+            {reel.pinned ? (
+              <>
+                <Pin className="h-3.5 w-3.5" aria-hidden /> Pinned to your profile. It stays up and shows only there.
+              </>
+            ) : reel.expiresAt ? (
+              <>Disappears in {timeLeft(reel.expiresAt)}. Pin it to keep it on your profile.</>
+            ) : null}
+          </p>
+        )}
 
         {reel.isMine && (
           <div className="space-y-1.5" data-testid="reel-audience">

@@ -23,6 +23,11 @@ router.get('/reels/:id', optionalAuth, asyncHandler(controller.detail));
 router.patch('/reels/:id', requireAuth, validate(updateReelSchema), asyncHandler(controller.update));
 router.post('/reels/:id/publish', requireAuth, asyncHandler(controller.publish));
 router.post('/reels/:id/archive', requireAuth, asyncHandler(controller.archive));
+// The author's own: delete it, or pin it to their profile and take it out of the
+// feeds (D58).
+router.delete('/reels/:id', requireAuth, asyncHandler(controller.deleteOwn));
+router.post('/reels/:id/pin', requireAuth, asyncHandler(controller.pin));
+router.delete('/reels/:id/pin', requireAuth, asyncHandler(controller.unpin));
 // Moderation: the kennel's media moderators, or platform staff for a reel that
 // belongs to no kennel.
 router.post('/reels/:id/remove', requireAuth, validate(removeReelSchema), asyncHandler(controller.remove));

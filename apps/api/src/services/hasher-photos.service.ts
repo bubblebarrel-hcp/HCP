@@ -4,7 +4,7 @@ import { page } from '../utils/http';
 import { audienceAllows, canSeeContentOf, relationTo } from './audience.service';
 import { followableUser } from './follow.service';
 import { type Actor } from './permission.service';
-import { canSee as canSeeReel } from './reel.service';
+import { canSee as canSeeReel, reelIsLive } from './reel.service';
 import { canView, getAccess } from './run.service';
 
 // The photo grid on a hasher's page (D57): every picture they took, in one place,
@@ -78,7 +78,16 @@ export async function listPhotos(actor: Actor | undefined, userId: string, opts:
     }),
     prisma.reel.findMany({
       where: { id: { in: idsOf(MediaTargetType.REEL) }, authorId: user.id },
-      select: { id: true, status: true, visibility: true, kennelId: true, runId: true, authorId: true },
+      select: {
+        id: true,
+        status: true,
+        visibility: true,
+        kennelId: true,
+        runId: true,
+        authorId: true,
+        publishedAt: true,
+        pinnedAt: true,
+      },
     }),
   ]);
   // A post's own audience counts as well as the profile's.
@@ -92,7 +101,13 @@ export async function listPhotos(actor: Actor | undefined, userId: string, opts:
   const reelById = new Map(reels.map((r) => [r.id, r]));
   const reelOk = new Map<string, boolean>();
   for (const reel of reels) {
-    const standing = reel.status === ReelStatus.PUBLISHED || (isMe && reel.status !== ReelStatus.REMOVED);
+    // A reel's photos leave the grid with it: once it has expired unpinned, or its
+    // author has deleted it (D58), for its author as much as anyone. What else
+    // they had (a draft, an archived reel) is still theirs to see, as before.
+    const standing =
+      reel.status === ReelStatus.PUBLISHED
+        ? reelIsLive(reel)
+        : isMe && reel.status !== ReelStatus.REMOVED && reel.status !== ReelStatus.DELETED;
     reelOk.set(reel.id, standing && (await canSeeReel(actor, reel)));
   }
   const runOk = new Map<string, boolean>();

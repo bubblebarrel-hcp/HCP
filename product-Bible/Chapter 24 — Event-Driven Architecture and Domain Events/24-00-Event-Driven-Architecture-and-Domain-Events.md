@@ -193,6 +193,9 @@ D41 reels, D50 follows and engagement, D51 posts. A reel and a post belong to th
 | `ReelPosted` | D41: a reel is published (draft, upload, publish, as with D28) | Social Service | Feed, Search Index, Audit |
 | `ReelArchived` | D41: the author archives their own reel | Social Service | Feed, Search Index |
 | `ReelRemoved` | D41: a moderator removes a reel; reason required | Social Service | Feed, Search Index, Audit |
+| `ReelDeleted` | D58: the author deletes their own reel; it is gone for everyone and the row stays | Social Service | Feed, Search Index, Audit |
+| `ReelPinned` | D58: the author pins a reel to their profile; it stops expiring and leaves the feeds | Social Service | Feed, Search Index, Audit |
+| `ReelUnpinned` | D58: the author unpins a reel; it goes back to the 24 hours it started with | Social Service | Feed, Search Index, Audit |
 | `PostPublished` | D51: a post is published; its audience (D57) is its own `visibility` narrowed by its author's profile, and is not carried on the event | Social Service | Feed, Search Index, Audit |
 | `PostArchived` | D51: the author archives their own post | Social Service | Feed, Search Index |
 | `PostRemoved` | D51: a moderator removes a post; reason required | Social Service | Feed, Search Index, Audit |

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Bell, Settings } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/card';
-import { notificationCategoryLabel, notificationHref, notificationTone } from '@/lib/notifications';
+import { NOTIFICATIONS_CHANGED, notificationCategoryLabel, notificationHref, notificationTone } from '@/lib/notifications';
 import type { NotificationItem, NotificationPage } from '@/lib/types';
 import { cn, formatDate } from '@/lib/utils';
 import api from '@/services/api';
@@ -43,9 +43,11 @@ export function NotificationBell() {
     };
     refresh();
     const timer = setInterval(refresh, POLL_MS);
+    window.addEventListener(NOTIFICATIONS_CHANGED, refresh);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      window.removeEventListener(NOTIFICATIONS_CHANGED, refresh);
     };
   }, [user]);
 
@@ -164,7 +166,7 @@ export function NotificationBell() {
               </div>
             ) : items.length === 0 ? (
               <p className="p-6 text-center text-sm text-muted-foreground">
-                Nothing yet. Membership decisions, run changes and trail releases land here.
+                Nothing yet. Likes, comments, follows, run changes and trail releases land here.
               </p>
             ) : (
               <ul className="divide-y divide-border">
@@ -213,6 +215,15 @@ export function NotificationBell() {
               </ul>
             )}
           </div>
+
+          <Link
+            href="/notifications"
+            onClick={() => setOpen(false)}
+            data-testid="notification-see-all"
+            className="block border-t border-border p-3 text-center text-sm font-medium text-primary-strong hover:bg-muted"
+          >
+            See all notifications
+          </Link>
         </div>
       )}
     </div>
