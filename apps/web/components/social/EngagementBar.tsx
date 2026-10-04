@@ -255,17 +255,6 @@ export function EngagementBar({
               ))}
             </span>
           )}
-          {used.length > 1 && (
-            <span className="ml-1 flex items-center text-xs" title={used.map((r) => `${r.label} ${engagement.reactions[r.kind]}`).join(' · ')}>
-              {used.slice(0, 3).map((r) =>
-                r.emoji ? (
-                  <span key={r.kind} aria-hidden>
-                    {r.emoji}
-                  </span>
-                ) : null,
-              )}
-            </span>
-          )}
         </span>
 
         <button
@@ -357,6 +346,26 @@ export function EngagementBar({
           </span>
         )}
       </div>
+
+      {/* What people reacted with, once more than one kind is in play. */}
+      {used.length > 1 && (
+        <ul
+          className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 pb-1.5 text-xs text-muted-foreground"
+          aria-label={used.map((r) => `${r.label} ${engagement.reactions[r.kind]}`).join(', ')}
+          data-testid="reaction-counts"
+        >
+          {used.map((r) => (
+            <li key={r.kind} className="inline-flex items-center gap-1" title={r.label}>
+              {r.emoji ? (
+                <span aria-hidden>{r.emoji}</span>
+              ) : (
+                <Heart className="h-3.5 w-3.5 text-primary-strong" aria-hidden />
+              )}
+              <span className="tabular-nums">{engagement.reactions[r.kind]}</span>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {error && <p className="px-4 pb-2 text-sm text-destructive">{error}</p>}
 
