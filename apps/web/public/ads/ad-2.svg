@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400" role="img" aria-label="Placeholder ad">
+  <rect width="320" height="400" fill="#171717"/>
+  <path d="M0 300 Q80 240 160 290 T320 260 V400 H0Z" fill="#F4511E" opacity=".85"/>
+  <path d="M0 340 Q90 300 170 335 T320 315 V400 H0Z" fill="#F4F1E8" opacity=".2"/>
+  <text x="32" y="120" font-family="Arial, sans-serif" font-size="32" font-weight="700" fill="#F4F1E8">Beer check</text>
+  <text x="32" y="160" font-family="Arial, sans-serif" font-size="32" font-weight="700" fill="#F4F1E8">sponsor</text>
+  <text x="32" y="198" font-family="Arial, sans-serif" font-size="16" fill="#F4F1E8" opacity=".8">Advert space</text>
+</svg>

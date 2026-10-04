@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400" role="img" aria-label="Placeholder ad">
+  <rect width="320" height="400" fill="#F4511E"/>
+  <circle cx="260" cy="70" r="90" fill="#171717" opacity=".12"/>
+  <circle cx="40" cy="360" r="110" fill="#F4F1E8" opacity=".18"/>
+  <text x="32" y="190" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#171717">Your brand</text>
+  <text x="32" y="232" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#171717">here</text>
+  <text x="32" y="276" font-family="Arial, sans-serif" font-size="16" fill="#171717">Reach hashers on trail</text>
+</svg>
