@@ -108,6 +108,12 @@ export function EngagementBar({
   }
 
   const mineReaction = REACTIONS.find((r) => r.kind === engagement.myReaction);
+  // The reactions people actually used, most used first. A phone has no hover
+  // tooltip, so the counts are shown in a line under the bar (as on web, only
+  // once more than one kind is in play).
+  const used = REACTIONS.filter((r) => engagement.reactions[r.kind] > 0).sort(
+    (a, b) => engagement.reactions[b.kind] - engagement.reactions[a.kind],
+  );
 
   function onBookmark() {
     if (signedOut) return;
@@ -234,6 +240,24 @@ export function EngagementBar({
         )}
       </View>
 
+      {used.length > 1 && (
+        <View
+          style={styles.reactionCounts}
+          accessible
+          accessibilityLabel={used.map((r) => `${r.label} ${engagement.reactions[r.kind]}`).join(', ')}>
+          {used.map((r) => (
+            <View key={r.kind} style={styles.reactionCount}>
+              {r.emoji ? (
+                <ThemedText style={styles.emojiSmall}>{r.emoji}</ThemedText>
+              ) : (
+                <Icon name={{ ios: 'heart.fill', android: 'favorite', web: 'favorite' }} size={13} color={theme.primaryStrong} />
+              )}
+              <Count value={engagement.reactions[r.kind]} />
+            </View>
+          ))}
+        </View>
+      )}
+
       {tray && !signedOut && (
         <View style={[styles.tray, { backgroundColor: theme.card, borderColor: theme.border }]} accessibilityLabel="Reactions">
           {REACTIONS.map((r) => (
@@ -298,6 +322,9 @@ const styles = StyleSheet.create({
   views: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.two },
   count: { fontVariant: ['tabular-nums'] },
   emoji: { fontSize: 18, lineHeight: 22 },
+  emojiSmall: { fontSize: 13, lineHeight: 18 },
+  reactionCounts: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingBottom: Spacing.one },
+  reactionCount: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   tray: { flexDirection: 'row', gap: Spacing.one, alignSelf: 'flex-start', marginLeft: Spacing.two, marginBottom: Spacing.one, borderWidth: 1, borderRadius: 999, padding: Spacing.one },
   trayButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   composeBox: { borderTopWidth: 1, padding: Spacing.three, gap: Spacing.two },
