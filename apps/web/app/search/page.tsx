@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { BookOpen, Camera, Footprints, MapPin, Users } from 'lucide-react';
+import { BookOpen, Camera, Footprints, Hash, MapPin, Users } from 'lucide-react';
 import { Avatar } from '@/components/Avatar';
 import { KennelCard } from '@/components/KennelCard';
 import { FeedLayout } from '@/components/layout/FeedLayout';
@@ -75,7 +75,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         {/* Plain GET form: search works without JavaScript */}
         <form action="/search" className="mt-3 flex gap-2" role="search">
           <label htmlFor="global-search-q" className="sr-only">Search Shiggy Trails</label>
-          <Input id="global-search-q" name="q" defaultValue={q} placeholder="Kennels, runs, reports, hashers…" className="max-w-md" data-testid="search-input" />
+          <Input id="global-search-q" name="q" defaultValue={q} placeholder="Kennels, runs, reports, hashers, #tags…" className="max-w-md" data-testid="search-input" />
           <Button type="submit">Search</Button>
         </form>
         {data && (
@@ -109,6 +109,18 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             </Card>
           )}
 
+          <Section title="Hashtags" icon={Hash} count={data.tags.length}>
+            {data.tags.map((t) => (
+              <Hit
+                key={t.tag}
+                href={`/tags/${encodeURIComponent(t.tag)}`}
+                title={`#${t.tag}`}
+                subtitle={`${t.count} ${t.count === 1 ? 'use' : 'uses'}`}
+                avatarName="#"
+              />
+            ))}
+          </Section>
+
           <Section title="Runs" icon={Footprints} count={data.runs.length}>
             {data.runs.map((r) => (
               <Hit
@@ -141,7 +153,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                 key={h.id}
                 href={`/hashers/${h.id}`}
                 title={h.name}
-                subtitle={h.homeKennel?.shortName}
+                subtitle={[h.username && `@${h.username}`, h.homeKennel?.shortName].filter(Boolean).join(' · ') || undefined}
                 avatarName={h.name}
               />
             ))}

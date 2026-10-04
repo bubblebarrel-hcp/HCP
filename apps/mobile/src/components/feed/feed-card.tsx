@@ -4,6 +4,9 @@ import { useRouter } from 'expo-router';
 import { Avatar } from '@/components/feed/avatar';
 import { Icon } from '@/components/icon';
 import { EngagementBar } from '@/components/social/engagement-bar';
+import { LinkPreviewCard } from '@/components/social/link-preview-card';
+import { PollCard } from '@/components/social/poll-card';
+import { RichText } from '@/components/social/rich-text';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
@@ -55,8 +58,11 @@ function Attribution({
   );
 }
 
-function engagementTarget(item: FeedEntry): { segment: SubjectSegment; id: string; authorId: string | null } {
+function engagementTarget(item: FeedEntry): { segment: SubjectSegment; id: string; authorId: string | null } | null {
   switch (item.kind) {
+    // News, not a thing to like (D60).
+    case 'MILESTONE':
+      return null;
     case 'REPORT':
       return { segment: 'reports', id: item.id, authorId: item.authorId };
     case 'PHOTO':
@@ -173,9 +179,11 @@ function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> })
       <View style={styles.padded}>
         <Attribution name={item.author} authorId={item.authorId} kennel={item.kennel} at={item.at} iconName={{ ios: 'bubble.left', android: 'chat_bubble', web: 'chat_bubble' }} />
         <Pressable accessibilityRole="link" accessibilityLabel="Open this post" onPress={() => router.push(`/posts/${item.id}`)}>
-          <ThemedText style={{ marginTop: Spacing.two }}>{item.body}</ThemedText>
+          <RichText text={item.body} style={{ marginTop: Spacing.two }} />
           {item.edited ? <ThemedText type="small" themeColor="textSecondary">edited</ThemedText> : null}
         </Pressable>
+        {item.poll ? <PollCard postId={item.id} initial={item.poll} /> : null}
+        {item.linkPreview ? <LinkPreviewCard preview={item.linkPreview} /> : null}
       </View>
       {item.photos.length > 0 && (
         <View style={many ? styles.photoGrid : undefined}>
@@ -222,9 +230,39 @@ function PhotoCard({ item }: { item: Extract<FeedItem, { kind: 'PHOTO' }> }) {
   );
 }
 
+// A hasher passing 10, 50, 100 runs (D60). News, so there is no bar under it.
+function MilestoneCard({ item }: { item: Extract<FeedItem, { kind: 'MILESTONE' }> }) {
+  const theme = useTheme();
+  const router = useRouter();
+  return (
+    <View style={[styles.padded, styles.row]}>
+      <View style={[styles.trophy, { backgroundColor: theme.accent }]}>
+        <ThemedText style={styles.trophyText}>🏆</ThemedText>
+      </View>
+      <View style={styles.milestoneText}>
+        <ThemedText>
+          <ThemedText type="smallBold" onPress={() => router.push(`/hashers/${item.hasher.id}`)}>{item.hasher.name}</ThemedText>
+          {' '}has run <ThemedText type="smallBold">{item.threshold} trails</ThemedText>. On On!
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {item.run ? `Run #${item.run.runNumber ?? '—'}${item.run.title ? ` · ${item.run.title}` : ''} · ` : ''}
+          {formatDate(item.at)}
+        </ThemedText>
+      </View>
+    </View>
+  );
+}
+
 export function FeedCard({ item }: { item: FeedEntry }) {
   const theme = useTheme();
   const target = engagementTarget(item);
+  if (!target) {
+    return (
+      <ThemedView type="card" style={[styles.card, { borderColor: theme.border }]}>
+        {item.kind === 'MILESTONE' ? <MilestoneCard item={item} /> : null}
+      </ThemedView>
+    );
+  }
   return (
     <ThemedView type="card" style={[styles.card, { borderColor: theme.border }]}>
       {item.kind === 'RUN' ? <RunAnnouncement item={item} /> : null}
@@ -256,4 +294,7 @@ const styles = StyleSheet.create({
   quotePad: { padding: Spacing.three, gap: 2 },
   runLink: { padding: Spacing.three, paddingTop: 0 },
   readMore: { marginTop: Spacing.two, minHeight: 32 },
+  trophy: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  trophyText: { fontSize: 24, lineHeight: 30 },
+  milestoneText: { flex: 1, minWidth: 0, gap: 2 },
 });

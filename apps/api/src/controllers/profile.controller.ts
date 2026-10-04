@@ -26,7 +26,9 @@ export async function getPrivacy(req: Request, res: Response) {
 
 export async function setPrivacy(req: Request, res: Response) {
   if (!req.user) throw ApiError.unauthorized();
-  return ok(res, await account.setProfileVisibility(req.user.id, req.body.profileVisibility));
+  if (req.body.shareMilestones !== undefined) await account.setMilestoneSharing(req.user.id, req.body.shareMilestones);
+  if (req.body.profileVisibility) return ok(res, await account.setProfileVisibility(req.user.id, req.body.profileVisibility));
+  return ok(res, await account.getPrivacy(req.user.id));
 }
 
 export async function deactivate(req: Request, res: Response) {

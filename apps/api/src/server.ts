@@ -25,6 +25,8 @@ import officerRoutes from './routes/officer.routes';
 import reelRoutes from './routes/reel.routes';
 import hareRoutes from './routes/hare.routes';
 import postRoutes from './routes/post.routes';
+import entityRoutes from './routes/entity.routes';
+import safetyRoutes from './routes/safety.routes';
 import engagementRoutes from './routes/engagement.routes';
 import followRoutes from './routes/follow.routes';
 import profileRoutes from './routes/profile.routes';
@@ -102,6 +104,10 @@ app.use('/api/v1', reelRoutes);
 // are tried before '/kennels/:slug/follow'.
 // A hasher's written post (D51)
 app.use('/api/v1', postRoutes);
+// Hashtags and mentions (D59)
+app.use('/api/v1', entityRoutes);
+// Blocks, mentions inbox, photo tags (D60)
+app.use('/api/v1', safetyRoutes);
 app.use('/api/v1', engagementRoutes);
 app.use('/api/v1', followRoutes);
 app.use('/api/v1', profileRoutes);

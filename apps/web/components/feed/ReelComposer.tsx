@@ -6,7 +6,9 @@ import { toast } from 'sonner';
 import { ReelRecorder } from '@/components/feed/ReelRecorder';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Select, Textarea } from '@/components/ui/input';
+import { MentionTextarea } from '@/components/social/MentionTextarea';
+import { Select, fieldClass } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 import { AudiencePicker } from '@/components/profile/AudiencePicker';
 import { Field } from '@/components/ui/label';
 import { ACCEPTED_IMAGES, ACCEPTED_VIDEOS, MAX_UPLOAD_BYTES, fileSize, uploadPhoto, uploadVideo } from '@/lib/media';
@@ -266,13 +268,14 @@ export function ReelComposer({
           )}
 
           <Field label="Caption (optional)" htmlFor={`${id}-caption`}>
-            <Textarea
+            <MentionTextarea
               id={`${id}-caption`}
               rows={2}
               value={caption}
               maxLength={500}
-              placeholder="Beer check at the top of the hill"
-              onChange={(event) => setCaption(event.target.value)}
+              className={cn(fieldClass, 'min-h-24 h-auto')}
+              placeholder="Beer check at the top of the hill #beercheck"
+              onValueChange={setCaption}
               data-testid="reel-caption"
             />
           </Field>

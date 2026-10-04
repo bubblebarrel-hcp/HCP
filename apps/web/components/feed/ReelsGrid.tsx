@@ -13,7 +13,16 @@ import api from '@/services/api';
 // server rendered. Signed in it is the hashers you follow and your own: the page
 // was served from the cache with no session, so it asks again once there is one
 // and the server's version stands until that answers.
-export function ReelsGrid({ initial }: { initial: Reel[] }) {
+export function ReelsGrid({
+  initial,
+  query = '/reels?limit=30',
+  emptyText,
+}: {
+  initial: Reel[];
+  // Which list this is. A hashtag page asks for its own (D59).
+  query?: string;
+  emptyText?: string;
+}) {
   const { user } = useAuth();
   const [reels, setReels] = useState(initial);
 
@@ -21,7 +30,7 @@ export function ReelsGrid({ initial }: { initial: Reel[] }) {
     if (!user) return;
     let cancelled = false;
     api
-      .get<{ data: Page<Reel> }>('/reels?limit=30')
+      .get<{ data: Page<Reel> }>(query)
       .then((res) => {
         if (!cancelled) setReels(res.data.data.items);
       })
@@ -29,7 +38,7 @@ export function ReelsGrid({ initial }: { initial: Reel[] }) {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, query]);
 
   return (
     <>
@@ -38,9 +47,10 @@ export function ReelsGrid({ initial }: { initial: Reel[] }) {
           className="border-y border-dashed border-border bg-card p-10 text-center text-muted-foreground sm:rounded-xl sm:border-x"
           data-testid="reels-empty"
         >
-          {user
+          {emptyText ??
+            (user
             ? 'Nothing here yet. Follow hashers and their reels land here; post one of your own and it does too.'
-            : 'No public reels yet. Sign in and follow hashers to fill this with theirs.'}
+            : 'No public reels yet. Sign in and follow hashers to fill this with theirs.')}
         </p>
       ) : (
         <ul className="grid grid-cols-2 gap-3 px-4 sm:grid-cols-3 sm:px-0 lg:grid-cols-4" data-testid="reels-grid">

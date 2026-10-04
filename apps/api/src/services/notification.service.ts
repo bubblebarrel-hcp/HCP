@@ -15,9 +15,12 @@ import {
   RoleAssignmentStatus,
   RsvpStatus,
   ScopedRole,
+  type SubjectType,
 } from '@prisma/client';
 import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
+import { resolveSubject } from './subject.service';
+import { reachable } from './block.service';
 import { isEmailConfigured, sendEmail } from './email.service';
 import { isExpoPushToken, isPushConfigured, registerDevice, revokeDevice, sendPush } from './push.service';
 import { evaluateQuietHours, quietHoursFor } from './quiet-hours';
@@ -98,6 +101,27 @@ function subjectWord(subjectType: string | null) {
       return 'reel';
   }
 }
+
+// The web names a notification's page by these words, not by the enum.
+function mentionContext(type: string) {
+  switch (type) {
+    case 'POST':
+      return 'Post';
+    case 'REEL':
+      return 'Reel';
+    case 'RUN':
+      return 'Run';
+    default:
+      return type;
+  }
+}
+
+// What each hash reaction reads as in a sentence (D60).
+const REACTION_VERB: Record<string, string> = {
+  BEER: 'raised a beer to',
+  SHIGGY: 'got muddy over',
+  DOWN_DOWN: 'called a down-down on',
+};
 
 // One line of somebody's comment, for the body of a notification.
 function excerpt(body: string, max = 140) {
@@ -625,7 +649,10 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
       return {
         category: C.SOCIAL,
         priority: P.LOW,
-        title: `${who} liked your ${subjectWord(str(payload, 'subjectType'))}`,
+        title:
+          str(payload, 'reaction') && str(payload, 'reaction') !== 'ON_ON'
+            ? `${who} ${REACTION_VERB[str(payload, 'reaction') as string] ?? 'reacted to'} your ${subjectWord(str(payload, 'subjectType'))}`
+            : `${who} liked your ${subjectWord(str(payload, 'subjectType'))}`,
         body: 'On On!',
         contextType: event.aggregateType,
         contextId: event.aggregateId,
@@ -681,6 +708,88 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         contextId: event.aggregateId,
         kennelId: str(payload, 'kennelId'),
         recipients: [authorId],
+      };
+    }
+    // Somebody wrote @username (D59). One notification per person newly named.
+    // Each is checked as that person: a mention can only point somebody at a
+    // thing they could already open, so it can never be how a members-only run
+    // or a followers-only post is found.
+    case 'ContentMentioned': {
+      if (!event.actorId) return null;
+      const subjectType = str(payload, 'subjectType') as SubjectType | null;
+      const subjectId = str(payload, 'subjectId');
+      const ids = Array.isArray(payload.mentionedUserIds)
+        ? (payload.mentionedUserIds as unknown[]).filter((v): v is string => typeof v === 'string')
+        : [];
+      if (!subjectType || !subjectId || ids.length === 0) return null;
+
+      const recipients: string[] = [];
+      for (const id of ids) {
+        if (id === event.actorId) continue;
+        try {
+          await resolveSubject({ id, role: 'USER' }, subjectType, subjectId);
+          recipients.push(id);
+        } catch {
+          // Not theirs to see, so not theirs to be told about.
+        }
+      }
+      if (recipients.length === 0) return null;
+
+      const who = await publicNameOf(event.actorId);
+      let words: string | null = null;
+      if (subjectType === 'POST') {
+        words = (await prisma.post.findUnique({ where: { id: subjectId }, select: { body: true } }))?.body ?? null;
+      } else if (subjectType === 'REEL') {
+        words = (await prisma.reel.findUnique({ where: { id: subjectId }, select: { caption: true } }))?.caption ?? null;
+      } else if (subjectType === 'COMMENT') {
+        words = (await prisma.contentComment.findUnique({ where: { id: subjectId }, select: { body: true } }))?.body ?? null;
+      }
+      return {
+        category: C.SOCIAL,
+        priority: P.NORMAL,
+        title: `${who} mentioned you in a ${subjectWord(subjectType)}`,
+        body: words ? excerpt(words) : 'Go and see what they said.',
+        // The thing the words are on, which for a comment is not the comment.
+        contextType: mentionContext(str(payload, 'homeType') ?? event.aggregateType),
+        contextId: event.aggregateId,
+        kennelId: null,
+        recipients,
+        pushByDefault: true,
+      };
+    }
+    // Somebody tagged you in a photo (D60). It needs an answer, so it reaches the
+    // phone and the inbox even though the rest of SOCIAL is in-app only.
+    case 'PhotoTagRequested': {
+      const taggedUserId = str(payload, 'taggedUserId');
+      if (!taggedUserId || !event.actorId) return null;
+      const who = await publicNameOf(event.actorId);
+      return {
+        category: C.SOCIAL,
+        priority: P.NORMAL,
+        title: `${who} tagged you in a photo`,
+        body: 'It only shows once you say yes.',
+        contextType: 'PhotoTag',
+        contextId: event.aggregateId,
+        kennelId: null,
+        recipients: [taggedUserId],
+        pushByDefault: true,
+        emailByDefault: true,
+        link: { label: 'Review the tag', path: '/account/photo-tags' },
+      };
+    }
+    case 'PhotoTagApproved': {
+      const taggerId = str(payload, 'taggerId');
+      if (!taggerId || !event.actorId) return null;
+      const who = await publicNameOf(event.actorId);
+      return {
+        category: C.SOCIAL,
+        priority: P.LOW,
+        title: `${who} approved your photo tag`,
+        body: 'They are in the photo now.',
+        contextType: 'User',
+        contextId: event.actorId,
+        kennelId: null,
+        recipients: [taggerId],
       };
     }
     case 'ContentCommentRemoved': {
@@ -832,7 +941,11 @@ export async function fanOut(event: DomainEvent) {
   if (!(await kennelAllows(spec.kennelId, spec.category))) return 0;
 
   // Nobody needs telling about their own action.
-  const recipients = [...new Set(spec.recipients)].filter((id) => id !== event.actorId);
+  let recipients = [...new Set(spec.recipients)].filter((id) => id !== event.actorId);
+  // Somebody who blocked or muted the actor hears nothing from them, and the
+  // actor's blocks hold too (D60). Only social notices: a trail release is not
+  // an act by a person.
+  if (spec.category === C.SOCIAL && event.actorId) recipients = await reachable(event.actorId, recipients);
   const now = new Date();
   const emailable = isEmailConfigured();
   const pushOn = isPushConfigured();

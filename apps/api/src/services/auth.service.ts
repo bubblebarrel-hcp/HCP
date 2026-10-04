@@ -6,6 +6,7 @@ import { hashToken, signAccessToken, signRefreshToken, verifyRefreshToken } from
 import { logger } from '../utils/logger';
 import { serializeSessionUser, sessionUserSelect } from '../serializers/user';
 import { encryptField } from '../utils/field-crypto';
+import { allocateUsername } from './entity.service';
 import { recordAudit, recordEvent } from './record.service';
 import { issueVerification } from './verification.service';
 
@@ -74,6 +75,9 @@ export async function register(input: RegisterInput) {
         email: input.email,
         passwordHash,
         hashHandle,
+        // What they are @mentioned as (D59). Made from the handle when it can be,
+        // and theirs to change afterwards.
+        username: await allocateUsername(tx, hashHandle),
         termsAcceptedAt: new Date(),
         // The account exists but cannot be signed into until the address is
         // confirmed (D31). ACTIVE is about standing, not about verification:

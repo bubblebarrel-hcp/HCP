@@ -1,5 +1,6 @@
 import { Audience, FollowStatus, FollowTargetType } from '@prisma/client';
 import prisma from '../config/prisma';
+import { hiddenFor } from './block.service';
 import { type Actor } from './permission.service';
 
 // Who may see what a hasher has made (D57).
@@ -59,14 +60,17 @@ export async function contentVisibleAuthors(actor: Actor | undefined, authorIds:
   const visible = new Set<string>();
   if (unique.length === 0) return visible;
 
-  const [users, follows] = await Promise.all([
+  const [users, follows, hidden] = await Promise.all([
     prisma.user.findMany({
       where: { id: { in: unique }, ...standing },
       select: { id: true, profileVisibility: true },
     }),
     activeFollowSet(actor?.id, unique),
+    // Blocked either way, nothing of theirs is visible to this viewer (D60).
+    hiddenFor(actor?.id),
   ]);
   for (const user of users) {
+    if (hidden.blocked.has(user.id)) continue;
     if (audienceAllows(user.profileVisibility, { isSelf: actor?.id === user.id, follows: follows.has(user.id) })) {
       visible.add(user.id);
     }

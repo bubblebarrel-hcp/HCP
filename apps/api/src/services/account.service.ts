@@ -23,8 +23,23 @@ import { deleteObject } from './storage.service';
 // ─── Who sees what I make ───
 
 export async function getPrivacy(userId: string) {
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { profileVisibility: true } });
-  return { profileVisibility: user.profileVisibility, pendingRequests: await pendingRequestCount(userId) };
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { profileVisibility: true, shareMilestones: true },
+  });
+  return {
+    profileVisibility: user.profileVisibility,
+    // Whether a milestone may appear in the feed as a card (D60).
+    shareMilestones: user.shareMilestones,
+    pendingRequests: await pendingRequestCount(userId),
+  };
+}
+
+// Opt out of (or back into) milestone cards in the feed (D60). It only governs the
+// card: the milestone itself stays on the Hash Passport either way.
+export async function setMilestoneSharing(userId: string, share: boolean) {
+  await prisma.user.update({ where: { id: userId }, data: { shareMilestones: share } });
+  return getPrivacy(userId);
 }
 
 // One setting for the whole profile: posts, photos and reels. FOLLOWERS is a
@@ -227,6 +242,8 @@ export async function deleteAccount(userId: string, password: string) {
           email: `deleted+${userId}@deleted.invalid`,
           passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
           hashHandle: null,
+          // Freed, so a deleted hasher's name can be somebody else's (D59).
+          username: null,
           avatarUrl: null,
           avatarPosition: null,
           bannerUrl: null,

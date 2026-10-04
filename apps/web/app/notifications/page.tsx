@@ -9,6 +9,7 @@ import { FeedLayout } from '@/components/layout/FeedLayout';
 import { LeftNav } from '@/components/layout/LeftNav';
 import { Button } from '@/components/ui/button';
 import { Badge, Card } from '@/components/ui/card';
+import { MentionsList } from '@/components/social/MentionsList';
 import { NOTIFICATIONS_CHANGED, notificationCategoryLabel, notificationHref, notificationTone } from '@/lib/notifications';
 import type { NotificationItem, NotificationPage } from '@/lib/types';
 import { bleedCard, cn } from '@/lib/utils';
@@ -34,6 +35,8 @@ export default function NotificationsPage() {
   const [total, setTotal] = useState(0);
   const [unread, setUnread] = useState(0);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  // The mentions inbox (D60): everything that has mentioned you, kept.
+  const [mentions, setMentions] = useState(false);
   const [page, setPage] = useState(1);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +117,7 @@ export default function NotificationsPage() {
   }
 
   const shell = (children: React.ReactNode) => (
-    <FeedLayout left={<LeftNav />} wide>
+    <FeedLayout left={<LeftNav />}>
       {children}
     </FeedLayout>
   );
@@ -122,7 +125,7 @@ export default function NotificationsPage() {
   if (!user) return shell(<div className="h-96 animate-pulse bg-card sm:rounded-xl" aria-busy />);
 
   return shell(
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="space-y-4">
       <Card className={cn(bleedCard, 'p-5')}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -141,9 +144,10 @@ export default function NotificationsPage() {
           <Button
             type="button"
             size="sm"
-            variant={unreadOnly ? 'outline' : 'default'}
+            variant={!mentions && !unreadOnly ? 'default' : 'outline'}
             onClick={() => {
               setItems(null);
+              setMentions(false);
               setUnreadOnly(false);
             }}
             data-testid="notifications-filter-all"
@@ -153,16 +157,26 @@ export default function NotificationsPage() {
           <Button
             type="button"
             size="sm"
-            variant={unreadOnly ? 'default' : 'outline'}
+            variant={!mentions && unreadOnly ? 'default' : 'outline'}
             onClick={() => {
               setItems(null);
+              setMentions(false);
               setUnreadOnly(true);
             }}
             data-testid="notifications-filter-unread"
           >
             Unread{unread > 0 ? ` (${unread})` : ''}
           </Button>
-          {unread > 0 && (
+          <Button
+            type="button"
+            size="sm"
+            variant={mentions ? 'default' : 'outline'}
+            onClick={() => setMentions(true)}
+            data-testid="notifications-filter-mentions"
+          >
+            Mentions
+          </Button>
+          {unread > 0 && !mentions && (
             <Button
               type="button"
               size="sm"
@@ -178,7 +192,9 @@ export default function NotificationsPage() {
       </Card>
 
       <Card className={cn(bleedCard, 'overflow-hidden')} data-testid="notifications-list">
-        {error ? (
+        {mentions ? (
+          <MentionsList />
+        ) : error ? (
           <p className="p-8 text-center text-sm text-destructive">{error}</p>
         ) : items === null ? (
           <div className="space-y-2 p-3" aria-busy>
@@ -222,7 +238,7 @@ export default function NotificationsPage() {
             ))}
           </ul>
         )}
-        {items && items.length < total && (
+        {!mentions && items && items.length < total && (
           <div className="border-t border-border p-3 text-center">
             <Button
               type="button"

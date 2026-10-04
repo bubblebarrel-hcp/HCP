@@ -1,12 +1,13 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { Bookmark, Eye, Heart, MessageCircle, Repeat2, Share2 } from 'lucide-react';
+import { Bookmark, Eye, Heart, MessageCircle, Repeat2, Share2, SmilePlus } from 'lucide-react';
 import { CommentThread } from '@/components/social/CommentThread';
 import { ShareDialog } from '@/components/social/ShareDialog';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { countView, getEngagement, setBookmarked, setLiked, reshare, unreshare } from '@/lib/social';
-import type { Engagement, SubjectSegment } from '@/lib/types';
+import { REACTIONS, reactionLabel } from '@/lib/reactions';
+import type { Engagement, ReactionKind, SubjectSegment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 // The bar under a piece of content: like, comment, reshare, save, seen (D50).
@@ -61,6 +62,8 @@ export function EngagementBar({
   const [busy, setBusy] = useState(false);
   const [mine, setMine] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The hash reaction tray (D60).
+  const [tray, setTray] = useState(false);
 
   // A card rendered without a session carries nobody's own flags, and a page
   // rendered on the client starts with nothing at all. Either way, ask once —
@@ -113,10 +116,43 @@ export function EngagementBar({
 
   const onLike = () => {
     const next = !engagement.liked;
-    void act({ ...engagement, liked: next, likes: engagement.likes + (next ? 1 : -1) }, () =>
-      setLiked(segment, id, next),
+    const reactions = { ...engagement.reactions };
+    if (next) reactions.ON_ON += 1;
+    else if (engagement.myReaction) reactions[engagement.myReaction] = Math.max(0, reactions[engagement.myReaction] - 1);
+    void act(
+      { ...engagement, liked: next, likes: engagement.likes + (next ? 1 : -1), reactions, myReaction: next ? 'ON_ON' : null },
+      () => setLiked(segment, id, next),
     );
   };
+
+  // Choosing a reaction is a like with a kind (D60): the count of likes does not
+  // change when a standing like is swapped for another.
+  const onReact = (kind: ReactionKind) => {
+    setTray(false);
+    if (engagement.liked && engagement.myReaction === kind) {
+      onLike();
+      return;
+    }
+    const reactions = { ...engagement.reactions };
+    if (engagement.myReaction) reactions[engagement.myReaction] = Math.max(0, reactions[engagement.myReaction] - 1);
+    reactions[kind] += 1;
+    void act(
+      {
+        ...engagement,
+        liked: true,
+        likes: engagement.liked ? engagement.likes : engagement.likes + 1,
+        reactions,
+        myReaction: kind,
+      },
+      () => setLiked(segment, id, true, kind),
+    );
+  };
+
+  const mine_ = REACTIONS.find((r) => r.kind === engagement.myReaction);
+  // The reactions people actually used, most used first, as small icons.
+  const used = REACTIONS.filter((r) => engagement.reactions[r.kind] > 0).sort(
+    (a, b) => engagement.reactions[b.kind] - engagement.reactions[a.kind],
+  );
 
   const onBookmark = () => {
     const next = !engagement.bookmarked;
@@ -152,19 +188,82 @@ export function EngagementBar({
   return (
     <div className={cn('border-t border-border', className)} data-testid="engagement-bar">
       <div className="flex items-center gap-1 px-2 py-1">
-        <button
-          type="button"
-          onClick={onLike}
-          disabled={busy || signedOut}
-          aria-pressed={engagement.liked}
-          aria-label={engagement.liked ? 'Unlike' : 'Like'}
-          title={signedOut ? 'Sign in to like' : undefined}
-          className={cn(buttonClass, engagement.liked && 'text-primary-strong font-medium')}
-          data-testid="engagement-like"
+        {/* Like, and a tray of hash reactions (D60): hover or focus it, or use
+            the button beside it, which works on a phone and from the keyboard. */}
+        <span
+          className="relative inline-flex"
+          onMouseEnter={() => !signedOut && setTray(true)}
+          onMouseLeave={() => setTray(false)}
         >
-          <Heart className={cn('h-4 w-4', engagement.liked && 'fill-current')} aria-hidden />
-          <Count value={engagement.likes} />
-        </button>
+          <button
+            type="button"
+            onClick={onLike}
+            disabled={busy || signedOut}
+            aria-pressed={engagement.liked}
+            aria-label={engagement.liked ? `Remove ${reactionLabel(engagement.myReaction)}` : 'On On! (like)'}
+            title={signedOut ? 'Sign in to like' : undefined}
+            className={cn(buttonClass, engagement.liked && 'text-primary-strong font-medium')}
+            data-testid="engagement-like"
+          >
+            {mine_?.emoji ? (
+              <span className="text-base leading-none" aria-hidden>
+                {mine_.emoji}
+              </span>
+            ) : (
+              <Heart className={cn('h-4 w-4', engagement.liked && 'fill-current')} aria-hidden />
+            )}
+            <Count value={engagement.likes} />
+          </button>
+          {!signedOut && (
+            <button
+              type="button"
+              onClick={() => setTray((open) => !open)}
+              aria-expanded={tray}
+              aria-label="Choose a reaction"
+              className="rounded-md px-1 py-1.5 text-muted-foreground hover:bg-muted"
+              data-testid="reaction-toggle"
+            >
+              <SmilePlus className="h-4 w-4" aria-hidden />
+            </button>
+          )}
+          {tray && !signedOut && (
+            <span
+              role="menu"
+              aria-label="Reactions"
+              className="absolute bottom-full left-0 z-40 flex gap-1 rounded-full border border-border bg-card p-1 shadow-lg"
+              data-testid="reaction-tray"
+            >
+              {REACTIONS.map((r) => (
+                <button
+                  key={r.kind}
+                  type="button"
+                  role="menuitem"
+                  title={r.label}
+                  aria-label={r.label}
+                  onClick={() => onReact(r.kind)}
+                  className={cn(
+                    'grid h-9 w-9 place-items-center rounded-full text-xl hover:bg-muted',
+                    engagement.myReaction === r.kind && 'bg-muted ring-2 ring-primary',
+                  )}
+                  data-testid={`reaction-${r.kind}`}
+                >
+                  {r.emoji ?? <Heart className="h-5 w-5 text-primary-strong" aria-hidden />}
+                </button>
+              ))}
+            </span>
+          )}
+          {used.length > 1 && (
+            <span className="ml-1 flex items-center text-xs" title={used.map((r) => `${r.label} ${engagement.reactions[r.kind]}`).join(' · ')}>
+              {used.slice(0, 3).map((r) =>
+                r.emoji ? (
+                  <span key={r.kind} aria-hidden>
+                    {r.emoji}
+                  </span>
+                ) : null,
+              )}
+            </span>
+          )}
+        </span>
 
         <button
           type="button"

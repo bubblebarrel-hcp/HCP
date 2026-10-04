@@ -1,13 +1,14 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Footprints, ImagePlus, Loader2, Video, X } from 'lucide-react';
+import { BarChart3, BookOpen, Footprints, ImagePlus, Loader2, Plus, Video, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar } from '@/components/Avatar';
 import { ReelComposer } from '@/components/feed/ReelComposer';
+import { MentionTextarea } from '@/components/social/MentionTextarea';
 import { AudienceSelect } from '@/components/profile/AudienceSelect';
 import { FEED_REFRESH_EVENT } from '@/components/feed/PullToRefresh';
 import { Button } from '@/components/ui/button';
@@ -15,8 +16,8 @@ import { Card } from '@/components/ui/card';
 import { ACCEPTED_IMAGES, MAX_UPLOAD_BYTES, fileSize } from '@/lib/media';
 import { MAX_POST_BODY, MAX_POST_PHOTOS, post as sendPost } from '@/lib/posts';
 import { bleedCard, cn } from '@/lib/utils';
-import type { Audience } from '@/lib/types';
-import { errorMessage } from '@/services/api';
+import type { Audience, TaggableRun } from '@/lib/types';
+import api, { errorMessage } from '@/services/api';
 
 // The composer at the top of the feed. "What's on trail?" is a real input now
 // (D51): a hasher types, optionally adds photos, and it lands in everybody's
@@ -39,11 +40,36 @@ export function Composer() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // A poll (D60): the words are the question, these are the answers.
+  const [pollOn, setPollOn] = useState(false);
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [pollHours, setPollHours] = useState(24);
+  // A run the post is about (D60).
+  const [runs, setRuns] = useState<TaggableRun[]>([]);
+  const [runId, setRunId] = useState('');
 
-  const ready = body.trim().length > 0 || photos.length > 0;
+  const filledOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
+  const pollReady = !pollOn || (filledOptions.length >= 2 && body.trim().length > 0);
+  const ready = (body.trim().length > 0 || photos.length > 0) && pollReady;
   // Open once there is something to say, so the box does not take over the top
   // of the feed before anybody has typed.
   const expanded = body.length > 0 || photos.length > 0;
+
+  // The runs worth tagging are fetched once the box opens, not for everybody who
+  // merely loads the page.
+  useEffect(() => {
+    if (!user || !expanded || runs.length > 0) return;
+    let alive = true;
+    api
+      .get<{ data: { items: TaggableRun[] } }>('/me/taggable-runs')
+      .then((res) => {
+        if (alive) setRuns(res.data.data.items);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [user, expanded, runs.length]);
 
   const addPhotos = (chosen: FileList | null) => {
     if (!chosen) return;
@@ -70,9 +96,21 @@ export function Composer() {
     setBusy(true);
     setProgress(photos.length ? { done: 0, total: photos.length } : null);
     try {
-      await sendPost({ body: body.trim(), photos, visibility: audience }, (done, total) => setProgress({ done, total }));
+      await sendPost(
+        {
+          body: body.trim(),
+          photos,
+          visibility: audience,
+          runId: runId || null,
+          poll: pollOn ? { options: filledOptions, hours: pollHours } : undefined,
+        },
+        (done, total) => setProgress({ done, total }),
+      );
       setBody('');
       setPhotos([]);
+      setPollOn(false);
+      setPollOptions(['', '']);
+      setRunId('');
       toast.success('Posted. On On!');
       // The home page is cached for a minute and the API's own eviction rides
       // the outbox, so the hasher who just posted would otherwise come back to
@@ -102,10 +140,10 @@ export function Composer() {
           <label htmlFor="composer-body" className="sr-only">
             What&apos;s on trail?
           </label>
-          <textarea
+          <MentionTextarea
             id="composer-body"
             value={body}
-            onChange={(event) => setBody(event.target.value.slice(0, MAX_POST_BODY))}
+            onValueChange={(next) => setBody(next.slice(0, MAX_POST_BODY))}
             placeholder={`What's on trail${user ? `, ${user.displayName}` : ''}?`}
             rows={expanded ? 4 : 1}
             disabled={busy}
@@ -150,6 +188,57 @@ export function Composer() {
             </ul>
           )}
 
+          {pollOn && (
+            <div className="mt-2 space-y-2 rounded-xl border border-border p-3" data-testid="composer-poll">
+              <p className="text-xs text-muted-foreground">Your words above are the question. Add two to five answers.</p>
+              {pollOptions.map((option, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    value={option}
+                    onChange={(event) =>
+                      setPollOptions((current) => current.map((o, i) => (i === index ? event.target.value.slice(0, 80) : o)))
+                    }
+                    placeholder={`Answer ${index + 1}`}
+                    aria-label={`Answer ${index + 1}`}
+                    className="h-9 min-w-0 flex-1 rounded-md border border-border bg-background px-3 text-sm focus-visible:outline-2 focus-visible:outline-primary"
+                    data-testid="composer-poll-option"
+                  />
+                  {pollOptions.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setPollOptions((current) => current.filter((_, i) => i !== index))}
+                      aria-label={`Remove answer ${index + 1}`}
+                      className="grid h-8 w-8 place-items-center rounded-full hover:bg-muted"
+                    >
+                      <X className="h-4 w-4" aria-hidden />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <div className="flex flex-wrap items-center gap-2">
+                {pollOptions.length < 5 && (
+                  <Button type="button" variant="outline" size="sm" onClick={() => setPollOptions((c) => [...c, ''])}>
+                    <Plus className="h-4 w-4" aria-hidden /> Answer
+                  </Button>
+                )}
+                <label className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
+                  Open for
+                  <select
+                    value={pollHours}
+                    onChange={(event) => setPollHours(Number(event.target.value))}
+                    className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                  >
+                    <option value={1}>1 hour</option>
+                    <option value={6}>6 hours</option>
+                    <option value={24}>1 day</option>
+                    <option value={72}>3 days</option>
+                    <option value={168}>7 days</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          )}
+
           {expanded && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <input
@@ -172,6 +261,38 @@ export function Composer() {
                 <ImagePlus className="h-4 w-4" aria-hidden />
                 Photo
               </Button>
+
+              <Button
+                type="button"
+                variant={pollOn ? 'secondary' : 'outline'}
+                size="sm"
+                disabled={busy}
+                aria-pressed={pollOn}
+                onClick={() => setPollOn((on) => !on)}
+                data-testid="composer-poll-toggle"
+              >
+                <BarChart3 className="h-4 w-4" aria-hidden />
+                Poll
+              </Button>
+
+              {runs.length > 0 && (
+                <select
+                  value={runId}
+                  onChange={(event) => setRunId(event.target.value)}
+                  disabled={busy}
+                  aria-label="Tag a run"
+                  className="h-9 max-w-[11rem] truncate rounded-md border border-border bg-background px-2 text-sm"
+                  data-testid="composer-run"
+                >
+                  <option value="">Tag a run</option>
+                  {runs.map((run) => (
+                    <option key={run.id} value={run.id}>
+                      {run.kennel.shortName} #{run.runNumber ?? '—'}
+                      {run.title ? ` · ${run.title}` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               <AudienceSelect
                 value={audience}

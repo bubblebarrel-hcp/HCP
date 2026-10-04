@@ -9,6 +9,8 @@ interface AuthState {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  // Re-read who I am, after something about me changed (a username).
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -48,6 +50,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void registerForPush();
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const data = await api<{ user: SessionUser }>('/auth/me');
+    setUser(data.user);
+  }, []);
+
   const logout = useCallback(async () => {
     // While the session is still valid: the API needs an authenticated caller
     // to know whose device this is.
@@ -58,7 +65,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);
+  const value = useMemo(
+    () => ({ user, loading, login, logout, refreshUser }),
+    [user, loading, login, logout, refreshUser],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

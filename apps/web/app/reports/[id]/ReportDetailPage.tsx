@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { EMPTY_ENGAGEMENT } from '@/lib/reactions';
 import Link from 'next/link';
 import { BookOpen, Check, History, MessageSquare, Send, Sparkles, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -20,16 +21,6 @@ import api, { errorMessage } from '@/services/api';
 
 // The page is a Client Component, so the counts are not in its server payload;
 // the bar asks for them once it knows who is reading.
-const EMPTY_ENGAGEMENT = {
-  likes: 0,
-  comments: 0,
-  reshares: 0,
-  bookmarks: 0,
-  views: 0,
-  liked: false,
-  bookmarked: false,
-  reshared: false,
-};
 
 // Scribe Studio. One page that is a reader for most people and a writing desk
 // for the Scribe — the rules about who may do what are the API's (D29); this

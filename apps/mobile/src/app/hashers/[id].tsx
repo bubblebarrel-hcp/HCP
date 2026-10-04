@@ -12,6 +12,8 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
+import { SafetyMenu } from '@/components/profile/safety-menu';
+import { TaggedPhotos } from '@/components/profile/tagged-photos';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -213,6 +215,7 @@ export default function HasherProfileScreen() {
         <View style={styles.header}>
           <Avatar name={hasher.name} size={72} src={hasher.avatarUrl} position={hasher.avatarPosition} />
           <ThemedText type="title">{hasher.name}</ThemedText>
+          {hasher.username ? <ThemedText themeColor="textSecondary">@{hasher.username}</ThemedText> : null}
           {!hasher.isNamed && <ThemedText themeColor="textSecondary">Not yet named by a kennel</ThemedText>}
           {hasher.bio ? <ThemedText style={styles.bio}>{hasher.bio}</ThemedText> : null}
           <ThemedText themeColor="textSecondary">Hashing since {formatDate(hasher.joinedAt)}</ThemedText>
@@ -264,6 +267,10 @@ export default function HasherProfileScreen() {
             </Pressable>
           ))}
 
+          {!hasher.isMe && user && (
+            <SafetyMenu hasherId={hasher.id} name={hasher.name} initial={hasher.myBlock ?? null} />
+          )}
+
           {hasher.isMe && (
             <Pressable
               accessibilityRole="button"
@@ -273,6 +280,8 @@ export default function HasherProfileScreen() {
             </Pressable>
           )}
         </View>
+
+        {hasher.canSeeContent && <TaggedPhotos hasherId={hasher.id} name={hasher.name} />}
 
         {hasher.homeKennel && (
           <View style={styles.section}>

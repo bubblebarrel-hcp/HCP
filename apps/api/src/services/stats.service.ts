@@ -1,4 +1,4 @@
-import { Prisma, SubjectType } from '@prisma/client';
+import { Prisma, ReactionKind, SubjectType } from '@prisma/client';
 import prisma from '../config/prisma';
 
 // Engagement counters, read in bulk (D50).
@@ -29,7 +29,18 @@ export interface Engagement {
   liked: boolean;
   bookmarked: boolean;
   reshared: boolean;
+  // What the likes are made of (D60), and which one is this viewer's. A plain
+  // like is ON_ON, so "likes" is still the total.
+  reactions: Record<ReactionKind, number>;
+  myReaction: ReactionKind | null;
 }
+
+export const EMPTY_REACTIONS: Record<ReactionKind, number> = {
+  ON_ON: 0,
+  BEER: 0,
+  SHIGGY: 0,
+  DOWN_DOWN: 0,
+};
 
 export const EMPTY: Engagement = {
   likes: 0,
@@ -40,6 +51,8 @@ export const EMPTY: Engagement = {
   liked: false,
   bookmarked: false,
   reshared: false,
+  reactions: EMPTY_REACTIONS,
+  myReaction: null,
 };
 
 type Tx = Prisma.TransactionClient;
@@ -72,7 +85,7 @@ export async function engagementFor(
   const unique = new Map<string, SubjectRef>();
   for (const ref of refs) unique.set(subjectKey(ref.type, ref.id), ref);
   const list = [...unique.values()];
-  for (const ref of list) out.set(subjectKey(ref.type, ref.id), { ...EMPTY });
+  for (const ref of list) out.set(subjectKey(ref.type, ref.id), { ...EMPTY, reactions: { ...EMPTY_REACTIONS } });
 
   // Prisma has no tuple `IN`, and the subject types on a page are few, so the
   // filter is grouped by type: one OR arm per type, each with an id list.
@@ -91,12 +104,23 @@ export async function engagementFor(
     entry.views = row.viewerCount + row.anonViewCount;
   }
 
+  // What the likes are made of, for the whole page in one grouped read.
+  const grouped = await prisma.contentLike.groupBy({
+    by: ['subjectType', 'subjectId', 'reaction'],
+    where: { unlikedAt: null, OR: arms },
+    _count: { _all: true },
+  });
+  for (const row of grouped) {
+    const entry = out.get(subjectKey(row.subjectType, row.subjectId));
+    if (entry) entry.reactions[row.reaction] = row._count._all;
+  }
+
   if (!viewerId) return out;
 
   const [likes, bookmarks, reshares] = await Promise.all([
     prisma.contentLike.findMany({
       where: { userId: viewerId, unlikedAt: null, OR: arms },
-      select: { subjectType: true, subjectId: true },
+      select: { subjectType: true, subjectId: true, reaction: true },
     }),
     prisma.contentBookmark.findMany({
       where: { userId: viewerId, removedAt: null, OR: arms },
@@ -110,7 +134,10 @@ export async function engagementFor(
 
   for (const row of likes) {
     const e = out.get(subjectKey(row.subjectType, row.subjectId));
-    if (e) e.liked = true;
+    if (e) {
+      e.liked = true;
+      e.myReaction = row.reaction;
+    }
   }
   for (const row of bookmarks) {
     const e = out.get(subjectKey(row.subjectType, row.subjectId));
@@ -126,7 +153,7 @@ export async function engagementFor(
 
 export async function engagementOne(viewerId: string | undefined, type: SubjectType, id: string): Promise<Engagement> {
   const map = await engagementFor(viewerId, [{ type, id }]);
-  return map.get(subjectKey(type, id)) ?? { ...EMPTY };
+  return map.get(subjectKey(type, id)) ?? { ...EMPTY, reactions: { ...EMPTY_REACTIONS } };
 }
 
 // Recount a subject from its rows. Nothing calls this on a request path; it is

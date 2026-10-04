@@ -27,6 +27,7 @@ import {
 } from '@prisma/client';
 import { env } from '../src/config/env';
 import { encryptField } from '../src/utils/field-crypto';
+import { usernameFrom } from '../src/utils/entities';
 
 // Idempotent by design: every write is an upsert, or a find-then-create keyed on
 // something stable, so re-running against a populated database is safe.
@@ -60,6 +61,9 @@ async function upsertUser(p: SeedPerson) {
       passwordHash,
       platformRole: p.role ?? PlatformRole.USER,
       hashHandle: p.hashHandle,
+      // What they are @mentioned as (D59): the handle, or the part of the email
+      // before the "@" for the seeded accounts that have none.
+      username: usernameFrom(p.hashHandle) ?? p.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]+/g, '_'),
       trustLevel: TrustLevel.VERIFIED_EMAIL,
       emailVerifiedAt: new Date(),
       termsAcceptedAt: new Date(),

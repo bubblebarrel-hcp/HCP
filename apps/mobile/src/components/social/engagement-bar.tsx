@@ -9,7 +9,8 @@ import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { WEB_URL } from '@/lib/api';
 import { getEngagement, reshare, setBookmarked, setLiked, unreshare } from '@/lib/social';
-import type { Engagement, SubjectSegment } from '@/lib/types';
+import { REACTIONS, reactionLabel } from '@/lib/reactions';
+import type { Engagement, ReactionKind, SubjectSegment } from '@/lib/types';
 
 // The bar under a piece of content: like, comment, reshare, share, save, seen
 // (D50). Mirrors apps/web/components/social/EngagementBar.tsx's interaction
@@ -54,6 +55,8 @@ export function EngagementBar({
   const [commentary, setCommentary] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The hash reaction tray (D60): opened by a long press on the like button.
+  const [tray, setTray] = useState(false);
 
   async function act(optimistic: Engagement, run: () => Promise<Engagement>) {
     const previous = engagement;
@@ -75,9 +78,35 @@ export function EngagementBar({
 
   function onLike() {
     if (signedOut) return;
+    setTray(false);
     const next = !engagement.liked;
-    void act({ ...engagement, liked: next, likes: engagement.likes + (next ? 1 : -1) }, () => setLiked(segment, id, next));
+    const reactions = { ...engagement.reactions };
+    if (next) reactions.ON_ON += 1;
+    else if (engagement.myReaction) reactions[engagement.myReaction] = Math.max(0, reactions[engagement.myReaction] - 1);
+    void act(
+      { ...engagement, liked: next, likes: engagement.likes + (next ? 1 : -1), reactions, myReaction: next ? 'ON_ON' : null },
+      () => setLiked(segment, id, next),
+    );
   }
+
+  // Choosing a reaction is a like with a kind (D60): the number of likes does not
+  // change when a standing like is swapped for another.
+  function onReact(kind: ReactionKind) {
+    setTray(false);
+    if (engagement.liked && engagement.myReaction === kind) {
+      onLike();
+      return;
+    }
+    const reactions = { ...engagement.reactions };
+    if (engagement.myReaction) reactions[engagement.myReaction] = Math.max(0, reactions[engagement.myReaction] - 1);
+    reactions[kind] += 1;
+    void act(
+      { ...engagement, liked: true, likes: engagement.liked ? engagement.likes : engagement.likes + 1, reactions, myReaction: kind },
+      () => setLiked(segment, id, true, kind),
+    );
+  }
+
+  const mineReaction = REACTIONS.find((r) => r.kind === engagement.myReaction);
 
   function onBookmark() {
     if (signedOut) return;
@@ -114,15 +143,22 @@ export function EngagementBar({
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ selected: engagement.liked, disabled: busy || signedOut }}
-          accessibilityLabel={engagement.liked ? 'Unlike' : 'Like'}
+          accessibilityLabel={engagement.liked ? `Remove ${reactionLabel(engagement.myReaction)}` : 'On On! (like). Hold for more reactions.'}
+          accessibilityHint="Hold to choose a reaction"
           disabled={busy || signedOut}
           onPress={onLike}
+          onLongPress={() => setTray((open) => !open)}
+          delayLongPress={350}
           style={styles.button}>
-          <Icon
-            name={{ ios: engagement.liked ? 'heart.fill' : 'heart', android: 'favorite', web: 'favorite' }}
-            size={19}
-            color={engagement.liked ? theme.primaryStrong : theme.textSecondary}
-          />
+          {mineReaction?.emoji ? (
+            <ThemedText style={styles.emoji}>{mineReaction.emoji}</ThemedText>
+          ) : (
+            <Icon
+              name={{ ios: engagement.liked ? 'heart.fill' : 'heart', android: 'favorite', web: 'favorite' }}
+              size={19}
+              color={engagement.liked ? theme.primaryStrong : theme.textSecondary}
+            />
+          )}
           <Count value={engagement.likes} />
         </Pressable>
 
@@ -185,6 +221,25 @@ export function EngagementBar({
         )}
       </View>
 
+      {tray && !signedOut && (
+        <View style={[styles.tray, { backgroundColor: theme.card, borderColor: theme.border }]} accessibilityLabel="Reactions">
+          {REACTIONS.map((r) => (
+            <Pressable
+              key={r.kind}
+              accessibilityRole="button"
+              accessibilityLabel={r.label}
+              onPress={() => onReact(r.kind)}
+              style={[styles.trayButton, engagement.myReaction === r.kind && { backgroundColor: theme.backgroundSelected }]}>
+              {r.emoji ? (
+                <ThemedText style={styles.emoji}>{r.emoji}</ThemedText>
+              ) : (
+                <Icon name={{ ios: 'heart.fill', android: 'favorite', web: 'favorite' }} size={22} color={theme.primaryStrong} />
+              )}
+            </Pressable>
+          ))}
+        </View>
+      )}
+
       {error && <ThemedText type="small" style={{ color: theme.danger, paddingHorizontal: Spacing.three, paddingBottom: Spacing.two }}>{error}</ThemedText>}
 
       {composing && (
@@ -229,6 +284,9 @@ const styles = StyleSheet.create({
   bookmark: { marginLeft: 'auto' },
   views: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.two },
   count: { fontVariant: ['tabular-nums'] },
+  emoji: { fontSize: 18, lineHeight: 22 },
+  tray: { flexDirection: 'row', gap: Spacing.one, alignSelf: 'flex-start', marginLeft: Spacing.two, marginBottom: Spacing.one, borderWidth: 1, borderRadius: 999, padding: Spacing.one },
+  trayButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   composeBox: { borderTopWidth: 1, padding: Spacing.three, gap: Spacing.two },
   textarea: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.three, minHeight: 60, fontSize: 15 },
   composeRow: { flexDirection: 'row', gap: Spacing.two },

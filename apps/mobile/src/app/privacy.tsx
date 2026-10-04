@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { UsernameCard } from '@/components/profile/username-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { errorMessage } from '@/lib/api';
-import { deactivateAccount, deleteAccount, getPrivacy, setPrivacy } from '@/lib/social';
+import { deactivateAccount, deleteAccount, getPrivacy, setMilestoneSharing, setPrivacy } from '@/lib/social';
 import type { Audience } from '@/lib/types';
 
 // Privacy and account (D57): who sees what a hasher makes, stepping away for a
@@ -32,6 +33,8 @@ export default function PrivacyScreen() {
   const { user, logout } = useAuth();
   const [level, setLevel] = useState<Audience | null>(null);
   const [pending, setPending] = useState(0);
+  // Whether a milestone may appear in the feed as a card (D60).
+  const [milestones, setMilestones] = useState(true);
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [danger, setDanger] = useState<Danger | null>(null);
@@ -45,6 +48,7 @@ export default function PrivacyScreen() {
       const data = await getPrivacy();
       setLevel(data.profileVisibility);
       setPending(data.pendingRequests);
+      setMilestones(data.shareMilestones);
     } catch (err) {
       setNote(errorMessage(err, 'Could not load your privacy settings'));
     }
@@ -166,6 +170,40 @@ export default function PrivacyScreen() {
         </Pressable>
 
         <View style={styles.dangerBlock}>
+          <ThemedText type="smallBold">Milestones in the feed</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            When you pass 10, 50 or 100 runs, the people who can see your profile may get a card for it. Turning it off
+            only removes the card: the milestone stays on your Hash Passport.
+          </ThemedText>
+          <View style={styles.switchRow}>
+            <ThemedText style={styles.flex}>Show my milestones as cards</ThemedText>
+            <Switch
+              value={milestones}
+              accessibilityLabel="Show my milestones as cards in the feed"
+              onValueChange={(next) => {
+                setMilestones(next);
+                setMilestoneSharing(next).catch(() => setMilestones(!next));
+              }}
+            />
+          </View>
+        </View>
+
+        <UsernameCard />
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/blocked')}
+          style={({ pressed }) => [styles.row, { backgroundColor: theme.card, opacity: pressed ? 0.8 : 1 }]}>
+          <ThemedText type="smallBold">Blocked and muted</ThemedText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/photo-tags')}
+          style={({ pressed }) => [styles.row, { backgroundColor: theme.card, opacity: pressed ? 0.8 : 1 }]}>
+          <ThemedText type="smallBold">Photo tags waiting for me</ThemedText>
+        </Pressable>
+
+        <View style={styles.dangerBlock}>
           <ThemedText type="smallBold">Step away for a while</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             Deactivating takes your profile, photos, posts and reels off Shiggy Trails and signs you out. Kennel records that name
@@ -261,6 +299,7 @@ export default function PrivacyScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four },
   scroll: { padding: Spacing.three, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center', paddingBottom: Spacing.six },
   options: { gap: Spacing.two },

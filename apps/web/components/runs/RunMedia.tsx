@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { PhotoTags } from '@/components/social/PhotoTags';
 import { ACCEPTED_IMAGES, MAX_UPLOAD_BYTES, fileSize, uploadPhoto } from '@/lib/media';
 import type { MediaAsset, MediaTarget } from '@/lib/types';
 import { bleedCard } from '@/lib/utils';
@@ -219,6 +220,8 @@ export function RunMedia({
                     </div>
                   )}
                 </div>
+                {/* Who is in it, and asking somebody to be tagged (D60). */}
+                {open.moderationState === 'APPROVED' && <PhotoTags mediaId={open.id} />}
                 {canModerate && open.moderationState === 'PENDING' && (
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
                     <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden />

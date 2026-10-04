@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { EMPTY_ENGAGEMENT } from '@/lib/reactions';
 import Link from 'next/link';
 import { Ban, Banknote, CalendarDays, Check, Footprints, MapPin, Pause, Users } from 'lucide-react';
 import { toast } from 'sonner';
@@ -11,6 +12,7 @@ import { LeftNav } from '@/components/layout/LeftNav';
 import { CapsulePanel } from '@/components/capsules/CapsulePanel';
 import { ReportPanel } from '@/components/reports/ReportPanel';
 import { RunMedia } from '@/components/runs/RunMedia';
+import { RunPosts } from '@/components/runs/RunPosts';
 import { RunPoster } from '@/components/runs/RunPoster';
 import { HarePanel } from '@/components/runs/HarePanel';
 import { AttendanceCard, CircleCard, OrganiserPanel, RsvpPanel, type Send } from '@/components/runs/RunPanels';
@@ -33,16 +35,6 @@ import api, { errorMessage } from '@/services/api';
 
 // A Client Component, so the counts are not in its server payload; the bar
 // asks for them once it knows who is reading.
-const EMPTY_ENGAGEMENT = {
-  likes: 0,
-  comments: 0,
-  reshares: 0,
-  bookmarks: 0,
-  views: 0,
-  liked: false,
-  bookmarked: false,
-  reshared: false,
-};
 
 // Chapter 22 A.3, shown as progress.
 const LIFECYCLE: RunStatus[] = [
@@ -272,6 +264,7 @@ export function RunDetailPage({ id }: { id: string }) {
             target={{ type: 'RUN', id: run.id }}
             canContribute={Boolean(user) && (run.viewer.canSeeNames || run.viewer.canOperate)}
           />
+          <RunPosts runId={run.id} />
           <CircleCard run={run} send={send} />
           <ReportPanel runId={run.id} />
           <CapsulePanel runId={run.id} />

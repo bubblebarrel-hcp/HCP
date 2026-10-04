@@ -17,6 +17,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { Avatar } from '@/components/feed/avatar';
 import { AudienceChips } from '@/components/profile/audience-chips';
 import { EngagementBar } from '@/components/social/engagement-bar';
+import { RichText } from '@/components/social/rich-text';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -244,7 +245,7 @@ export default function ReelScreen() {
                 <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>{where.label}</ThemedText>
               </Pressable>
             )}
-            {reel.caption ? <ThemedText style={styles.caption}>{reel.caption}</ThemedText> : null}
+            {reel.caption ? <RichText text={reel.caption} style={styles.caption} /> : null}
           </View>
 
           {/* The pager: one item per page, in the order they were added. */}

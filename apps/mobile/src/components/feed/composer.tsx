@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { Avatar } from '@/components/feed/avatar';
 import { ReelComposer } from '@/components/feed/reel-composer';
+import { MentionInput } from '@/components/social/mention-input';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
-import type { Audience } from '@/lib/types';
+import type { Audience, TaggableRun } from '@/lib/types';
 
 // A hasher's own words, straight from the composer (D51): create-draft,
 // publish. The post stays text-only on mobile (photos on a post are still
@@ -39,19 +40,50 @@ export function Composer({
   const [audience, setAudience] = useState<Audience>('PUBLIC');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A poll (D60): the words are the question, these are the answers.
+  const [pollOn, setPollOn] = useState(false);
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [pollHours, setPollHours] = useState(24);
+  // A run the post is about (D60).
+  const [runs, setRuns] = useState<TaggableRun[]>([]);
+  const [runId, setRunId] = useState<string | null>(null);
+
+  const filled = pollOptions.map((o) => o.trim()).filter(Boolean);
+  const pollReady = !pollOn || filled.length >= 2;
+
+  // The runs worth tagging are fetched when the box opens, not for everybody who
+  // merely loads the feed.
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    api<{ items: TaggableRun[] }>('/me/taggable-runs')
+      .then((data) => alive && setRuns(data.items))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [open]);
 
   async function submit() {
     const value = body.trim();
-    if (!value) return;
+    if (!value || !pollReady) return;
     setBusy(true);
     setError(null);
     try {
       const draft = await api<{ post: { id: string } }>('/posts', {
         method: 'POST',
-        body: { body: value, visibility: audience },
+        body: {
+          body: value,
+          visibility: audience,
+          runId,
+          ...(pollOn ? { poll: { options: filled, hours: pollHours } } : {}),
+        },
       });
       await api(`/posts/${draft.post.id}/publish`, { method: 'POST' });
       setBody('');
+      setPollOn(false);
+      setPollOptions(['', '']);
+      setRunId(null);
       setOpen(false);
       onPosted();
     } catch (err) {
@@ -96,13 +128,13 @@ export function Composer({
             <ThemedText type="smallBold">New post</ThemedText>
             <Pressable
               accessibilityRole="button"
-              disabled={busy || !body.trim()}
+              disabled={busy || !body.trim() || !pollReady}
               onPress={submit}
               style={styles.headerButton}>
               {busy ? (
                 <ActivityIndicator color={theme.primary} />
               ) : (
-                <ThemedText type="smallBold" style={{ color: body.trim() ? theme.primaryStrong : theme.textSecondary }}>
+                <ThemedText type="smallBold" style={{ color: body.trim() && pollReady ? theme.primaryStrong : theme.textSecondary }}>
                   Post
                 </ThemedText>
               )}
@@ -137,16 +169,82 @@ export function Composer({
             <ThemedText type="small" themeColor="textSecondary">
               {AUDIENCES.find((a) => a.value === audience)?.hint}
             </ThemedText>
-            <TextInput
+            <MentionInput
               value={body}
               onChangeText={setBody}
-              placeholder="What's on trail?"
+              placeholder="What's on trail? Use # for a tag, @ for a hasher."
               placeholderTextColor={theme.textSecondary}
               multiline
               autoFocus
               maxLength={5000}
               style={[styles.input, { color: theme.text }]}
             />
+
+            {runs.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.runRow} style={styles.runScroll}>
+                {runs.map((run) => {
+                  const selected = runId === run.id;
+                  return (
+                    <Pressable
+                      key={run.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={`Tag ${run.kennel.shortName} run ${run.runNumber ?? ''}`}
+                      onPress={() => setRunId(selected ? null : run.id)}
+                      style={[styles.chip, { borderColor: selected ? theme.primary : theme.border, backgroundColor: theme.card }]}>
+                      <ThemedText type="smallBold" style={{ color: selected ? theme.primaryStrong : theme.textSecondary }}>
+                        {run.kennel.shortName} #{run.runNumber ?? '—'}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: pollOn }}
+              onPress={() => setPollOn((on) => !on)}
+              style={[styles.chip, styles.pollToggle, { borderColor: pollOn ? theme.primary : theme.border, backgroundColor: theme.card }]}>
+              <ThemedText type="smallBold" style={{ color: pollOn ? theme.primaryStrong : theme.textSecondary }}>
+                {pollOn ? 'Poll on' : 'Add a poll'}
+              </ThemedText>
+            </Pressable>
+            {pollOn && (
+              <View style={styles.poll}>
+                <ThemedText type="small" themeColor="textSecondary">Your words are the question. Add two to five answers.</ThemedText>
+                {pollOptions.map((option, index) => (
+                  <TextInput
+                    key={index}
+                    value={option}
+                    onChangeText={(next) => setPollOptions((cur) => cur.map((o, i) => (i === index ? next.slice(0, 80) : o)))}
+                    placeholder={`Answer ${index + 1}`}
+                    placeholderTextColor={theme.textSecondary}
+                    accessibilityLabel={`Answer ${index + 1}`}
+                    style={[styles.pollInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
+                  />
+                ))}
+                <View style={styles.runRow}>
+                  {pollOptions.length < 5 && (
+                    <Pressable accessibilityRole="button" onPress={() => setPollOptions((cur) => [...cur, ''])} style={[styles.chip, { borderColor: theme.border }]}>
+                      <ThemedText type="smallBold">+ Answer</ThemedText>
+                    </Pressable>
+                  )}
+                  {[1, 24, 72, 168].map((h) => (
+                    <Pressable
+                      key={h}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: pollHours === h }}
+                      onPress={() => setPollHours(h)}
+                      style={[styles.chip, { borderColor: pollHours === h ? theme.primary : theme.border }]}>
+                      <ThemedText type="smallBold" style={{ color: pollHours === h ? theme.primaryStrong : theme.textSecondary }}>
+                        {h === 1 ? '1 h' : h === 24 ? '1 day' : h === 72 ? '3 days' : '7 days'}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
             {error && <ThemedText style={{ color: theme.danger }}>{error}</ThemedText>}
             <ThemedText type="small" themeColor="textSecondary">
               Words only here. For a video or photos, post a reel.
@@ -196,7 +294,12 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.three, paddingTop: Spacing.six, paddingBottom: Spacing.two },
   headerButton: { minHeight: 44, minWidth: 60, justifyContent: 'center' },
   modalBody: { flex: 1, padding: Spacing.three, gap: Spacing.two },
-  input: { flex: 1, fontSize: 18, textAlignVertical: 'top' },
+  input: { flex: 1, minHeight: 90, fontSize: 18, textAlignVertical: 'top' },
+  runScroll: { flexGrow: 0 },
+  runRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, alignItems: 'center' },
+  pollToggle: { alignSelf: 'flex-start' },
+  poll: { gap: Spacing.two },
+  pollInput: { minHeight: 44, borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, fontSize: 16 },
   audience: { flexDirection: 'row', gap: Spacing.two },
   chip: { minHeight: 36, paddingHorizontal: Spacing.three, borderRadius: 18, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
 });

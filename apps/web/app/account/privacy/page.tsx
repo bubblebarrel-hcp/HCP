@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, UserCheck } from 'lucide-react';
+import { ArrowLeft, Camera, ShieldBan, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { AudiencePicker } from '@/components/profile/AudiencePicker';
@@ -22,6 +22,8 @@ export default function PrivacyPage() {
   const [level, setLevel] = useState<Audience>('PUBLIC');
   const [pending, setPending] = useState(0);
   const [saving, setSaving] = useState(false);
+  // Whether a milestone may appear in the feed as a card (D60).
+  const [milestones, setMilestones] = useState(true);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/auth/login');
@@ -33,9 +35,10 @@ export default function PrivacyPage() {
     if (!user) return;
     let alive = true;
     api
-      .get<{ data: { profileVisibility: Audience; pendingRequests: number } }>('/me/privacy')
+      .get<{ data: { profileVisibility: Audience; pendingRequests: number; shareMilestones: boolean } }>('/me/privacy')
       .then((res) => {
         if (!alive) return;
+        setMilestones(res.data.data.shareMilestones);
         setLevel(res.data.data.profileVisibility);
         setPending(res.data.data.pendingRequests);
       })
@@ -68,6 +71,17 @@ export default function PrivacyPage() {
       toast.error(errorMessage(err, 'Could not change your privacy'));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function changeMilestones(next: boolean) {
+    setMilestones(next);
+    try {
+      await api.patch('/me/privacy', { shareMilestones: next });
+      toast.success(next ? 'Your milestones can show in the feed.' : 'Your milestones stay off the feed.');
+    } catch (err) {
+      setMilestones(!next);
+      toast.error(errorMessage(err, 'Could not save that'));
     }
   }
 
@@ -130,6 +144,51 @@ export default function PrivacyPage() {
             <Link href="/account/follow-requests" data-testid="to-follow-requests">
               <UserCheck className="h-4 w-4" aria-hidden />
               Follow requests{pending > 0 ? ` (${pending})` : ''}
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="privacy-milestones">
+        <CardHeader>
+          <CardTitle>Milestones in the feed</CardTitle>
+          <CardDescription>
+            When you pass 10, 50 or 100 runs, the people who can see your profile may get a card for it. Turning it
+            off only removes the card: the milestone stays on your Hash Passport.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <label className="flex items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={milestones}
+              onChange={(event) => void changeMilestones(event.target.checked)}
+              className="h-4 w-4 accent-[var(--color-primary)]"
+              data-testid="milestones-toggle"
+            />
+            Show my milestones as cards in the feed
+          </label>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="privacy-safety">
+        <CardHeader>
+          <CardTitle>Blocking and tags</CardTitle>
+          <CardDescription>
+            Who you have blocked or muted, and photo tags waiting for your yes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/account/blocked" data-testid="to-blocked">
+              <ShieldBan className="h-4 w-4" aria-hidden />
+              Blocked and muted
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/account/photo-tags" data-testid="to-photo-tags">
+              <Camera className="h-4 w-4" aria-hidden />
+              Photo tags
             </Link>
           </Button>
         </CardContent>

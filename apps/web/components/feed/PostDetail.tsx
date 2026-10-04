@@ -3,6 +3,9 @@ import { Avatar } from '@/components/Avatar';
 import { Card } from '@/components/ui/card';
 import { AudienceControl } from '@/components/profile/AudienceControl';
 import { EngagementBar } from '@/components/social/EngagementBar';
+import { RichText } from '@/components/social/RichText';
+import { LinkPreviewCard } from '@/components/social/LinkPreviewCard';
+import { PollCard } from '@/components/social/PollCard';
 import type { HasherPost } from '@/lib/types';
 import { brandColor, cn, formatDate } from '@/lib/utils';
 
@@ -43,8 +46,10 @@ export function PostDetail({ post }: { post: HasherPost }) {
         </div>
 
         <p className="mt-3 whitespace-pre-line leading-relaxed text-[15px]" data-testid="post-body">
-          {post.body}
+          <RichText text={post.body} />
         </p>
+        {post.poll && <PollCard postId={post.id} initial={post.poll} />}
+        {post.linkPreview && <LinkPreviewCard preview={post.linkPreview} />}
       </div>
 
       {post.photos.length > 0 && (

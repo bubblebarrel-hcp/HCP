@@ -8,6 +8,7 @@ import { Composer, WelcomeCard } from '@/components/feed/composer';
 import { FeedCard } from '@/components/feed/feed-card';
 import { KennelStrip } from '@/components/feed/kennel-strip';
 import { PullToRefresh } from '@/components/feed/pull-to-refresh';
+import { TrendingTags } from '@/components/social/trending-tags';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -109,6 +110,7 @@ export default function HomeScreen() {
                         avatarPosition={user.avatarPosition}
                         onPosted={() => load(scope)}
                       /> : <WelcomeCard onLogin={() => router.push('/account')} />}
+                    <TrendingTags />
                     {kennels.length > 0 && (
                       <View style={{ backgroundColor: theme.card }}>
                         <KennelStrip kennels={kennels} />

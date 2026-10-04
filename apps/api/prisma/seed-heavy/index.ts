@@ -52,6 +52,7 @@ import {
 } from '@prisma/client';
 import { env } from '../../src/config/env';
 import { encryptField } from '../../src/utils/field-crypto';
+import { usernameFrom } from '../../src/utils/entities';
 import { rebuildPassport } from '../../src/services/passport.service';
 import { generateBranding, generatePhotos, generateVideos, type SeedImage } from './assets';
 import {
@@ -419,6 +420,13 @@ async function main() {
       const passportRows: Prisma.HashPassportCreateManyInput[] = [];
       const hashNameRows: Prisma.HashNameCreateManyInput[] = [];
 
+      // Usernames already spoken for: the base seed's and the ones handed out here.
+      const usernamesTaken = new Set(
+        (await db.user.findMany({ where: { username: { not: null } }, select: { username: true } })).map(
+          (u) => u.username as string,
+        ),
+      );
+
       const homePlan: string[] = [];
       for (const [slug, n] of HOME_WEIGHTS) for (let i = 0; i < n; i++) homePlan.push(slug);
       for (const [i, slug] of shuffled(homePlan).entries()) {
@@ -432,8 +440,12 @@ async function main() {
         const id = randomUUID();
         const email = `member${pad2(i + 1)}@hcp.test`;
         const createdAt = daysAgo(int(40, 900));
+        // @mention name (D59): the handle when it makes a free one, else memberNN.
+        const fromHandle = usernameFrom(handle);
+        const username = fromHandle && !usernamesTaken.has(fromHandle) ? fromHandle : `member${pad2(i + 1)}`;
+        usernamesTaken.add(username);
         userRows.push({
-          id, email, passwordHash, hashHandle: handle, trustLevel: chance(0.6) ? TrustLevel.VERIFIED_MEMBER : TrustLevel.VERIFIED_EMAIL,
+          id, email, passwordHash, hashHandle: handle, username, trustLevel: chance(0.6) ? TrustLevel.VERIFIED_MEMBER : TrustLevel.VERIFIED_EMAIL,
           emailVerifiedAt: createdAt, termsAcceptedAt: createdAt, bio: pick(BIOS), homeKennelId: kennel.id,
           profileVisibility: weighted<Audience>([[Audience.PUBLIC, 7], [Audience.FOLLOWERS, 2], [Audience.ONLY_ME, 1]]),
           lastLoginAt: daysAgo(int(0, 20)), createdAt,
@@ -459,7 +471,7 @@ async function main() {
       for (const [tag, first, status, verified] of edge) {
         const id = randomUUID();
         userRows.push({
-          id, email: `${tag}@hcp.test`, passwordHash, status, trustLevel: verified ? TrustLevel.VERIFIED_EMAIL : TrustLevel.UNVERIFIED,
+          id, email: `${tag}@hcp.test`, username: tag, passwordHash, status, trustLevel: verified ? TrustLevel.VERIFIED_EMAIL : TrustLevel.UNVERIFIED,
           emailVerifiedAt: verified ? daysAgo(100) : null, termsAcceptedAt: daysAgo(100), deactivatedAt: status === AccountStatus.DEACTIVATED ? daysAgo(10) : null,
         });
         personRows.push({

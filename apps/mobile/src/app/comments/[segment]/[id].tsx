@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/feed/avatar';
+import { MentionInput } from '@/components/social/mention-input';
+import { RichText } from '@/components/social/rich-text';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -32,9 +34,13 @@ function CommentRow({ comment, reply }: { comment: ContentComment; reply?: boole
       <View style={styles.commentBody}>
         <View style={[styles.bubble, { backgroundColor: theme.backgroundElement }]}>
           <ThemedText type="smallBold">{comment.author?.name ?? 'A hasher'}</ThemedText>
-          <ThemedText style={gone ? { color: theme.textSecondary, fontStyle: 'italic' } : undefined}>
-            {gone ? (comment.status === 'DELETED' ? 'Comment deleted' : 'Comment removed') : comment.body}
-          </ThemedText>
+          {gone ? (
+            <ThemedText style={{ color: theme.textSecondary, fontStyle: 'italic' }}>
+              {comment.status === 'DELETED' ? 'Comment deleted' : 'Comment removed'}
+            </ThemedText>
+          ) : (
+            <RichText text={comment.body ?? ''} />
+          )}
         </View>
         <View style={styles.metaRow}>
           <ThemedText type="small" themeColor="textSecondary">{timeAgo(comment.createdAt)}</ThemedText>
@@ -113,10 +119,11 @@ export default function CommentsScreen() {
 
           {user ? (
             <View style={[styles.composer, { borderTopColor: theme.border, backgroundColor: theme.card }]}>
-              <TextInput
+              <MentionInput
                 value={body}
                 onChangeText={setBody}
-                placeholder="Add a comment…"
+                suggestionsAbove
+                placeholder="Add a comment… @ to mention"
                 placeholderTextColor={theme.textSecondary}
                 multiline
                 style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement }]}

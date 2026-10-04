@@ -4,6 +4,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Icon } from '@/components/icon';
+import { RunPosts } from '@/components/runs/run-posts';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -177,6 +178,8 @@ export default function RunDetailScreen() {
               {busy ? <ActivityIndicator color={theme.onPrimary} /> : <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Check in</ThemedText>}
             </Pressable>
           ) : null}
+
+          <RunPosts runId={run.id} />
 
           <Pressable
             accessibilityRole="link"

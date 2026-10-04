@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { FeedLayout } from '@/components/layout/FeedLayout';
 import { LeftNav } from '@/components/layout/LeftNav';
 import { HasherBody } from '@/components/profile/HasherBody';
+import { SafetyMenu } from '@/components/profile/SafetyMenu';
 import { publicGet } from '@/lib/server-api';
 import type { HasherPhotoPage, HasherProfile, Page, Reel } from '@/lib/types';
 import { brandColor, cn } from '@/lib/utils';
@@ -68,6 +69,11 @@ export default async function HasherPage({ params }: { params: Promise<{ id: str
             <h1 className="text-2xl font-semibold" data-testid="hasher-name">
               {hasher.name}
             </h1>
+            {hasher.username && (
+              <p className="text-sm text-muted-foreground" data-testid="hasher-username">
+                @{hasher.username}
+              </p>
+            )}
             {!hasher.isNamed && (
               // "Just <firstName>" is not a hash name; saying so is kinder than
               // letting it read as one (D11).
@@ -77,6 +83,7 @@ export default async function HasherPage({ params }: { params: Promise<{ id: str
         </ProfileBranding>
         <div className="px-4 pb-4">
           {hasher.bio && <p className="whitespace-pre-line leading-relaxed text-[15px]">{hasher.bio}</p>}
+          <SafetyMenu hasherId={hasher.id} name={hasher.name} />
 
           {hasher.kennels.length > 0 && (
             <div className="mt-4">

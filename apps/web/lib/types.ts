@@ -15,6 +15,8 @@ export interface SessionUser {
   status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
   trustLevel: string;
   hashHandle: string | null;
+  // What they are @mentioned as (D59); null only after the account is deleted.
+  username: string | null;
   // hashHandle, or "Just <firstName>" (D11)
   displayName: string;
   avatarUrl: string | null;
@@ -1038,6 +1040,7 @@ export interface SearchReportHit {
 export interface SearchHasherHit {
   id: string;
   name: string;
+  username: string | null;
   avatarUrl: string | null;
   homeKennel: FeedKennel | null;
 }
@@ -1056,6 +1059,8 @@ export interface SearchResults {
   reports: SearchReportHit[];
   hashers: SearchHasherHit[];
   capsules: SearchCapsuleHit[];
+  // Hashtags with something public under them (D59).
+  tags: { tag: string; count: number }[];
   total: number;
 }
 
@@ -1124,6 +1129,18 @@ export type FeedItem =
       photos: PostPhoto[];
       kennel: FeedKennel | null;
       run: { id: string; runNumber: number | null; title: string | null } | null;
+      poll: PostPoll | null;
+      linkPreview: LinkPreview | null;
+    }
+  | {
+      // A hasher passing 10, 50, 100 runs (D60). News, so it has no engagement bar.
+      kind: 'MILESTONE';
+      id: string;
+      at: string;
+      threshold: number;
+      hasher: { id: string; name: string; avatarUrl: string | null };
+      run: { id: string; runNumber: number | null; title: string | null } | null;
+      kennel: FeedKennel | null;
     }
   | {
       // Somebody passing on somebody else's post, with something of their own
@@ -1208,6 +1225,9 @@ export type SubjectType = 'REEL' | 'POST' | 'TRAIL_REPORT' | 'MEDIA_ASSET' | 'RU
 
 // What people have done to a piece of content, and what this viewer has done.
 // `views` is unique signed-in viewers plus anonymous opens.
+// What a like can be (D60). ON_ON is the plain like.
+export type ReactionKind = 'ON_ON' | 'BEER' | 'SHIGGY' | 'DOWN_DOWN';
+
 export interface Engagement {
   likes: number;
   comments: number;
@@ -1217,6 +1237,9 @@ export interface Engagement {
   liked: boolean;
   bookmarked: boolean;
   reshared: boolean;
+  // What the likes are made of, and which one is this viewer's (D60).
+  reactions: Record<ReactionKind, number>;
+  myReaction: ReactionKind | null;
 }
 
 export interface EngagementDetail extends Engagement {
@@ -1319,9 +1342,53 @@ export interface FollowRequest {
 
 // The public face of a hasher (D11): handle, picture, words, kennels. Never
 // biodata.
+export type BlockKind = 'BLOCK' | 'MUTE';
+
+export interface BlockedHasher {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  kind: BlockKind;
+  since: string;
+}
+
+export interface PhotoTag {
+  id: string;
+  status: 'PENDING' | 'APPROVED';
+  user: { id: string; name: string; avatarUrl: string | null };
+  canRemove: boolean;
+}
+
+export interface PendingPhotoTag {
+  id: string;
+  createdAt: string;
+  photo: { id: string; url: string; thumbnailUrl: string | null; caption: string | null };
+  by: { id: string; name: string };
+}
+
+export interface MentionItem {
+  id: string;
+  createdAt: string;
+  in: 'POST' | 'REEL' | 'COMMENT';
+  segment: SubjectSegment;
+  targetId: string;
+  excerpt: string;
+  by: { id: string; name: string; avatarUrl: string | null };
+}
+
+export interface TaggableRun {
+  id: string;
+  runNumber: number | null;
+  title: string | null;
+  startsAt: string;
+  kennel: { id: string; slug: string; shortName: string };
+}
+
 export interface HasherProfile {
   id: string;
   name: string;
+  // What they are @mentioned as (D59).
+  username: string | null;
   isNamed: boolean;
   avatarUrl: string | null;
   avatarPosition: string | null;
@@ -1398,6 +1465,26 @@ export interface PostPhoto {
 }
 
 // Always public once published (D51), so there is no visibility to choose.
+// A poll on a post (D60). Results are null until this viewer has voted, the poll
+// has closed, or the viewer wrote it.
+export interface PostPoll {
+  id: string;
+  closesAt: string;
+  closed: boolean;
+  totalVotes: number;
+  myVote: string | null;
+  options: { id: string; text: string; votes: number | null; share: number | null }[];
+}
+
+// What a pasted link looks like, read by the server (D60).
+export interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  siteName: string | null;
+}
+
 export interface HasherPost {
   id: string;
   body: string;
@@ -1413,5 +1500,7 @@ export interface HasherPost {
   run: { id: string; runNumber: number | null; title: string | null } | null;
   photos: PostPhoto[];
   engagement: Engagement;
+  poll: PostPoll | null;
+  linkPreview: LinkPreview | null;
   isMine: boolean;
 }

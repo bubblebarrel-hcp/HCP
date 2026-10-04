@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import { TrendingTags } from '@/components/social/TrendingTags';
 
 // Placeholder advert slots for the right column of pages that have no rail of
 // their own. Dummy artwork from /public/ads and example.com links until real
@@ -12,6 +13,7 @@ const ads = [
 export function AdRail() {
   return (
     <div className="space-y-4" data-testid="ad-rail">
+      <TrendingTags />
       <h2 className="px-2 text-[15px] font-semibold text-muted-foreground">Sponsored</h2>
       <ul className="space-y-4">
         {ads.map((ad) => (

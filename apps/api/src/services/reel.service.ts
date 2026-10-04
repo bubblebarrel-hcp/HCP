@@ -10,6 +10,8 @@ import {
 import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
 import { activeFollowSet, audienceAllows, contentVisibleAuthors } from './audience.service';
+import { hiddenFor } from './block.service';
+import { syncEntities, taggedIds } from './entity.service';
 import * as follows from './follow.service';
 import { type Actor, assertKennelPermission, resolveKennelContext } from './permission.service';
 import { recordAudit, recordEvent } from './record.service';
@@ -61,6 +63,15 @@ export function feedReelWhere(now = new Date()): Prisma.ReelWhereInput {
     pinnedAt: null,
     publishedAt: { gt: new Date(now.getTime() - REEL_LIFETIME_MS) },
   };
+}
+
+// Authors a viewer has muted, as a clause to AND in. Rail authors are an explicit
+// list, so there it is subtracted from the list rather than added beside it.
+async function mutedAuthorsWhere(viewerId: string | undefined, rail: string[] | null): Promise<Prisma.ReelWhereInput> {
+  const muted = [...(await hiddenFor(viewerId)).muted];
+  if (muted.length === 0) return {};
+  if (rail) return { authorId: { in: rail.filter((id) => !muted.includes(id)) } };
+  return { NOT: { authorId: { in: muted } } };
 }
 
 export interface ReelInput {
@@ -348,6 +359,12 @@ export async function publish(actor: Actor, reelId: string) {
         itemCount: ready.length,
       },
     });
+    // Its tags go under it and the people its caption names are told (D59).
+    await syncEntities(tx, {
+      subject: { type: SubjectType.REEL, id: reel.id },
+      authorId: actor.id,
+      text: row.caption,
+    });
     await recordAudit(tx, {
       actorId: actor.id,
       action: 'reel.publish',
@@ -370,13 +387,25 @@ export async function updateDraft(actor: Actor, reelId: string, input: ReelInput
   if (reel.status === S.REMOVED) throw ApiError.badRequest('That reel was taken down.', 'REEL_REMOVED');
   if (reel.status === S.DELETED) throw ApiError.notFound('Reel not found');
 
-  const updated = await prisma.reel.update({
-    where: { id: reel.id },
-    data: {
-      ...(input.caption !== undefined ? { caption: input.caption?.trim() || null } : {}),
-      ...(input.visibility ? { visibility: input.visibility } : {}),
-    },
-    select: { ...reelSelect, authorId: true, kennelId: true, runId: true },
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.reel.update({
+      where: { id: reel.id },
+      data: {
+        ...(input.caption !== undefined ? { caption: input.caption?.trim() || null } : {}),
+        ...(input.visibility ? { visibility: input.visibility } : {}),
+      },
+      select: { ...reelSelect, authorId: true, kennelId: true, runId: true },
+    });
+    // A draft is indexed when it publishes; a published reel's caption is read
+    // again when it changes (D59).
+    if (input.caption !== undefined && reel.status === S.PUBLISHED) {
+      await syncEntities(tx, {
+        subject: { type: SubjectType.REEL, id: reel.id },
+        authorId: actor.id,
+        text: row.caption,
+      });
+    }
+    return row;
   });
   return serializeOne(updated, actor.id);
 }
@@ -569,9 +598,11 @@ export async function remove(actor: Actor, reelId: string, reason: string) {
 // reels are few enough that this stays cheap.
 export async function listPublished(
   actor: Actor | undefined,
-  opts: { page: number; limit: number; kennelSlug?: string; authorId?: string },
+  opts: { page: number; limit: number; kennelSlug?: string; authorId?: string; tag?: string },
 ) {
-  const isRail = !opts.authorId && !opts.kennelSlug;
+  // A hashtag page is not the rail: it is everybody's reels with that tag, not
+  // the people the viewer follows (D59).
+  const isRail = !opts.authorId && !opts.kennelSlug && !opts.tag;
   const railAuthors =
     actor && isRail ? [actor.id, ...(await follows.followedBy(actor.id)).userIds] : null;
 
@@ -582,6 +613,9 @@ export async function listPublished(
     ...(opts.kennelSlug ? { kennel: { slug: opts.kennelSlug } } : {}),
     ...(opts.authorId ? { authorId: opts.authorId } : {}),
     ...(railAuthors ? { authorId: { in: railAuthors } } : {}),
+    ...(opts.tag ? { id: { in: await taggedIds(SubjectType.REEL, opts.tag) } } : {}),
+    // Muted hashers leave the lists (D60); their own page still shows them.
+    ...(opts.authorId ? {} : await mutedAuthorsWhere(actor?.id, railAuthors)),
     // Nobody signed out can be a follower or the author, so only a public reel
     // can reach them; cheaper to say so in the query than to fetch and drop.
     ...(actor ? {} : { visibility: Audience.PUBLIC }),

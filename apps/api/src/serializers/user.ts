@@ -13,6 +13,7 @@ export const sessionUserSelect = {
   status: true,
   trustLevel: true,
   hashHandle: true,
+  username: true,
   avatarUrl: true,
   avatarPosition: true,
   bannerUrl: true,
@@ -36,6 +37,8 @@ export function serializeSessionUser(user: SessionUserRow) {
     status: user.status,
     trustLevel: user.trustLevel,
     hashHandle: user.hashHandle,
+    // What they are @mentioned as (D59).
+    username: user.username,
     displayName: displayName(user.hashHandle, user.person?.firstName),
     avatarUrl: user.avatarUrl,
     avatarPosition: user.avatarPosition,

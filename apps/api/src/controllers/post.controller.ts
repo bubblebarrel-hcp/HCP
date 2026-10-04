@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as posts from '../services/post.service';
+import * as polls from '../services/poll.service';
 import { ApiError, ok } from '../utils/http';
 
 // D51. Thin, like every other controller here.
@@ -12,13 +13,15 @@ const actor = (req: Request) => {
 const viewer = (req: Request) => (req.user ? { id: req.user.id, role: req.user.role } : undefined);
 
 export async function list(req: Request, res: Response) {
-  const { page, limit, kennelSlug, authorId } = req.query as unknown as {
+  const { page, limit, kennelSlug, authorId, tag, runId } = req.query as unknown as {
     page: number;
     limit: number;
     kennelSlug?: string;
     authorId?: string;
+    tag?: string;
+    runId?: string;
   };
-  return ok(res, await posts.listPublished(viewer(req), { page, limit, kennelSlug, authorId }));
+  return ok(res, await posts.listPublished(viewer(req), { page, limit, kennelSlug, authorId, tag, runId }));
 }
 
 export async function detail(req: Request, res: Response) {
@@ -43,4 +46,9 @@ export async function archive(req: Request, res: Response) {
 
 export async function remove(req: Request, res: Response) {
   return ok(res, { post: await posts.remove(actor(req), req.params.id, req.body.reason) });
+}
+
+// D60. Answering a poll on a post.
+export async function pollVote(req: Request, res: Response) {
+  return ok(res, await polls.vote(actor(req), req.params.id, req.body.optionId));
 }

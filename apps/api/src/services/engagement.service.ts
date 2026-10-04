@@ -1,7 +1,9 @@
-import { CommentStatus, Prisma, SubjectType } from '@prisma/client';
+import { CommentStatus, Prisma, ReactionKind, SubjectType } from '@prisma/client';
 import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
 import { type Actor, assertKennelPermission, resolveKennelContext } from './permission.service';
+import { listHiddenIds } from './block.service';
+import { syncEntities } from './entity.service';
 import { recordAudit, recordEvent } from './record.service';
 import { publicName, userPublicSelect } from './run.service';
 import * as stats from './stats.service';
@@ -37,36 +39,46 @@ async function noteLike(
   actor: Actor,
   subject: SubjectContext,
   eventType: 'ContentLiked' | 'ContentUnliked',
+  reaction: ReactionKind = ReactionKind.ON_ON,
 ) {
   return recordEvent(tx, {
     eventType,
     aggregateType: subject.type,
     aggregateId: subject.id,
     actorId: actor.id,
-    payload: { subjectType: subject.type, authorId: subject.authorId, kennelId: subject.kennelId },
+    payload: { subjectType: subject.type, authorId: subject.authorId, kennelId: subject.kennelId, reaction },
   });
 }
 
 // ─── Like ───
 
-export async function like(actor: Actor, type: SubjectType, id: string) {
+export async function like(actor: Actor, type: SubjectType, id: string, reaction: ReactionKind = ReactionKind.ON_ON) {
   const subject = await resolveSubject(actor, type, id);
 
   const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.contentLike.findUnique({
       where: { userId_subjectType_subjectId: { userId: actor.id, subjectType: type, subjectId: id } },
-      select: { id: true, unlikedAt: true },
+      select: { id: true, unlikedAt: true, reaction: true },
     });
     // Already liked: say so and change nothing, rather than double-counting.
-    if (existing && !existing.unlikedAt) return { changed: false };
+    // A different reaction on a standing like swaps it (D60): the number of
+    // likes is the same, and nobody is told a second time.
+    if (existing && !existing.unlikedAt) {
+      if (existing.reaction === reaction) return { changed: false };
+      await tx.contentLike.update({ where: { id: existing.id }, data: { reaction } });
+      return { changed: true };
+    }
 
     if (existing) {
-      await tx.contentLike.update({ where: { id: existing.id }, data: { unlikedAt: null, likedAt: new Date() } });
+      await tx.contentLike.update({
+        where: { id: existing.id },
+        data: { unlikedAt: null, likedAt: new Date(), reaction },
+      });
     } else {
-      await tx.contentLike.create({ data: { userId: actor.id, subjectType: type, subjectId: id } });
+      await tx.contentLike.create({ data: { userId: actor.id, subjectType: type, subjectId: id, reaction } });
     }
     await stats.bump(tx, type, id, 'likeCount', 1);
-    await noteLike(tx, actor, subject, 'ContentLiked');
+    await noteLike(tx, actor, subject, 'ContentLiked', reaction);
     return { changed: true };
   });
 
@@ -391,7 +403,14 @@ export async function listComments(
 ) {
   await resolveSubject(actor, type, id);
 
-  const where: Prisma.ContentCommentWhereInput = { subjectType: type, subjectId: id, parentId: null };
+  // Comments by hashers this reader blocked or muted are not shown to them (D60).
+  const hiddenIds = [...(await listHiddenIds(actor?.id))];
+  const where: Prisma.ContentCommentWhereInput = {
+    subjectType: type,
+    subjectId: id,
+    parentId: null,
+    ...(hiddenIds.length ? { authorId: { notIn: hiddenIds } } : {}),
+  };
   const [roots, total] = await prisma.$transaction([
     prisma.contentComment.findMany({
       where,
@@ -430,7 +449,11 @@ export async function listReplies(actor: Actor | undefined, commentId: string, o
   // Resolving the comment resolves what it is about, so a reply thread under a
   // members-only run is as private as the run.
   await resolveSubject(actor, SubjectType.COMMENT, commentId);
-  const where: Prisma.ContentCommentWhereInput = { parentId: commentId };
+  const hiddenIds = [...(await listHiddenIds(actor?.id))];
+  const where: Prisma.ContentCommentWhereInput = {
+    parentId: commentId,
+    ...(hiddenIds.length ? { authorId: { notIn: hiddenIds } } : {}),
+  };
   const [rows, total] = await prisma.$transaction([
     prisma.contentComment.findMany({
       where,
@@ -458,10 +481,13 @@ export async function addComment(
   // One level deep. A reply to a reply attaches to the same root, so a thread
   // is always two levels and can be read without recursion.
   let parentId: string | null = null;
+  // Who is already told about this comment, so a mention does not tell them twice:
+  // a reply answers its parent's author, a top-level comment is on somebody's thing.
+  let alreadyTold: string | null = subject.authorId;
   if (input.parentId) {
     const parent = await prisma.contentComment.findUnique({
       where: { id: input.parentId },
-      select: { id: true, parentId: true, subjectType: true, subjectId: true, status: true },
+      select: { id: true, parentId: true, subjectType: true, subjectId: true, status: true, authorId: true },
     });
     if (!parent) throw ApiError.notFound('Comment not found');
     if (parent.subjectType !== type || parent.subjectId !== id) {
@@ -471,6 +497,7 @@ export async function addComment(
       throw ApiError.badRequest('That comment is gone.', 'PARENT_GONE');
     }
     parentId = parent.parentId ?? parent.id;
+    alreadyTold = parent.authorId;
   }
 
   const row = await prisma.$transaction(async (tx) => {
@@ -495,6 +522,15 @@ export async function addComment(
         kennelId: subject.kennelId,
       },
     });
+    // Tags and mentions in the comment (D59). A mention opens the thing the
+    // comment is on, because a comment has no page of its own.
+    await syncEntities(tx, {
+      subject: { type: SubjectType.COMMENT, id: created.id },
+      home: { type: subject.type, id: subject.id },
+      authorId: actor.id,
+      text: body,
+      alsoNotified: alreadyTold ? [alreadyTold] : [],
+    });
     return created;
   });
 
@@ -505,7 +541,7 @@ export async function editComment(actor: Actor, commentId: string, body: string)
   if (!isUuid(commentId)) throw ApiError.notFound('Comment not found');
   const comment = await prisma.contentComment.findUnique({
     where: { id: commentId },
-    select: { id: true, authorId: true, status: true },
+    select: { id: true, authorId: true, status: true, subjectType: true, subjectId: true },
   });
   if (!comment) throw ApiError.notFound('Comment not found');
   if (comment.authorId !== actor.id) throw ApiError.forbidden('Only the author edits their comment.', 'NOT_THE_AUTHOR');
@@ -515,10 +551,20 @@ export async function editComment(actor: Actor, commentId: string, body: string)
   if (!trimmed) throw ApiError.badRequest('Say something.', 'COMMENT_EMPTY');
   if (trimmed.length > MAX_COMMENT) throw ApiError.badRequest('That is too long for a comment.', 'COMMENT_TOO_LONG');
 
-  const row = await prisma.contentComment.update({
-    where: { id: commentId },
-    data: { body: trimmed, editedAt: new Date() },
-    select: commentSelect,
+  const row = await prisma.$transaction(async (tx) => {
+    const updated = await tx.contentComment.update({
+      where: { id: commentId },
+      data: { body: trimmed, editedAt: new Date() },
+      select: commentSelect,
+    });
+    // Only whoever the edit newly names is told (D59).
+    await syncEntities(tx, {
+      subject: { type: SubjectType.COMMENT, id: commentId },
+      home: { type: comment.subjectType, id: comment.subjectId },
+      authorId: actor.id,
+      text: trimmed,
+    });
+    return updated;
   });
   return (await serializeThread([row], actor.id))[0];
 }

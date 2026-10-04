@@ -3,6 +3,10 @@ import { Beer, BookOpen, CalendarDays, Camera, MapPin, Megaphone, MessageSquare,
 import { Avatar } from '@/components/Avatar';
 import { Card } from '@/components/ui/card';
 import { EngagementBar } from '@/components/social/EngagementBar';
+import { RichText } from '@/components/social/RichText';
+import { LinkPreviewCard } from '@/components/social/LinkPreviewCard';
+import { PollCard } from '@/components/social/PollCard';
+import { MilestoneCard } from '@/components/feed/MilestoneCard';
 import type { FeedEntry, FeedItem, SubjectSegment } from '@/lib/types';
 import { formatRunWhen } from '@/lib/runs';
 import { bleedCard, brandColor, cn, formatDate } from '@/lib/utils';
@@ -238,8 +242,11 @@ const subjectWords: Record<string, string> = {
 
 // Which subject the bar under a card acts on. A reshare's bar acts on what it
 // quotes, because a like belongs to whoever made the thing.
-function engagementTarget(item: FeedEntry): { segment: SubjectSegment; id: string; authorId: string | null } {
+function engagementTarget(item: FeedEntry): { segment: SubjectSegment; id: string; authorId: string | null } | null {
   switch (item.kind) {
+    // News, not a thing to like (D60).
+    case 'MILESTONE':
+      return null;
     case 'REPORT':
       return { segment: 'reports', id: item.id, authorId: item.authorId };
     case 'PHOTO':
@@ -275,9 +282,11 @@ function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> })
           icon={<MessageSquare className="h-3.5 w-3.5" aria-hidden />}
         />
         <p className="mt-2 whitespace-pre-line leading-relaxed text-[15px]" data-testid="feed-post-body">
-          {item.body}
+          <RichText text={item.body} />
         </p>
         {item.edited && <p className="mt-1 text-xs text-muted-foreground">edited</p>}
+        {item.poll && <PollCard postId={item.id} initial={item.poll} />}
+        {item.linkPreview && <LinkPreviewCard preview={item.linkPreview} />}
       </div>
 
       {item.photos.length > 0 && (
@@ -315,6 +324,7 @@ function Body({ item }: { item: FeedItem }) {
   if (item.kind === 'RUN') return <RunAnnouncement item={item} />;
   if (item.kind === 'RESHARE') return <Reshare item={item} />;
   if (item.kind === 'POST') return <HasherPostCard item={item} />;
+  if (item.kind === 'MILESTONE') return <MilestoneCard item={item} />;
 
   if (item.kind === 'REPORT') {
     return (
@@ -387,6 +397,7 @@ function Body({ item }: { item: FeedItem }) {
 // still renders its content without JavaScript.
 export function FeedCard({ item }: { item: FeedEntry }) {
   const target = engagementTarget(item);
+  if (!target) return <Body item={item} />;
   return (
     <div className="overflow-hidden rounded-none border-y border-border bg-card sm:rounded-xl sm:border">
       <div className="[&>*]:rounded-none [&>*]:border-0">

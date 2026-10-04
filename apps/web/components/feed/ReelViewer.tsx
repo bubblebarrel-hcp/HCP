@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { DialogContent } from '@/components/ui/dialog';
 import { ReelCarousel } from '@/components/feed/ReelCarousel';
 import { EngagementBar } from '@/components/social/EngagementBar';
+import { RichText } from '@/components/social/RichText';
 import { AudiencePicker } from '@/components/profile/AudiencePicker';
 import type { Audience, Reel } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -172,7 +173,11 @@ export function ReelViewer({
           </div>
         )}
 
-        {reel.caption && <p className="text-sm">{reel.caption}</p>}
+        {reel.caption && (
+          <p className="text-sm">
+            <RichText text={reel.caption} />
+          </p>
+        )}
 
         {/* The reel's lifespan (D58), told to the person who made it. */}
         {reel.isMine && (

@@ -5,6 +5,9 @@ import { canView, getAccess, publicName, userPublicSelect } from './run.service'
 import * as reports from './report.service';
 import * as follows from './follow.service';
 import { activeFollowSet, contentVisibleAuthors } from './audience.service';
+import { hiddenFor } from './block.service';
+import { previewSelect } from './link-preview.service';
+import { type SerializedPoll, pollsFor } from './poll.service';
 import * as stats from './stats.service';
 import { resolveVisible, segmentFor } from './subject.service';
 
@@ -93,6 +96,20 @@ export type FeedItem =
       photos: FeedPhoto[];
       kennel: { slug: string; shortName: string; primaryColor: string | null } | null;
       run: { id: string; runNumber: number | null; title: string | null } | null;
+      // A poll the hasher attached, and what their first link looks like (D60).
+      poll: SerializedPoll | null;
+      linkPreview: { url: string; title: string | null; description: string | null; imageUrl: string | null; siteName: string | null } | null;
+    }
+  | {
+      // A hasher reaching a number of runs (D60). Not a thing to like or reply to:
+      // it is news, and it carries no engagement bar.
+      kind: 'MILESTONE';
+      id: string;
+      at: Date;
+      threshold: number;
+      hasher: { id: string; name: string; avatarUrl: string | null };
+      run: { id: string; runNumber: number | null; title: string | null } | null;
+      kennel: { slug: string; shortName: string; primaryColor: string | null } | null;
     }
   | {
       // Somebody passing on somebody else's post, with something of their own
@@ -129,8 +146,10 @@ export type FeedEntry = FeedItem & { engagement: stats.Engagement };
 
 // Which subject each kind of card is engagement-wise. A reshare points at what
 // it quotes, so liking a reshared report likes the report.
-function subjectOf(item: FeedItem): { type: SubjectType; id: string } {
+function subjectOf(item: FeedItem): { type: SubjectType; id: string } | null {
   switch (item.kind) {
+    case 'MILESTONE':
+      return null;
     case 'REPORT':
       return { type: SubjectType.TRAIL_REPORT, id: item.id };
     case 'PHOTO':
@@ -353,9 +372,11 @@ async function recentPosts(actor: Actor | undefined, limit: number): Promise<Fee
       author: { select: { ...userPublicSelect, avatarUrl: true } },
       kennel: { select: { slug: true, shortName: true, primaryColor: true } },
       run: { select: { id: true, runNumber: true, title: true } },
+      linkPreview: { select: previewSelect },
     },
   });
   if (rows.length === 0) return [];
+  const polls = await pollsFor(actor?.id, new Map(rows.map((r) => [r.id, r.author.id])));
 
   const links = await prisma.mediaLink.findMany({
     where: { targetType: 'POST', targetId: { in: rows.map((r) => r.id) } },
@@ -404,7 +425,67 @@ async function recentPosts(actor: Actor | undefined, limit: number): Promise<Fee
     photos: photosByPost.get(row.id) ?? [],
     kennel: row.kennel,
     run: row.run,
+    poll: polls.get(row.id) ?? null,
+    linkPreview: row.linkPreview,
   }));
+}
+
+// ─── Milestones (D60) ───
+
+// A hasher passing 10, 50, 100 runs, as news for the people who follow them. They
+// can opt out (User.shareMilestones), their profile's audience applies like it
+// does to a post, and the run it happened on is named only when this viewer may
+// see that run.
+const MILESTONE_DAYS = 30;
+
+async function recentMilestones(actor: Actor | undefined, limit: number): Promise<FeedItem[]> {
+  const rows = await prisma.passportMilestone.findMany({
+    where: {
+      reachedAt: { gte: new Date(Date.now() - MILESTONE_DAYS * 24 * 60 * 60 * 1000) },
+      passport: { user: { shareMilestones: true, status: 'ACTIVE', deactivatedAt: null, deletedAt: null } },
+    },
+    orderBy: { reachedAt: 'desc' },
+    take: limit,
+    select: {
+      id: true,
+      threshold: true,
+      reachedAt: true,
+      runId: true,
+      passport: { select: { user: { select: { ...userPublicSelect, avatarUrl: true } } } },
+    },
+  });
+  if (rows.length === 0) return [];
+
+  const readable = await contentVisibleAuthors(
+    actor,
+    rows.map((r) => r.passport.user.id),
+  );
+  const items: FeedItem[] = [];
+  for (const row of rows) {
+    const user = row.passport.user;
+    if (!readable.has(user.id)) continue;
+    let run: { id: string; runNumber: number | null; title: string | null } | null = null;
+    let kennel: { slug: string; shortName: string; primaryColor: string | null } | null = null;
+    if (row.runId) {
+      const access = await getAccess(actor, row.runId);
+      if (canView(access)) {
+        run = { id: access.run.id, runNumber: access.run.runNumber, title: access.run.title };
+        kennel = access.run.kennel
+          ? { slug: access.run.kennel.slug, shortName: access.run.kennel.shortName, primaryColor: null }
+          : null;
+      }
+    }
+    items.push({
+      kind: 'MILESTONE',
+      id: row.id,
+      at: row.reachedAt,
+      threshold: row.threshold,
+      hasher: { id: user.id, name: publicName(user), avatarUrl: user.avatarUrl },
+      run,
+      kennel,
+    });
+  }
+  return items;
 }
 
 // ─── Reshares (D50) ───
@@ -704,14 +785,15 @@ export async function list(actor: Actor | undefined, opts: { page: number; limit
     coverUrl: (r.run?.id ? posterByRunId.get(r.run.id) : null) ?? null,
   }));
 
-  const [photos, runs, reshares, hasherPosts] = await Promise.all([
+  const [photos, runs, reshares, hasherPosts, milestones] = await Promise.all([
     recentPhotos(actor, opts.limit),
     upcomingRuns(actor, opts.limit),
     recentReshares(actor, opts.limit),
     recentPosts(actor, opts.limit),
+    recentMilestones(actor, opts.limit),
   ]);
 
-  let merged = [...asReports, ...photos, ...runs, ...reshares, ...hasherPosts].sort(
+  let merged = [...asReports, ...photos, ...runs, ...reshares, ...hasherPosts, ...milestones].sort(
     (a, b) => b.at.getTime() - a.at.getTime(),
   );
 
@@ -730,6 +812,8 @@ export async function list(actor: Actor | undefined, opts: { page: number; limit
         case 'PHOTO':
         case 'POST':
           return Boolean(item.authorId && followedUsers.has(item.authorId));
+        case 'MILESTONE':
+          return followedUsers.has(item.hasher.id);
         case 'RESHARE':
           // Your own reshares belong in your feed: you put them there.
           return followedUsers.has(item.sharer.id) || item.sharer.id === actor?.id;
@@ -737,6 +821,23 @@ export async function list(actor: Actor | undefined, opts: { page: number; limit
         case 'RUN':
           return false;
       }
+    });
+  }
+
+  // Blocked and muted hashers are not in this reader's feed (D60). A block is
+  // already out of every source above; a mute is only applied here.
+  const hidden = await hiddenFor(actor?.id);
+  if (hidden.muted.size || hidden.blocked.size) {
+    merged = merged.filter((item) => {
+      const who =
+        item.kind === 'RESHARE'
+          ? item.sharer.id
+          : item.kind === 'MILESTONE'
+            ? item.hasher.id
+            : 'authorId' in item
+              ? item.authorId
+              : null;
+      return !who || !(hidden.muted.has(who) || hidden.blocked.has(who));
     });
   }
 
@@ -761,10 +862,14 @@ export async function list(actor: Actor | undefined, opts: { page: number; limit
   }
 
   // The numbers under every card, in one pass for the page (D50).
-  const engagement = await stats.engagementFor(actor?.id, items.map(subjectOf));
+  const engagement = await stats.engagementFor(
+    actor?.id,
+    items.flatMap((item) => subjectOf(item) ?? []),
+  );
   const entries: FeedEntry[] = items.map((item) => {
     const ref = subjectOf(item);
-    return { ...item, engagement: engagement.get(stats.subjectKey(ref.type, ref.id)) ?? { ...stats.EMPTY } };
+    const own = ref ? engagement.get(stats.subjectKey(ref.type, ref.id)) : undefined;
+    return { ...item, engagement: own ?? { ...stats.EMPTY, reactions: { ...stats.EMPTY_REACTIONS } } };
   });
 
   return {

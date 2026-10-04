@@ -29,6 +29,8 @@ export const listReelsQuery = Joi.object({
   limit: Joi.number().integer().min(1).max(30).default(12),
   kennelSlug: Joi.string().trim().max(120),
   authorId: uuid,
+  // A hashtag page (D59), with or without the "#".
+  tag: Joi.string().trim().max(51),
 });
 
 export const feedQuery = Joi.object({

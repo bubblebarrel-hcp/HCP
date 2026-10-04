@@ -131,6 +131,9 @@ export function routeFor(data: Record<string, unknown> | undefined): string | nu
     // Somebody asked to follow a locked profile (D57): the thing to do is answer.
     case 'FollowRequest':
       return '/follow-requests';
+    // Somebody tagged you in a photo and wants your yes (D60).
+    case 'PhotoTag':
+      return '/photo-tags';
     // A like or a comment names the thing it was on (D50).
     case 'Post':
       return `/posts/${id}`;

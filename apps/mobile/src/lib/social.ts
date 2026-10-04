@@ -13,6 +13,7 @@ import type {
   HasherPhotoPage,
   HasherProfile,
   Page,
+  ReactionKind,
   SubjectSegment,
 } from '@/lib/types';
 
@@ -25,9 +26,10 @@ export async function getEngagement(segment: SubjectSegment, id: string) {
   return api<EngagementDetail>(subjectPath(segment, id));
 }
 
-export async function setLiked(segment: SubjectSegment, id: string, liked: boolean) {
+export async function setLiked(segment: SubjectSegment, id: string, liked: boolean, reaction?: ReactionKind) {
   const data = await api<{ engagement: Engagement }>(`${subjectPath(segment, id)}/like`, {
     method: liked ? 'POST' : 'DELETE',
+    body: liked && reaction ? { reaction } : undefined,
   });
   return data.engagement;
 }
@@ -97,7 +99,12 @@ export async function hasherPhotos(id: string, page = 1, limit = 24) {
 
 // Who sees what I make, stepping away, and leaving (D57).
 export async function getPrivacy() {
-  return api<{ profileVisibility: Audience; pendingRequests: number }>('/me/privacy');
+  return api<{ profileVisibility: Audience; pendingRequests: number; shareMilestones: boolean }>('/me/privacy');
+}
+
+// Whether a milestone may appear in the feed as a card (D60).
+export async function setMilestoneSharing(shareMilestones: boolean) {
+  return api<{ shareMilestones: boolean }>('/me/privacy', { method: 'PATCH', body: { shareMilestones } });
 }
 
 export async function setPrivacy(profileVisibility: Audience) {

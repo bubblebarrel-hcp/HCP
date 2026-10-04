@@ -84,11 +84,16 @@ export default function NotificationsScreen() {
             />
           }
           ListHeaderComponent={
-            hasUnread ? (
-              <Pressable accessibilityRole="button" onPress={markAllRead} style={styles.markAll}>
-                <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>Mark all as read</ThemedText>
+            <View style={styles.headerRow}>
+              <Pressable accessibilityRole="link" onPress={() => router.push('/mentions')} style={styles.markAll}>
+                <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>Mentions</ThemedText>
               </Pressable>
-            ) : null
+              {hasUnread ? (
+                <Pressable accessibilityRole="button" onPress={markAllRead} style={styles.markAll}>
+                  <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>Mark all as read</ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
           }
           ListEmptyComponent={
             <ThemedText themeColor="textSecondary" style={styles.center}>
@@ -121,6 +126,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four },
   list: { padding: Spacing.two, gap: Spacing.two, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center' },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between' },
   markAll: { alignItems: 'flex-end', padding: Spacing.two, minHeight: 44, justifyContent: 'center' },
   row: { flexDirection: 'row', gap: Spacing.two, borderWidth: 1, borderRadius: 12, padding: Spacing.three },
   rowText: { flex: 1, gap: 2 },

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Lock } from 'lucide-react';
 import { ReelStrip } from '@/components/feed/ReelStrip';
 import { ProfilePhotoGrid } from '@/components/profile/ProfilePhotoGrid';
+import { TaggedPhotos } from '@/components/profile/TaggedPhotos';
 import { FollowButton } from '@/components/social/FollowButton';
 import { FollowLists } from '@/components/social/FollowLists';
 import { Button } from '@/components/ui/button';
@@ -244,6 +245,7 @@ export function HasherBody({
               <section aria-label="Photos">
                 <ProfilePhotoGrid photos={photos} total={total} loading={loading} onMore={() => void more()} name={name} />
               </section>
+              <TaggedPhotos hasherId={hasherId} name={name} />
             </div>
           ) : (
             <div className="px-4 pb-1 pt-3 sm:px-0">

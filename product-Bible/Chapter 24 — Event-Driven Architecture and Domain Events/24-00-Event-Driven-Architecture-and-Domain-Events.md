@@ -208,6 +208,10 @@ D41 reels, D50 follows and engagement, D51 posts. A reel and a post belong to th
 | `ContentCommentWithdrawn` | D50: the author takes their own comment down | Social Service | Feed (counts) |
 | `ContentCommentRemoved` | D50: a moderator removes a comment; reason required | Social Service | Feed (counts), Audit |
 | `ContentReshared` / `ContentReshareWithdrawn` | D50: a reshare, with an optional quote, is made or withdrawn | Social Service | Feed |
+| `ContentMentioned` | D59: words newly name one or more hashers with @username; one event per publish or edit, naming only the newly mentioned | Social Service | Notification |
+| `HasherBlocked` / `HasherUnblocked` / `HasherMuted` / `HasherUnmuted` | D60: a hasher blocks, mutes, or undoes either | Social Service | Notification (suppression), Feed |
+| `PhotoTagRequested` / `PhotoTagApproved` | D60: a hasher asks to tag another in a photo; the tagged hasher says yes | Social Service | Notification |
+| `PollVoted` | D60: a hasher answers, or changes their answer to, a poll on a post | Social Service | None yet |
 
 ## Notification Events
 

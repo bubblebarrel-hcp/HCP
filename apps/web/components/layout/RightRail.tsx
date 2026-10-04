@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Archive, Compass, EyeOff, Users } from 'lucide-react';
+import { TrendingTags } from '@/components/social/TrendingTags';
 
 const pillars = [
   {
@@ -22,6 +23,7 @@ const pillars = [
 export function RightRail({ kennelCount }: { kennelCount: number }) {
   return (
     <div className="space-y-4" data-testid="right-rail">
+      <TrendingTags />
       <section aria-labelledby="rail-kennels">
         <h2 id="rail-kennels" className="px-2 text-[15px] font-semibold text-muted-foreground">Kennels on Shiggy Trails</h2>
         <Link href="/kennels" className="mt-1 flex items-center gap-3 rounded-lg p-2 hover:bg-foreground/5">

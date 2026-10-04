@@ -5,6 +5,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Avatar } from '@/components/feed/avatar';
 import { AudienceChips } from '@/components/profile/audience-chips';
 import { EngagementBar } from '@/components/social/engagement-bar';
+import { LinkPreviewCard } from '@/components/social/link-preview-card';
+import { PollCard } from '@/components/social/poll-card';
+import { RichText } from '@/components/social/rich-text';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
@@ -124,7 +127,9 @@ export default function PostScreen() {
                 </ThemedText>
               </View>
             </Pressable>
-            {post.body ? <ThemedText style={styles.body}>{post.body}</ThemedText> : null}
+            {post.body ? <RichText text={post.body} style={styles.body} /> : null}
+            {post.poll ? <PollCard postId={post.id} initial={post.poll} /> : null}
+            {post.linkPreview ? <LinkPreviewCard preview={post.linkPreview} /> : null}
           </View>
 
           {post.photos.length > 0 && (

@@ -2,6 +2,7 @@ import { Audience, FollowStatus, FollowTargetType, KennelStatus, MembershipStatu
 import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
 import { audienceAllows, relationTo } from './audience.service';
+import { blockedBy, myRelationTo } from './block.service';
 import { type Actor, resolveKennelContext } from './permission.service';
 import { recordEvent } from './record.service';
 import { publicName, userPublicSelect } from './run.service';
@@ -36,6 +37,7 @@ export async function followableUser(actor: Actor | undefined, userId: string) {
     select: {
       id: true,
       hashHandle: true,
+      username: true,
       avatarUrl: true,
       avatarPosition: true,
       bannerUrl: true,
@@ -52,6 +54,9 @@ export async function followableUser(actor: Actor | undefined, userId: string) {
   });
   if (!user) throw ApiError.notFound('Hasher not found');
   if (user.status !== 'ACTIVE' || user.deactivatedAt || user.deletedAt) throw ApiError.notFound('Hasher not found');
+  // Somebody who has blocked you is not there for you (D60). Their page is a 404,
+  // the same as one that never existed, so a block does not announce itself.
+  if (await blockedBy(actor?.id, user.id)) throw ApiError.notFound('Hasher not found');
   return user;
 }
 
@@ -155,6 +160,9 @@ export async function followUser(actor: Actor, userId: string) {
   const target = await followableUser(actor, userId);
   if (target.id === actor.id) {
     throw ApiError.badRequest('You already have your own posts.', 'CANNOT_FOLLOW_SELF');
+  }
+  if ((await myRelationTo(actor.id, userId)) === 'BLOCK') {
+    throw ApiError.badRequest('You blocked this hasher. Unblock them first.', 'BLOCKED');
   }
   if (target.profileVisibility === Audience.ONLY_ME) {
     throw ApiError.forbidden('This hasher is not taking new followers.', 'FOLLOWS_CLOSED');
@@ -602,6 +610,8 @@ export async function hasherProfile(actor: Actor | undefined, userId: string) {
   return {
     id: user.id,
     name: publicName(user),
+    // What they are @mentioned as (D59). A chosen name, like the handle.
+    username: user.username,
     // Whether they have been named yet, so the page can say "not yet named"
     // rather than pretending "Just Chidi" is a hash handle.
     isNamed: Boolean(user.hashHandle),
@@ -625,5 +635,7 @@ export async function hasherProfile(actor: Actor | undefined, userId: string) {
     followsOpen: user.profileVisibility !== Audience.ONLY_ME,
     pendingRequests: requests,
     isMe: actor?.id === user.id,
+    // Where the viewer stands: BLOCK, MUTE or null (D60). Only their own side.
+    myBlock: await myRelationTo(actor?.id, user.id),
   };
 }

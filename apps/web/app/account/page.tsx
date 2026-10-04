@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ProfileBranding } from '@/components/profile/ProfileBranding';
+import { UsernameForm } from '@/components/profile/UsernameForm';
 import { MyMemberships } from '@/components/membership/MyMemberships';
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -89,6 +90,7 @@ export default function AccountPage() {
               <dt className="text-muted-foreground">Member since</dt>
               <dd>{new Date(user.createdAt).toLocaleDateString()}</dd>
             </dl>
+            <UsernameForm />
             {/* Who follows you and who you follow live on your profile page,
                 which opens on the right list (D57). */}
             <div className="mt-4 flex flex-wrap gap-2">

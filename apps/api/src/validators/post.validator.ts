@@ -5,7 +5,15 @@ import { uuid } from './common';
 // its author's profile: PUBLIC, FOLLOWERS or ONLY_ME.
 const visibility = Joi.string().valid('PUBLIC', 'FOLLOWERS', 'ONLY_ME');
 
+// Two to five answers and how long they stay open (D60). The service says which
+// rule was broken; this keeps junk out.
+const poll = Joi.object({
+  options: Joi.array().items(Joi.string().trim().min(1).max(80)).min(2).max(5).required(),
+  hours: Joi.number().integer().min(1).max(168),
+});
+
 export const createPostSchema = Joi.object({
+  poll,
   // Empty is allowed here and refused at publish: a draft exists so photos have
   // somewhere to upload to, and the photos may land before the words do.
   body: Joi.string().trim().allow('').max(5000),
@@ -29,4 +37,12 @@ export const listPostsQuery = Joi.object({
   limit: Joi.number().integer().min(1).max(30).default(12),
   kennelSlug: Joi.string().trim().max(120),
   authorId: uuid,
+  // A hashtag page (D59), with or without the "#".
+  tag: Joi.string().trim().max(51),
+  // Posts about one run (D60).
+  runId: uuid,
+});
+
+export const pollVoteSchema = Joi.object({
+  optionId: uuid.required(),
 });

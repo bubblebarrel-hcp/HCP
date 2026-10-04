@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { ReelCarousel } from '@/components/feed/ReelCarousel';
 import { AudienceControl } from '@/components/profile/AudienceControl';
 import { EngagementBar } from '@/components/social/EngagementBar';
+import { RichText } from '@/components/social/RichText';
 import type { Reel } from '@/lib/types';
 import { brandColor, formatDate } from '@/lib/utils';
 
@@ -46,7 +47,11 @@ export function ReelDetail({ reel }: { reel: Reel }) {
         </p>
       </div>
 
-      {reel.caption && <p className="px-4 pb-3 text-[15px]">{reel.caption}</p>}
+      {reel.caption && (
+        <p className="px-4 pb-3 text-[15px]">
+          <RichText text={reel.caption} />
+        </p>
+      )}
 
       {/* The carousel is the one client part: a post holds several items and
           moving between them needs the browser (D48). */}

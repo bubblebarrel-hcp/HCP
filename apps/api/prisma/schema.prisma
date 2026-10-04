@@ -669,6 +669,11 @@ model User {
   // Public identity (D5/D11): shown as hashHandle, or "Just <firstName>" when
   // the hasher has not been named yet.
   hashHandle        String?
+  // What @mentions are typed as (D59). A hash handle has spaces and is not
+  // unique, so it cannot be a mention; this is lowercase a-z 0-9 _ . and unique.
+  // Null only once an account is deleted. The hash handle stays the name that is
+  // displayed (D11); the username is how somebody is addressed.
+  username          String?           @unique
   avatarUrl         String?
   // Which part of the picture the round crop shows, a CSS object-position pair
   // ("50% 30%"), like bannerPosition. Null is centred.
@@ -683,6 +688,8 @@ model User {
   // Who sees what this hasher has made: posts, photos and reels (D57). A reel
   // can narrow this further for itself; it can never widen it.
   profileVisibility Audience          @default(PUBLIC)
+  // Whether a milestone (100th run) may appear in the feed as a card (D60).
+  shareMilestones   Boolean           @default(true)
   homeKennelId      String?           @db.Uuid
   preferredLanguage String            @default("en")
   timeZone          String?
@@ -751,6 +758,12 @@ model User {
   contentViews            ContentView[]
   posts                   Post[]                    @relation("PostAuthor")
   postsRemoved            Post[]                    @relation("PostRemover")
+  mentionedIn             ContentMention[]          @relation("Mentioned")
+  blocksMade              UserBlock[]               @relation("Blocker")
+  blocksReceived          UserBlock[]               @relation("Blocked")
+  pollVotes               PollVote[]
+  photoTagsOfMe           PhotoTag[]                @relation("PhotoTagged")
+  photoTagsMade           PhotoTag[]                @relation("PhotoTagger")
 
   @@index([hashHandle])
   @@index([homeKennelId])
@@ -2114,6 +2127,7 @@ model MediaAsset {
   // Attribution is permanent (BR-CAPSULE-007)
   uploader      User?                  @relation(fields: [uploaderId], references: [id])
   links         MediaLink[]
+  photoTags     PhotoTag[]
   reels         Reel[]
   supplementals SupplementalArtifact[]
   evidence      EvidenceRecord[]
@@ -2546,6 +2560,9 @@ model ContentLike {
   subjectId   String      @db.Uuid
   likedAt     DateTime    @default(now())
   unlikedAt   DateTime?
+  // Which reaction it is (D60). A plain like is ON_ON; changing the reaction
+  // rewrites this and leaves the count alone.
+  reaction    ReactionKind @default(ON_ON)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -2684,9 +2701,14 @@ model Post {
   removedAt     DateTime?
   removedById   String?    @db.Uuid
   removedReason String?
+  // The first link in the words, once fetched (D60). Null until then, and null
+  // for good if it could not be read.
+  linkPreviewId String?    @db.Uuid
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
+  linkPreview LinkPreview? @relation(fields: [linkPreviewId], references: [id])
+  poll        Poll?
   author    User    @relation("PostAuthor", fields: [authorId], references: [id])
   removedBy User?   @relation("PostRemover", fields: [removedById], references: [id])
   kennel    Kennel? @relation(fields: [kennelId], references: [id])
@@ -2695,4 +2717,176 @@ model Post {
   @@index([status, publishedAt])
   @@index([authorId, status])
   @@index([kennelId, status])
+}
+
+// ───────────────────── Part K — Hashtags and mentions (D59) ─────────────────────
+
+// A #tag, stored once, lowercase. It carries no audience of its own: a tag is a
+// label on things, and what a viewer finds under it is whatever they could
+// already see (see entity.service.ts).
+model Hashtag {
+  id        String       @id @default(uuid()) @db.Uuid
+  tag       String       @unique
+  createdAt DateTime     @default(now())
+
+  uses ContentTag[]
+}
+
+// One row per (tag, thing). Polymorphic over SubjectType with no foreign key to
+// the subject, the same shape ContentLike and Follow use. It is an index derived
+// from the text, rewritten when the text is edited, not history: the words are
+// the record.
+model ContentTag {
+  id          String      @id @default(uuid()) @db.Uuid
+  hashtagId   String      @db.Uuid
+  subjectType SubjectType
+  subjectId   String      @db.Uuid
+  createdAt   DateTime    @default(now())
+
+  hashtag Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@unique([hashtagId, subjectType, subjectId])
+  @@index([subjectType, subjectId])
+  @@index([hashtagId, createdAt])
+}
+
+// Who a piece of text addressed. Kept so that editing a post notifies only the
+// people newly added to it, and never the same person twice. Like ContentTag it
+// is derived from the text.
+model ContentMention {
+  id              String      @id @default(uuid()) @db.Uuid
+  subjectType     SubjectType
+  subjectId       String      @db.Uuid
+  mentionedUserId String      @db.Uuid
+  authorId        String      @db.Uuid
+  createdAt       DateTime    @default(now())
+
+  mentioned User @relation("Mentioned", fields: [mentionedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectType, subjectId, mentionedUserId])
+  @@index([subjectType, subjectId])
+  @@index([mentionedUserId, createdAt])
+}
+
+
+// ───────────────────── Part L — Safety, reactions, polls, previews (D60) ─────────────────────
+
+enum BlockKind {
+  // Neither can see the other's things, follow, or notify the other.
+  BLOCK
+  // One-way and quiet: the muted hasher's things leave the muter's lists and
+  // their notifications stop. The muted hasher is not told and loses nothing.
+  MUTE
+}
+
+// One row per (who, whom), re-activated rather than duplicated, like a follow.
+// Not a message channel and not a role (D8): it only removes things.
+model UserBlock {
+  id        String    @id @default(uuid()) @db.Uuid
+  blockerId String    @db.Uuid
+  blockedId String    @db.Uuid
+  kind      BlockKind
+  createdAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId, endedAt])
+  @@index([blockerId, endedAt])
+}
+
+// What a like can be (D60). ON_ON is the plain like.
+enum ReactionKind {
+  ON_ON
+  BEER
+  SHIGGY
+  DOWN_DOWN
+}
+
+// Consent, not a label (D60). Somebody who tags you in a photo asks; the tag
+// shows on the photo and on your profile only once you say yes.
+enum PhotoTagStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  REMOVED
+}
+
+model PhotoTag {
+  id           String         @id @default(uuid()) @db.Uuid
+  mediaId      String         @db.Uuid
+  taggedUserId String         @db.Uuid
+  taggedById   String         @db.Uuid
+  status       PhotoTagStatus @default(PENDING)
+  createdAt    DateTime       @default(now())
+  decidedAt    DateTime?
+
+  media  MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  tagged User       @relation("PhotoTagged", fields: [taggedUserId], references: [id], onDelete: Cascade)
+  tagger User       @relation("PhotoTagger", fields: [taggedById], references: [id], onDelete: Cascade)
+
+  @@unique([mediaId, taggedUserId])
+  @@index([taggedUserId, status])
+}
+
+// A question with two to five answers, attached to a post (D60). The post body
+// is the question. Open or closed is `closesAt` against the clock: not a stored
+// state, so nothing needs sweeping.
+model Poll {
+  id        String   @id @default(uuid()) @db.Uuid
+  postId    String   @unique @db.Uuid
+  closesAt  DateTime
+  createdAt DateTime @default(now())
+
+  post    Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  options PollOption[]
+  votes   PollVote[]
+}
+
+model PollOption {
+  id       String @id @default(uuid()) @db.Uuid
+  pollId   String @db.Uuid
+  text     String
+  position Int
+
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+
+  @@index([pollId, position])
+}
+
+// One vote per hasher per poll; changing it rewrites the row while the poll is
+// open. Who voted for what is never shown, only the tallies.
+model PollVote {
+  id        String   @id @default(uuid()) @db.Uuid
+  pollId    String   @db.Uuid
+  optionId  String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+  @@index([optionId])
+}
+
+// What a link looks like, fetched once by the server and shared by everybody who
+// posts it (D60). `failedAt` records an unreadable page so it is not retried on
+// every post.
+model LinkPreview {
+  id          String    @id @default(uuid()) @db.Uuid
+  url         String    @unique
+  title       String?
+  description String?
+  imageUrl    String?
+  siteName    String?
+  fetchedAt   DateTime  @default(now())
+  failedAt    DateTime?
+
+  posts Post[]
 }

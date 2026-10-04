@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
+import { MentionInput } from '@/components/social/mention-input';
 import { ThemedText } from '@/components/themed-text';
 import { AudienceChips } from '@/components/profile/audience-chips';
 import { Spacing } from '@/constants/theme';
@@ -252,10 +253,10 @@ export function ReelComposer({
 
           <View style={styles.field}>
             <ThemedText type="smallBold" themeColor="textSecondary">Caption (optional)</ThemedText>
-            <TextInput
+            <MentionInput
               value={caption}
               onChangeText={setCaption}
-              placeholder="Beer check at the top of the hill"
+              placeholder="Beer check at the top of the hill #beercheck"
               placeholderTextColor={theme.textSecondary}
               multiline
               maxLength={500}

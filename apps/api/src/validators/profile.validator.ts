@@ -30,8 +30,9 @@ export const updateProfileSchema = Joi.object({
 
 // D57. Who sees what a hasher makes, and leaving.
 export const privacySchema = Joi.object({
-  profileVisibility: Joi.string().valid('PUBLIC', 'FOLLOWERS', 'ONLY_ME').required(),
-});
+  profileVisibility: Joi.string().valid('PUBLIC', 'FOLLOWERS', 'ONLY_ME'),
+  shareMilestones: Joi.boolean(),
+}).min(1);
 
 export const confirmPasswordSchema = Joi.object({
   password: Joi.string().min(1).max(200).required(),

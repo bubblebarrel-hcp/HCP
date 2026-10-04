@@ -5,6 +5,8 @@ import { Heart, Loader2 } from 'lucide-react';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/ui/button';
 import { ActionDialog } from '@/components/membership/ActionDialog';
+import { MentionTextarea } from '@/components/social/MentionTextarea';
+import { RichText } from '@/components/social/RichText';
 import { useAuth } from '@/context/AuthContext';
 import {
   addComment,
@@ -54,9 +56,9 @@ function Composer({
 
   return (
     <div className="flex-1">
-      <textarea
+      <MentionTextarea
         value={body}
-        onChange={(event) => setBody(event.target.value)}
+        onValueChange={setBody}
         rows={2}
         maxLength={2000}
         placeholder={placeholder}
@@ -198,7 +200,9 @@ function CommentRow({
                   'A hasher'
                 )}
               </p>
-              <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{comment.body}</p>
+              <p className="whitespace-pre-wrap text-[15px] leading-relaxed">
+                <RichText text={comment.body ?? ''} />
+              </p>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-3 px-3 text-xs text-muted-foreground">
               <time dateTime={comment.createdAt}>{formatDate(comment.createdAt)}</time>

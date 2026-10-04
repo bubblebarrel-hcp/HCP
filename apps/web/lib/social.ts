@@ -15,6 +15,7 @@ import type {
   HasherProfile,
   Liker,
   Page,
+  ReactionKind,
   SubjectSegment,
 } from '@/lib/types';
 
@@ -40,10 +41,10 @@ export async function getEngagement(segment: SubjectSegment, id: string) {
 
 // Like and unlike return the whole engagement block, so a button can replace
 // its numbers with the server's rather than guessing.
-export async function setLiked(segment: SubjectSegment, id: string, liked: boolean) {
+export async function setLiked(segment: SubjectSegment, id: string, liked: boolean, reaction?: ReactionKind) {
   const path = `${subjectPath(segment, id)}/like`;
   const res = liked
-    ? await api.post<Envelope<{ engagement: Engagement }>>(path)
+    ? await api.post<Envelope<{ engagement: Engagement }>>(path, reaction ? { reaction } : undefined)
     : await api.delete<Envelope<{ engagement: Engagement }>>(path);
   return unwrap(res).engagement;
 }

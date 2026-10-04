@@ -309,6 +309,7 @@ function Menu() {
     },
     { label: 'Trail reports', icon: { ios: 'book', android: 'menu_book', web: 'menu_book' } },
     { label: 'Hash Passport', icon: { ios: 'person.text.rectangle', android: 'badge', web: 'badge' }, onPress: () => router.push('/passport') },
+    { label: 'Mentions', icon: { ios: 'at', android: 'alternate_email', web: 'alternate_email' }, onPress: () => router.push('/mentions') },
     { label: 'Privacy', icon: { ios: 'lock', android: 'lock', web: 'lock' }, onPress: () => router.push('/privacy') },
     {
       label: 'Follow requests',

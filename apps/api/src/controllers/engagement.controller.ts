@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { ReactionKind } from '@prisma/client';
 import * as engagement from '../services/engagement.service';
 import { subjectTypeFromSegment } from '../services/subject.service';
 import { ApiError, ok } from '../utils/http';
@@ -22,7 +23,12 @@ export async function get(req: Request, res: Response) {
 }
 
 export async function like(req: Request, res: Response) {
-  return ok(res, await engagement.like(actor(req), subject(req), req.params.id));
+  // A plain press is ON_ON; a hash reaction names itself (D60).
+  const reaction = typeof req.body?.reaction === 'string' ? req.body.reaction : undefined;
+  if (reaction !== undefined && !(reaction in ReactionKind)) {
+    throw ApiError.badRequest('That is not a reaction.', 'BAD_REACTION');
+  }
+  return ok(res, await engagement.like(actor(req), subject(req), req.params.id, reaction as ReactionKind | undefined));
 }
 
 export async function unlike(req: Request, res: Response) {

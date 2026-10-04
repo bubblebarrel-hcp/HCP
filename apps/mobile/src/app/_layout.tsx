@@ -61,6 +61,11 @@ function PushedScreens() {
       <Stack.Screen name="reels/[id]" options={{ title: 'Reel' }} />
       <Stack.Screen name="privacy" options={{ title: 'Privacy' }} />
       <Stack.Screen name="follow-requests" options={{ title: 'Follow requests' }} />
+      <Stack.Screen name="tags/[tag]" options={{ title: 'Tag' }} />
+      <Stack.Screen name="u/[username]" options={{ title: 'Hasher' }} />
+      <Stack.Screen name="mentions" options={{ title: 'Mentions' }} />
+      <Stack.Screen name="blocked" options={{ title: 'Blocked and muted' }} />
+      <Stack.Screen name="photo-tags" options={{ title: 'Photo tags' }} />
       <Stack.Screen name="auth/register" options={{ title: 'Create account' }} />
       <Stack.Screen name="auth/verify" options={{ title: 'Confirm email' }} />
       <Stack.Screen name="auth/forgot-password" options={{ title: 'Forgot password' }} />

@@ -53,6 +53,9 @@ export function notificationHref(item: NotificationItem) {
     case 'Reel':
       return `/reels/${item.contextId}`;
     // Somebody asked to follow a locked profile (D57): the thing to do is answer.
+    // Somebody tagged you in a photo and wants your yes (D60).
+    case 'PhotoTag':
+      return '/account/photo-tags';
     case 'FollowRequest':
       return '/account/follow-requests';
     // A social notice about a person (an approved request, a follow) opens them.

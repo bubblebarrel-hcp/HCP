@@ -14,6 +14,9 @@ export interface Page<T> {
 export type SubjectSegment = 'reels' | 'posts' | 'reports' | 'photos' | 'runs' | 'capsules' | 'comments';
 export type SubjectType = 'REEL' | 'POST' | 'TRAIL_REPORT' | 'MEDIA_ASSET' | 'RUN' | 'RUN_CAPSULE' | 'COMMENT';
 
+// What a like can be (D60). ON_ON is the plain like.
+export type ReactionKind = 'ON_ON' | 'BEER' | 'SHIGGY' | 'DOWN_DOWN';
+
 export interface Engagement {
   likes: number;
   comments: number;
@@ -23,6 +26,9 @@ export interface Engagement {
   liked: boolean;
   bookmarked: boolean;
   reshared: boolean;
+  // What the likes are made of, and which one is this viewer's (D60).
+  reactions: Record<ReactionKind, number>;
+  myReaction: ReactionKind | null;
 }
 
 export interface EngagementDetail extends Engagement {
@@ -133,9 +139,68 @@ export interface FollowRequest {
   requestedAt: string | null;
 }
 
+export type BlockKind = 'BLOCK' | 'MUTE';
+
+// A poll on a post (D60). Results are null until this viewer has voted, the poll
+// has closed, or the viewer wrote it.
+export interface PostPoll {
+  id: string;
+  closesAt: string;
+  closed: boolean;
+  totalVotes: number;
+  myVote: string | null;
+  options: { id: string; text: string; votes: number | null; share: number | null }[];
+}
+
+// What a pasted link looks like, read by the server (D60).
+export interface LinkPreview {
+  url: string;
+  title: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  siteName: string | null;
+}
+
+export interface BlockedHasher {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  kind: BlockKind;
+  since: string;
+}
+
+export interface PendingPhotoTag {
+  id: string;
+  createdAt: string;
+  photo: { id: string; url: string; thumbnailUrl: string | null; caption: string | null };
+  by: { id: string; name: string };
+}
+
+export interface MentionItem {
+  id: string;
+  createdAt: string;
+  in: 'POST' | 'REEL' | 'COMMENT';
+  segment: SubjectSegment;
+  targetId: string;
+  excerpt: string;
+  by: { id: string; name: string; avatarUrl: string | null };
+}
+
+export interface TaggableRun {
+  id: string;
+  runNumber: number | null;
+  title: string | null;
+  startsAt: string;
+  kennel: { id: string; slug: string; shortName: string };
+}
+
 export interface HasherProfile {
   id: string;
   name: string;
+  // What they are @mentioned as (D59).
+  username: string | null;
+  // Where the viewer stands: BLOCK, MUTE or null (D60).
+  myBlock?: BlockKind | null;
   isNamed: boolean;
   avatarUrl: string | null;
   // CSS "x% y%" crop for the round picture; null is centred.
@@ -193,6 +258,8 @@ export interface HasherPost {
   run: { id: string; runNumber: number | null; title: string | null } | null;
   photos: PostPhoto[];
   engagement: Engagement;
+  poll: PostPoll | null;
+  linkPreview: LinkPreview | null;
   isMine: boolean;
 }
 
@@ -301,6 +368,18 @@ export type FeedItem =
       photos: PostPhoto[];
       kennel: FeedKennel | null;
       run: { id: string; runNumber: number | null; title: string | null } | null;
+      poll: PostPoll | null;
+      linkPreview: LinkPreview | null;
+    }
+  | {
+      // A hasher passing 10, 50, 100 runs (D60). News, so it has no engagement bar.
+      kind: 'MILESTONE';
+      id: string;
+      at: string;
+      threshold: number;
+      hasher: { id: string; name: string; avatarUrl: string | null };
+      run: { id: string; runNumber: number | null; title: string | null } | null;
+      kennel: FeedKennel | null;
     }
   | {
       kind: 'RESHARE';
@@ -324,6 +403,8 @@ export interface SessionUser {
   role: 'USER' | 'ADMIN';
   status: string;
   hashHandle: string | null;
+  // What they are @mentioned as (D59); null only after the account is deleted.
+  username?: string | null;
   // hashHandle, or "Just <firstName>" (D11)
   displayName: string;
   avatarUrl?: string | null;

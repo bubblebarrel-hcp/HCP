@@ -6,6 +6,7 @@ import { asyncHandler } from '../utils/async';
 import {
   createPostSchema,
   listPostsQuery,
+  pollVoteSchema,
   removePostSchema,
   updatePostSchema,
 } from '../validators/post.validator';
@@ -21,6 +22,7 @@ router.get('/posts', optionalAuth, validate(listPostsQuery, 'query'), asyncHandl
 router.post('/posts', requireAuth, validate(createPostSchema), asyncHandler(controller.create));
 router.get('/posts/:id', optionalAuth, asyncHandler(controller.detail));
 router.patch('/posts/:id', requireAuth, validate(updatePostSchema), asyncHandler(controller.update));
+router.post('/posts/:id/poll/vote', requireAuth, validate(pollVoteSchema), asyncHandler(controller.pollVote));
 router.post('/posts/:id/publish', requireAuth, asyncHandler(controller.publish));
 router.post('/posts/:id/archive', requireAuth, asyncHandler(controller.archive));
 // Moderation: the kennel's media moderators, or platform staff for a post made

@@ -10,6 +10,10 @@ import {
 import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
 import { activeFollowSet, canSeeAudience, contentVisibleAuthors } from './audience.service';
+import { hiddenFor } from './block.service';
+import { attachPreview, previewSelect } from './link-preview.service';
+import { type PollInput, type SerializedPoll, pollCreateData, pollsFor, startClock } from './poll.service';
+import { syncEntities, taggedIds } from './entity.service';
 import { type Actor, assertKennelPermission, resolveKennelContext } from './permission.service';
 import { recordAudit, recordEvent } from './record.service';
 import { canView, getAccess, publicName, userPublicSelect } from './run.service';
@@ -37,6 +41,8 @@ export const MAX_BODY = 5000;
 
 export interface PostInput {
   body?: string;
+  // Two to five answers and how long they stay open (D60).
+  poll?: PollInput;
   visibility?: Audience;
   kennelId?: string | null;
   runId?: string | null;
@@ -57,6 +63,8 @@ const postSelect = {
   author: { select: { ...userPublicSelect, avatarUrl: true } },
   kennel: { select: { id: true, slug: true, shortName: true, primaryColor: true } },
   run: { select: { id: true, runNumber: true, title: true } },
+  // What the first link in the words looks like, once it has been read (D60).
+  linkPreview: { select: previewSelect },
 } satisfies Prisma.PostSelect;
 
 type PostRow = Prisma.PostGetPayload<{ select: typeof postSelect }>;
@@ -121,6 +129,7 @@ function serialize(
   viewerId?: string,
   photos: PostPhoto[] = [],
   engagement: stats.Engagement = stats.EMPTY,
+  poll: SerializedPoll | null = null,
 ) {
   return {
     id: post.id,
@@ -141,6 +150,8 @@ function serialize(
     run: post.run,
     photos,
     engagement,
+    poll,
+    linkPreview: post.linkPreview,
     isMine: viewerId ? post.authorId === viewerId : false,
   };
 }
@@ -148,11 +159,12 @@ function serialize(
 export type SerializedPost = ReturnType<typeof serialize>;
 
 async function serializeOne(post: PostRow, viewerId?: string) {
-  const [photos, engagement] = await Promise.all([
+  const [photos, engagement, polls] = await Promise.all([
     photosFor([post.id]),
     stats.engagementOne(viewerId, SubjectType.POST, post.id),
+    pollsFor(viewerId, new Map([[post.id, post.authorId]])),
   ]);
-  return serialize(post, viewerId, photos.get(post.id) ?? [], engagement);
+  return serialize(post, viewerId, photos.get(post.id) ?? [], engagement, polls.get(post.id) ?? null);
 }
 
 async function findPost(id: string) {
@@ -194,6 +206,7 @@ export async function createDraft(actor: Actor, input: PostInput) {
       kennelId: input.kennelId ?? null,
       runId: input.runId ?? null,
       status: S.DRAFT,
+      ...(input.poll ? { poll: { create: pollCreateData(input.poll) } } : {}),
     },
     select: postSelect,
   });
@@ -206,16 +219,29 @@ export async function updateDraft(actor: Actor, postId: string, input: PostInput
   if (post.status === S.REMOVED) throw ApiError.badRequest('That post was taken down.', 'POST_REMOVED');
 
   const body = input.body === undefined ? undefined : cleanBody(input.body);
-  const updated = await prisma.post.update({
-    where: { id: post.id },
-    data: {
-      ...(body === undefined ? {} : { body }),
-      ...(input.visibility ? { visibility: input.visibility } : {}),
-      // Editing after publication is marked; editing a draft is just writing.
-      ...(body !== undefined && post.status === S.PUBLISHED ? { editedAt: new Date() } : {}),
-    },
-    select: postSelect,
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.post.update({
+      where: { id: post.id },
+      data: {
+        ...(body === undefined ? {} : { body }),
+        ...(input.visibility ? { visibility: input.visibility } : {}),
+        // Editing after publication is marked; editing a draft is just writing.
+        ...(body !== undefined && post.status === S.PUBLISHED ? { editedAt: new Date() } : {}),
+      },
+      select: postSelect,
+    });
+    // A draft is indexed when it publishes. A published post is indexed again
+    // when its words change, and only the people newly named are told (D59).
+    if (body !== undefined && post.status === S.PUBLISHED) {
+      await syncEntities(tx, {
+        subject: { type: SubjectType.POST, id: post.id },
+        authorId: actor.id,
+        text: body,
+      });
+    }
+    return row;
   });
+  if (body !== undefined && post.status === S.PUBLISHED) attachPreview(post.id, body);
   return serializeOne(updated, actor.id);
 }
 
@@ -244,8 +270,20 @@ export async function publish(actor: Actor, postId: string) {
       actorId: actor.id,
       payload: { kennelId: post.kennelId, runId: post.runId, photoCount: photos.length },
     });
+    // A poll's clock starts now, not when the draft was begun (D60).
+    await startClock(tx, post.id);
+    // The tags go under it and the people it names are told, in the same
+    // transaction, so a post is never public with its tags missing (D59).
+    await syncEntities(tx, {
+      subject: { type: SubjectType.POST, id: post.id },
+      authorId: actor.id,
+      text: post.body,
+    });
     return row;
   });
+  // The link's card is fetched after the post is up, not before: a slow site must
+  // not hold up posting (D60).
+  attachPreview(post.id, post.body);
   return serializeOne(published, actor.id);
 }
 
@@ -322,18 +360,31 @@ export async function remove(actor: Actor, postId: string, reason: string) {
 // (D57), so the page is filtered to the authors this viewer may read.
 export async function listPublished(
   actor: Actor | undefined,
-  opts: { page: number; limit: number; kennelSlug?: string; authorId?: string },
+  opts: { page: number; limit: number; kennelSlug?: string; authorId?: string; tag?: string; runId?: string },
 ) {
+  // Posts about one run (D60). Anybody who may not see the run is told there is
+  // no such run, the same as everywhere else it is looked up.
+  if (opts.runId) {
+    const access = await getAccess(actor, opts.runId);
+    if (!canView(access)) throw ApiError.notFound('Run not found');
+  }
   const where: Prisma.PostWhereInput = {
     status: S.PUBLISHED,
     ...(opts.kennelSlug ? { kennel: { slug: opts.kennelSlug } } : {}),
     ...(opts.authorId ? { authorId: opts.authorId } : {}),
+    ...(opts.runId ? { runId: opts.runId } : {}),
+    // A hashtag page (D59): only what carries the tag. Everything below still
+    // decides who may see each one, so a tag opens no door.
+    ...(opts.tag ? { id: { in: await taggedIds(SubjectType.POST, opts.tag) } } : {}),
   };
 
   // Who this viewer may read, decided up front so the query pages over exactly
   // those authors and the total agrees with the items.
   const candidates = await prisma.post.findMany({ where, distinct: ['authorId'], select: { authorId: true } });
   const readable = await contentVisibleAuthors(actor, candidates.map((c) => c.authorId));
+  // Muted hashers leave the lists (D60), but not their own page: asking for one
+  // hasher's posts is a deliberate visit.
+  if (!opts.authorId) for (const id of (await hiddenFor(actor?.id)).muted) readable.delete(id);
   const followed = await activeFollowSet(actor?.id, [...readable]);
   // The profile lets this viewer in, and then each post's own audience decides:
   // public to all of them, followers' posts to the ones they follow, and a
@@ -362,12 +413,13 @@ export async function listPublished(
     prisma.post.count({ where: readableWhere }),
   ]);
 
-  const [photos, engagement] = await Promise.all([
+  const [photos, engagement, polls] = await Promise.all([
     photosFor(rows.map((r) => r.id)),
     stats.engagementFor(
       actor?.id,
       rows.map((r) => ({ type: SubjectType.POST, id: r.id })),
     ),
+    pollsFor(actor?.id, new Map(rows.map((r) => [r.id, r.authorId]))),
   ]);
 
   const items = rows.map((row) =>
@@ -376,6 +428,7 @@ export async function listPublished(
       actor?.id,
       photos.get(row.id) ?? [],
       engagement.get(stats.subjectKey(SubjectType.POST, row.id)) ?? stats.EMPTY,
+      polls.get(row.id) ?? null,
     ),
   );
   return page(items, total, opts.page, opts.limit);

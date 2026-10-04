@@ -19,11 +19,18 @@ interface Envelope<T> {
 
 const unwrap = <T,>(res: { data: Envelope<T> }): T => res.data.data;
 
+// Two to five answers and how long they stay open (D60).
+export interface PollDraft {
+  options: string[];
+  hours: number;
+}
+
 export async function createDraft(input: {
   body: string;
   visibility?: Audience;
   kennelId?: string | null;
   runId?: string | null;
+  poll?: PollDraft;
 }) {
   return unwrap(await api.post<Envelope<{ post: HasherPost }>>('/posts', input)).post;
 }
@@ -40,7 +47,7 @@ export async function archivePost(id: string) {
   return unwrap(await api.post<Envelope<{ post: HasherPost }>>(`/posts/${id}/archive`)).post;
 }
 
-export async function listPosts(params: { page?: number; limit?: number; authorId?: string } = {}) {
+export async function listPosts(params: { page?: number; limit?: number; authorId?: string; runId?: string } = {}) {
   return unwrap(await api.get<Envelope<Page<HasherPost>>>('/posts', { params }));
 }
 
@@ -48,13 +55,22 @@ export async function listPosts(params: { page?: number; limit?: number; authorI
 // `onProgress` reports which photo is going up, because a slow upload with no
 // sign of life reads as a hang.
 export async function post(
-  input: { body: string; photos: File[]; visibility?: Audience; kennelId?: string | null },
+  input: {
+    body: string;
+    photos: File[];
+    visibility?: Audience;
+    kennelId?: string | null;
+    runId?: string | null;
+    poll?: PollDraft;
+  },
   onProgress?: (uploaded: number, total: number) => void,
 ): Promise<HasherPost> {
   const draft = await createDraft({
     body: input.body,
     visibility: input.visibility,
     kennelId: input.kennelId ?? null,
+    runId: input.runId ?? null,
+    poll: input.poll,
   });
 
   for (const [index, file] of input.photos.entries()) {
