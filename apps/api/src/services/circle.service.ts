@@ -4,7 +4,7 @@ import type { Actor } from './permission.service';
 import { recordAudit, recordEvent } from './record.service';
 import { CIRCLE_STATES, operateSource, operatorAccess, publicName, userPublicSelect } from './run.service';
 
-// Annex 08E-04: HCP documents the Circle, it does not run it. Hares and officers
+// Annex 08E-04: Shiggy Trails documents the Circle, it does not run it. Hares and officers
 // with run.manage record songs, announcements, notes and awards while the run
 // is in the Circle or Reporting phase.
 

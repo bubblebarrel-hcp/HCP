@@ -1,4 +1,4 @@
-// Response shapes from the HCP API. The backend is the source of truth; keep
+// Response shapes from the Shiggy Trails API. The backend is the source of truth; keep
 // these in step with apps/api/src/serializers and services.
 
 export interface Page<T> {

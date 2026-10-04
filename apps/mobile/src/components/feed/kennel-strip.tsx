@@ -16,7 +16,7 @@ export function KennelStrip({ kennels }: { kennels: PublicKennel[] }) {
       keyExtractor={(k) => k.id}
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.list}
-      accessibilityLabel="Kennels on HCP"
+      accessibilityLabel="Kennels on Shiggy Trails"
       renderItem={({ item }) => (
         <Pressable
           accessibilityRole="link"

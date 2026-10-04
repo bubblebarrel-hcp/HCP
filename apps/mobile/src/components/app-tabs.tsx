@@ -2,7 +2,7 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
 import { useTheme } from '@/hooks/use-theme';
 
-// Facebook-style top-level tabs. No messaging tab: HCP has no direct messaging (D8).
+// Facebook-style top-level tabs. No messaging tab: Shiggy Trails has no direct messaging (D8).
 export default function AppTabs() {
   const colors = useTheme();
 

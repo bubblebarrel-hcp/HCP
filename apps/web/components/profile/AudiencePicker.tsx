@@ -19,7 +19,7 @@ const LABEL: Record<Audience, string> = {
 
 const HINT = {
   profile: {
-    PUBLIC: 'Anyone on HCP, signed in or not, can see your photos, posts and reels.',
+    PUBLIC: 'Anyone on Shiggy Trails, signed in or not, can see your photos, posts and reels.',
     FOLLOWERS:
       'Your profile is locked. People ask to follow you, and only the ones you approve see your photos, posts and reels.',
     ONLY_ME: 'Nobody sees them but you, and nobody can follow you.',

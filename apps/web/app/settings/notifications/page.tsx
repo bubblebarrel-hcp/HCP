@@ -154,9 +154,9 @@ export default function NotificationSettingsPage() {
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               {!prefs.push.enabledPlatformWide
-                ? 'Switched off for HCP right now.'
+                ? 'Switched off for Shiggy Trails right now.'
                 : prefs.push.devices.length === 0
-                  ? 'No device yet. Open the HCP app on your phone and allow notifications.'
+                  ? 'No device yet. Open the Shiggy Trails app on your phone and allow notifications.'
                   : `${prefs.push.devices.length} device${prefs.push.devices.length === 1 ? '' : 's'} registered.`}
             </p>
             {prefs.push.devices.length > 0 && (

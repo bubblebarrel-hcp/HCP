@@ -7,9 +7,9 @@ import { getEngagement } from '@/lib/social';
 import type { SubjectSegment } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
-// Sending a link out of HCP (D50). Distinct from Reshare, which passes a post
+// Sending a link out of Shiggy Trails (D50). Distinct from Reshare, which passes a post
 // along *inside* the platform and creates a feed entry: this puts a URL on
-// somebody's clipboard or into WhatsApp, and HCP never hears about it again.
+// somebody's clipboard or into WhatsApp, and Shiggy Trails never hears about it again.
 //
 // WhatsApp is first because it is where a hash flyer actually lives today —
 // the whole premise of the run announcement card (D43).
@@ -103,7 +103,7 @@ export function ShareDialog({ segment, id, fallbackLabel, trigger }: Props) {
     };
   }, [open, segment, id, fallbackLabel]);
 
-  const text = `${label} — on the Hash Community Platform`;
+  const text = `${label} — on Shiggy Trails`;
 
   // The clipboard API needs a secure context and a permission the browser can
   // refuse — over plain http on a phone on the kennel's wifi, it will. So this
@@ -222,7 +222,7 @@ export function ShareDialog({ segment, id, fallbackLabel, trigger }: Props) {
                       href={channel.build(url, text)}
                       target="_blank"
                       // noreferrer as well as noopener: the receiving site has
-                      // no business knowing which HCP page this came from.
+                      // no business knowing which Shiggy Trails page this came from.
                       rel="noopener noreferrer"
                       onClick={() => setOpen(false)}
                       className={cn(
@@ -262,7 +262,7 @@ export function ShareDialog({ segment, id, fallbackLabel, trigger }: Props) {
 
               <p className="flex items-start gap-2 text-xs text-muted-foreground">
                 <Link2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                Sharing happens outside HCP, so nothing here is counted. To pass it on inside the hash, use Reshare.
+                Sharing happens outside Shiggy Trails, so nothing here is counted. To pass it on inside the hash, use Reshare.
               </p>
             </div>
           )}

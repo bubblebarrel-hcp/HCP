@@ -202,7 +202,7 @@ export function EngagementBar({
           </button>
         )}
 
-        {/* Sending the link out of HCP. Next to Reshare because they read as
+        {/* Sending the link out of Shiggy Trails. Next to Reshare because they read as
             the same gesture, but they are not: Reshare puts it in the hash's
             own feed, this puts a URL in WhatsApp. Needs no session — a link is
             a link. */}

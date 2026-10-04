@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const data = await load(id);
   if (!data) {
-    return shareMetadata({ title: 'Run Capsule', description: 'A Run Capsule on the Hash Community Platform.' });
+    return shareMetadata({ title: 'Run Capsule', description: 'A Run Capsule on Shiggy Trails.' });
   }
 
   const { capsule } = data;
@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     title: `#${hero.runNumber} · ${hero.title} — ${hero.kennel.shortName}`,
     description:
       capsule.summary ??
-      `${hero.place ? `${hero.place}. ` : ''}${hero.leadHare ? `Hare: ${hero.leadHare}. ` : ''}The Hash Community Platform's record of this run.`,
+      `${hero.place ? `${hero.place}. ` : ''}${hero.leadHare ? `Hare: ${hero.leadHare}. ` : ''}Shiggy Trails' record of this run.`,
     image: hero.photo,
   });
 }

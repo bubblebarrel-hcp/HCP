@@ -25,7 +25,7 @@ export const revalidate = 30;
 
 export const metadata: Metadata = {
   title: 'Search',
-  description: 'Search kennels, runs, trail reports, hashers and Run Capsules across HCP.',
+  description: 'Search kennels, runs, trail reports, hashers and Run Capsules across Shiggy Trails.',
 };
 
 function Section({
@@ -74,7 +74,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         <h1 className="text-2xl font-bold tracking-tight">Search</h1>
         {/* Plain GET form: search works without JavaScript */}
         <form action="/search" className="mt-3 flex gap-2" role="search">
-          <label htmlFor="global-search-q" className="sr-only">Search HCP</label>
+          <label htmlFor="global-search-q" className="sr-only">Search Shiggy Trails</label>
           <Input id="global-search-q" name="q" defaultValue={q} placeholder="Kennels, runs, reports, hashers…" className="max-w-md" data-testid="search-input" />
           <Button type="submit">Search</Button>
         </form>

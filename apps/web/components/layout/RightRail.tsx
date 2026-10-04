@@ -23,7 +23,7 @@ export function RightRail({ kennelCount }: { kennelCount: number }) {
   return (
     <div className="space-y-4" data-testid="right-rail">
       <section aria-labelledby="rail-kennels">
-        <h2 id="rail-kennels" className="px-2 text-[15px] font-semibold text-muted-foreground">Kennels on HCP</h2>
+        <h2 id="rail-kennels" className="px-2 text-[15px] font-semibold text-muted-foreground">Kennels on Shiggy Trails</h2>
         <Link href="/kennels" className="mt-1 flex items-center gap-3 rounded-lg p-2 hover:bg-foreground/5">
           <span className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-primary-strong">
             <Users className="h-5 w-5" aria-hidden />

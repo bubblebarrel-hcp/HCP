@@ -116,8 +116,8 @@ export async function createInvitation(
   if (input.method === InvitationMethod.EMAIL && invitation.email) {
     const result = await sendEmail({
       to: invitation.email,
-      subject: `You're invited to join ${kennel.name} on HCP`,
-      body: `A mismanagement member has invited you to join ${kennel.name} on the Hash Community Platform. This link is good for ${days} days.`,
+      subject: `You're invited to join ${kennel.name} on Shiggy Trails`,
+      body: `A mismanagement member has invited you to join ${kennel.name} on Shiggy Trails. This link is good for ${days} days.`,
       action: { label: 'Accept the invitation', path: link(token) },
     });
     if (!result.sent && isEmailConfigured()) {

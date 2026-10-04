@@ -106,7 +106,7 @@ export default function LoginPage() {
             </Button>
           </form>
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            New to HCP? <Link href="/auth/register" className="font-medium text-primary-strong hover:underline">Create an account</Link>
+            New to Shiggy Trails? <Link href="/auth/register" className="font-medium text-primary-strong hover:underline">Create an account</Link>
           </p>
         </CardContent>
       </Card>

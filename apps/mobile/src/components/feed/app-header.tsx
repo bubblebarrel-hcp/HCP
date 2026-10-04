@@ -6,7 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-// Facebook-style app bar: the HCP mark and wordmark on the left, round action buttons on the right.
+// Facebook-style app bar: the Shiggy Trails mark and wordmark on the left, round action buttons on the right.
 export function AppHeader({ onSearch }: { onSearch: () => void }) {
   const theme = useTheme();
   return (

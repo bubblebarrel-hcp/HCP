@@ -8,7 +8,7 @@ import type { Reel } from '@/lib/types';
 import { shareMetadata } from '@/lib/share-metadata';
 
 // One reel, at its own address (D50). It exists because a reel is the most
-// shareable thing on HCP and a share needs somewhere to land: `/reels?reel=<id>`
+// shareable thing on Shiggy Trails and a share needs somewhere to land: `/reels?reel=<id>`
 // used to be the link a notification carried, and the reels grid ignored the
 // query, so it landed on the grid instead of the reel.
 //
@@ -25,12 +25,12 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const data = await load(id);
   // Null is both 'no such reel' and 'not yours to see'. Neither says which.
-  if (!data) return shareMetadata({ title: 'Reel', description: 'A reel on the Hash Community Platform.' });
+  if (!data) return shareMetadata({ title: 'Reel', description: 'A reel on Shiggy Trails.' });
   const reel = data.reel;
   const where = reel.kennel?.shortName ?? reel.event?.title ?? 'the hash';
   return shareMetadata({
     title: reel.caption?.slice(0, 70) || `A reel by ${reel.author.name}`,
-    description: `${reel.author.name} at ${where} on the Hash Community Platform.`,
+    description: `${reel.author.name} at ${where} on Shiggy Trails.`,
     // A video still has no frame grab (D41), so the preview borrows the cover
     // photo if the post has one and shows no picture otherwise.
     image: reel.items.find((item) => item.kind === 'PHOTO')?.url ?? reel.items[0]?.posterUrl,

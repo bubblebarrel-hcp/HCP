@@ -22,11 +22,11 @@ export function Sidebar() {
   return (
     <aside className="flex w-full flex-col border-b border-border bg-card md:min-h-screen md:w-60 md:border-b-0 md:border-r">
       <div className="flex items-start justify-between gap-3 px-5 py-5">
-        <Link href="/" className="flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="HCP Admin home">
+        <Link href="/" className="flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Shiggy Trails Admin home">
           <BrandMark className="h-10 w-10" />
           <span className="min-w-0">
-            <span className="block font-bold tracking-tight">HCP Admin</span>
-            <span className="block text-xs text-muted-foreground">Hash Community Platform</span>
+            <span className="block font-bold tracking-tight">Shiggy Trails Admin</span>
+            <span className="block text-xs text-muted-foreground">Platform administration</span>
           </span>
         </Link>
         <ThemeToggleButton />

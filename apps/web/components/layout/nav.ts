@@ -10,7 +10,7 @@ export interface NavItem {
 }
 
 // One source for the top bar, bottom bar and left shortcuts so they never drift.
-// No messaging entry: HCP has no direct messaging (D8).
+// No messaging entry: Shiggy Trails has no direct messaging (D8).
 export const primaryNav: NavItem[] = [
   { label: 'Home', icon: Home, href: '/', match: (p) => p === '/' },
   { label: 'Kennels', icon: Users, href: '/kennels', match: (p) => p.startsWith('/kennels') },

@@ -138,7 +138,7 @@ async function proxyRequest(req: NextRequest, pathSegments: string[]) {
     return NextResponse.json(
       {
         success: false,
-        error: { message: `Cannot reach the HCP API at ${BACKEND}. Is it running?`, code: 'BACKEND_UNREACHABLE' },
+        error: { message: `Cannot reach the Shiggy Trails API at ${BACKEND}. Is it running?`, code: 'BACKEND_UNREACHABLE' },
       },
       { status: 502 },
     );

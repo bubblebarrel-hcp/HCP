@@ -291,7 +291,7 @@ export default function KennelSettingsPage({ params }: { params: Promise<{ slug:
         <Card className={bleedCard} data-testid="settings-colours">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Brand colours</CardTitle>
-            <CardDescription>Shown on your kennel page, cards and avatars. Leave blank for HCP&rsquo;s defaults.</CardDescription>
+            <CardDescription>Shown on your kennel page, cards and avatars. Leave blank for Shiggy Trails&rsquo; defaults.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             {(['primaryColor', 'secondaryColor'] as const).map((name) => {
@@ -403,7 +403,7 @@ export default function KennelSettingsPage({ params }: { params: Promise<{ slug:
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Hare nudges</CardTitle>
             <CardDescription>
-              When HCP speaks up about a run with nobody haring it yet (D45). Leave blank to use the platform default
+              When Shiggy Trails speaks up about a run with nobody haring it yet (D45). Leave blank to use the platform default
               — currently {settings.hareNudgeDefaults.soonDays} and {settings.hareNudgeDefaults.urgentDays} days.
             </CardDescription>
           </CardHeader>

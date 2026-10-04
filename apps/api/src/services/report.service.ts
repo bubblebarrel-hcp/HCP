@@ -156,7 +156,7 @@ function serialize(access: ReportAccess, opts: { includeBody: boolean }) {
       report.publishedAt &&
       `${report.run.kennel.name}. Run #${report.run.runNumber}. Trail Report. Published ${report.publishedAt
         .toISOString()
-        .slice(0, 10)}. Hash Community Platform.`,
+        .slice(0, 10)}. Shiggy Trails.`,
     assistants: contributorsOf(report, ReportContributorRole.ASSISTANT_SCRIBE).map((c) => publicName(c.user)),
     reviewers: contributorsOf(report, ReportContributorRole.REVIEWER).map((c) => publicName(c.user)),
     viewer: {

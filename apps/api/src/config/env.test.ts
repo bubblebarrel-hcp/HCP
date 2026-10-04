@@ -10,7 +10,7 @@ test('production config rejects resend.dev sender domains', () => {
         isProduction: true,
         appBaseUrl: 'https://shiggytrails.com',
         email: {
-          from: 'HCP <onboarding@resend.dev>',
+          from: 'Shiggy Trails <onboarding@resend.dev>',
           configured: true,
           apiKey: 'test-key',
         },
@@ -29,7 +29,7 @@ test('production config accepts verified custom-domain sender and media URL', ()
       isProduction: true,
       appBaseUrl: 'https://shiggytrails.com',
       email: {
-        from: 'HCP <onboarding@shiggytrails.com>',
+        from: 'Shiggy Trails <onboarding@shiggytrails.com>',
         configured: true,
         apiKey: 'test-key',
       },

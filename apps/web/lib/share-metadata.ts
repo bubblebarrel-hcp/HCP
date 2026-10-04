@@ -33,7 +33,7 @@ export function shareMetadata({
       title,
       description,
       type: 'article',
-      siteName: 'Hash Community Platform',
+      siteName: 'Shiggy Trails',
       ...(absolute ? { images: [absolute] } : {}),
     },
     twitter: {

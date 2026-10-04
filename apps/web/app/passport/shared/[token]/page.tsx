@@ -45,7 +45,7 @@ export default function SharedPassportPage({ params }: { params: Promise<{ token
         <p className="font-semibold">{error}</p>
         <p className="mt-1 text-sm text-muted-foreground">The hasher may have created a new link.</p>
         <Button asChild variant="outline" className="mt-4">
-          <Link href="/">Back to HCP</Link>
+          <Link href="/">Back to Shiggy Trails</Link>
         </Button>
       </Card>,
     );

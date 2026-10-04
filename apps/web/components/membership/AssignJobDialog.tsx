@@ -144,7 +144,7 @@ export function AssignJobDialog({
       </DialogTrigger>
       <DialogContent
         title={`What does ${name} do for the kennel?`}
-        description="An office is a seat this kennel defines and can name however it likes. A role carries authority across HCP — you can still call it whatever your kennel calls it."
+        description="An office is a seat this kennel defines and can name however it likes. A role carries authority across Shiggy Trails — you can still call it whatever your kennel calls it."
       >
         <form onSubmit={submit} className="space-y-4" data-testid="assign-job-dialog" noValidate>
           <Field label="Job" htmlFor={`${id}-choice`} hint={hint}>

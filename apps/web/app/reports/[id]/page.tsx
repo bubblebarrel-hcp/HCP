@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   // draft. None of them say which, and none of them say "not found" — the
   // Scribe opening their own draft would see that lie in the tab.
   if (!data) {
-    return shareMetadata({ title: 'Trail report', description: 'A trail report on the Hash Community Platform.' });
+    return shareMetadata({ title: 'Trail report', description: 'A trail report on Shiggy Trails.' });
   }
 
   const report = data.report;

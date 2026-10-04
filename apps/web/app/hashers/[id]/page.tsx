@@ -31,8 +31,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const data = await load(id);
   if (!data) return { title: 'Hasher not found' };
   return {
-    title: `${data.hasher.name} · HCP`,
-    description: data.hasher.bio ?? `${data.hasher.name} on the Hash Community Platform.`,
+    title: data.hasher.name,
+    description: data.hasher.bio ?? `${data.hasher.name} on Shiggy Trails.`,
   };
 }
 

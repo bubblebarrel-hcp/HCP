@@ -32,7 +32,7 @@ export interface DraftContext {
   } | null;
 }
 
-const SYSTEM_PROMPT = `You draft Hash House Harriers trail reports for the Hash Community Platform.
+const SYSTEM_PROMPT = `You draft Hash House Harriers trail reports for Shiggy Trails.
 
 Rules:
 - Use only the facts given in the JSON context. Never invent a hasher's name, a joke, an injury, weather, or any detail not present in the data.

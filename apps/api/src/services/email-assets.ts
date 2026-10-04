@@ -1,4 +1,4 @@
-// Generated assets for HCP email. Embedded so they ship inside dist/ with no
+// Generated assets for Shiggy Trails email. Embedded so they ship inside dist/ with no
 // file-path dependency, and are attached inline (cid:) so mail renders without
 // the web app being publicly reachable.
 //

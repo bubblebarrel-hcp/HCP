@@ -102,7 +102,7 @@ export function LeftNav() {
           </>
         )}
         <br />
-        Hash Community Platform, a digital home for Hash House Harriers.
+        Shiggy Trails. A Hash Community Platform and digital home for Hash House Harriers worldwide
       </p>
     </nav>
   );

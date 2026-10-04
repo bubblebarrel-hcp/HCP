@@ -1,6 +1,6 @@
 import { Ellipse, G, Path, Svg } from 'react-native-svg';
 
-// The HCP mark: the footprints from the brand asset (hash-logo.svg), re-framed
+// The Shiggy Trails mark: the footprints from the brand asset (hash-logo.svg), re-framed
 // from the artwork's own viewBox into a 64x64 square with 2px of padding. Each
 // shape is stroked in its own ink as well as filled, for a bolder weight.
 // Single-colour, so callers pass the theme ink.

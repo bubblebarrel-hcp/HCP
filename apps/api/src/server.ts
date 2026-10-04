@@ -149,7 +149,7 @@ app.use(notFound);
 app.use(errorHandler);
 
 const server = app.listen(env.port, () => {
-  logger.info(`HCP API listening on http://localhost:${env.port}/api/v1`);
+  logger.info(`Shiggy Trails API listening on http://localhost:${env.port}/api/v1`);
   // Drains DomainEvent rows into notifications (D26).
   startOutbox();
   // Speaks up about dates nobody is haring (D45).

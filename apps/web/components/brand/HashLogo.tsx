@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 
 /**
- * The HCP mark: the two hash footprints from `hash-logo.svg`, re-framed from the
+ * The Shiggy Trails mark: the two hash footprints from `hash-logo.svg`, re-framed from the
  * artwork's own viewBox into a 64x64 square with 2px of padding so it fills its
  * box. Each shape is stroked in its own ink as well as filled, which is what
  * makes this a bolder weight than the raw drawing.
@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
  * both themes. The flat file lives at `/hash-logo.svg` for anything that needs a
  * URL (og:image, manifest, email).
  */
-export function HashLogo({ className, title = 'Hash Community Platform' }: { className?: string; title?: string }) {
+export function HashLogo({ className, title = 'Shiggy Trails' }: { className?: string; title?: string }) {
   return (
     <svg
       viewBox="0 0 64 64"

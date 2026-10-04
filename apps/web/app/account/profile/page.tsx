@@ -175,7 +175,7 @@ export default function EditProfilePage() {
         <CardHeader>
           <CardTitle className="text-2xl">Your profile</CardTitle>
           <CardDescription>
-            Private biodata. Other hashers only ever see your hash handle — this stays between you and HCP (D5).
+            Private biodata. Other hashers only ever see your hash handle — this stays between you and Shiggy Trails (D5).
             Your picture and banner are changed on your account page, right on the picture.
           </CardDescription>
         </CardHeader>
@@ -218,7 +218,7 @@ export default function EditProfilePage() {
               <legend className="sr-only">Medical notes</legend>
               <div>
                 <h2 className="font-semibold">Medical notes</h2>
-                <p className="text-sm text-muted-foreground">Private to you. No one else on HCP can see this yet.</p>
+                <p className="text-sm text-muted-foreground">Private to you. No one else on Shiggy Trails can see this yet.</p>
               </div>
               <Field label="Medical notes (optional)" htmlFor="medicalNotes" error={e.medicalNotes?.message}>
                 <Textarea id="medicalNotes" data-testid="profile-medicalNotes" aria-invalid={!!e.medicalNotes} {...register('medicalNotes')} />

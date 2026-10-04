@@ -49,7 +49,7 @@ export async function requestPasswordReset(email: string) {
 
   const result = await sendEmail({
     to: user.email,
-    subject: 'Reset your HCP password',
+    subject: 'Reset your Shiggy Trails password',
     body: 'Someone asked to reset the password on this account. This link is good for 1 hour. If it was not you, ignore this email and nothing will change.',
     action: { label: 'Reset my password', path: link(token) },
   });

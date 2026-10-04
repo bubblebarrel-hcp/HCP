@@ -15,7 +15,7 @@ import type { Audience } from '@/lib/types';
 // while, and leaving for good.
 
 const OPTIONS: { value: Audience; label: string; hint: string }[] = [
-  { value: 'PUBLIC', label: 'Public', hint: 'Anyone on HCP, signed in or not, can see your photos, posts and reels.' },
+  { value: 'PUBLIC', label: 'Public', hint: 'Anyone on Shiggy Trails, signed in or not, can see your photos, posts and reels.' },
   {
     value: 'FOLLOWERS',
     label: 'Followers',
@@ -168,7 +168,7 @@ export default function PrivacyScreen() {
         <View style={styles.dangerBlock}>
           <ThemedText type="smallBold">Step away for a while</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            Deactivating takes your profile, photos, posts and reels off HCP and signs you out. Kennel records that name
+            Deactivating takes your profile, photos, posts and reels off Shiggy Trails and signs you out. Kennel records that name
             you stay as they are. Nothing is removed: log in again and everything is back.
           </ThemedText>
           <Pressable

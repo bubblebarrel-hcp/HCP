@@ -57,7 +57,7 @@ export async function registerForPush(): Promise<PushOutcome> {
   // throw an error nobody can act on. Checked before isDevice, which is true in
   // a browser on a real machine.
   if (Platform.OS === 'web') {
-    return { ok: false, reason: 'web', message: 'Push works in the HCP phone app. Browser notifications are not built yet.' };
+    return { ok: false, reason: 'web', message: 'Push works in the Shiggy Trails phone app. Browser notifications are not built yet.' };
   }
 
   // A simulator has no push service behind it, so there is no token to get.
@@ -86,7 +86,7 @@ export async function registerForPush(): Promise<PushOutcome> {
       granted = asked.granted;
     }
     if (!granted) {
-      return { ok: false, reason: 'denied', message: 'Notifications are turned off for HCP in your settings.' };
+      return { ok: false, reason: 'denied', message: 'Notifications are turned off for Shiggy Trails in your settings.' };
     }
 
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: id });

@@ -18,7 +18,7 @@ import * as stats from './stats.service';
 
 // Reels (D41): a hasher's own short video. At a run, at a meeting, at the
 // Circle, or holding a beer at home — the context is optional, which is the
-// whole point. Everything else on HCP belongs to a kennel or a run; this
+// whole point. Everything else on Shiggy Trails belongs to a kennel or a run; this
 // belongs to the hasher who shot it.
 //
 // The video itself is an ordinary MediaAsset, uploaded the way every other file

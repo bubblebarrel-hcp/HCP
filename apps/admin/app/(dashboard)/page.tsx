@@ -9,7 +9,7 @@ import { PendingKennelQueue } from '@/components/PendingKennelQueue';
 import type { AdminStats } from '@/lib/types';
 
 const tiles: { key: keyof AdminStats; label: string; hint: string }[] = [
-  { key: 'kennels', label: 'Kennels', hint: 'All organizations on HCP' },
+  { key: 'kennels', label: 'Kennels', hint: 'All organizations on Shiggy Trails' },
   { key: 'activeKennels', label: 'Active kennels', hint: 'Status Active' },
   { key: 'verifiedKennels', label: 'Verified', hint: '4+ mismanagement members' },
   { key: 'pendingKennels', label: 'Awaiting verification', hint: 'Status Pending Verification' },
@@ -40,7 +40,7 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">The state of the Hash Community Platform.</p>
+          <p className="text-muted-foreground">The state of Shiggy Trails.</p>
         </div>
         <Button asChild>
           <Link href="/kennels/new">New kennel</Link>

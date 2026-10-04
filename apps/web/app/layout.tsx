@@ -18,11 +18,21 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3010"),
   title: {
-    default: "Hash Community Platform",
-    template: "%s · Hash Community Platform",
+    default: "Shiggy Trails",
+    template: "%s · Shiggy Trails",
   },
   description:
     "A digital home for the worldwide Hash House Harriers community: find kennels, join runs, and preserve every trail.",
+  // The home page and any page that sets no preview of its own. A page that does
+  // set one goes through lib/share-metadata.ts, which carries the same site name.
+  openGraph: {
+    siteName: "Shiggy Trails",
+    title: "Shiggy Trails",
+    description:
+      "A digital home for the worldwide Hash House Harriers community: find kennels, join runs, and preserve every trail.",
+    type: "website",
+  },
+  twitter: { card: "summary", title: "Shiggy Trails" },
 };
 
 // viewport-fit=cover so the fixed top and bottom bars can pad for the notch and home indicator.

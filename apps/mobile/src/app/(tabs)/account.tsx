@@ -165,7 +165,7 @@ function LoginForm() {
         <ThemedText type="small" style={{ color: theme.primaryStrong }}>Forgot password?</ThemedText>
       </Pressable>
       <Pressable onPress={() => router.push('/auth/register')} style={styles.link}>
-        <ThemedText type="small" style={{ color: theme.primaryStrong }}>New to HCP? Create an account</ThemedText>
+        <ThemedText type="small" style={{ color: theme.primaryStrong }}>New to Shiggy Trails? Create an account</ThemedText>
       </Pressable>
     </View>
   );
@@ -254,7 +254,7 @@ function PushSettings() {
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             {!state.push.enabledPlatformWide
-              ? 'Push is switched off for HCP right now.'
+              ? 'Push is switched off for Shiggy Trails right now.'
               : on
                 ? quiet
                   ? `Quiet between ${quiet.start} and ${quiet.end}. Everything still waits in the app.`

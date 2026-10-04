@@ -43,7 +43,7 @@ export default function AccountPage() {
               {user.displayName}
             </h1>
             <p className="mt-1 text-muted-foreground">
-              {user.hashHandle ? 'Hasher' : 'Not named yet'} · on HCP since{' '}
+              {user.hashHandle ? 'Hasher' : 'Not named yet'} · on Shiggy Trails since{' '}
               {new Date(user.createdAt).toLocaleDateString()}
             </p>
           </div>

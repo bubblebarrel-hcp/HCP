@@ -115,7 +115,7 @@ export default function RegisterPage() {
       <Card>
         <CardHeader>
           <BrandMark className="mb-2 h-14 w-14" />
-          <CardTitle className="text-2xl">Join the Hash Community Platform</CardTitle>
+          <CardTitle className="text-2xl">Join Shiggy Trails</CardTitle>
           <CardDescription>
             Your details stay private. Other hashers only see your hash handle —
             or <strong>“{hashHandle?.trim() || `Just ${firstName?.trim() || 'your first name'}`}”</strong> until your kennel names you.

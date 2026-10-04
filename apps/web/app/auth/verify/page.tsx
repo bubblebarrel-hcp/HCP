@@ -53,7 +53,7 @@ function VerifyInner() {
         setMessage(
           res.data.data.alreadyVerified
             ? 'That address was already confirmed. You can log in.'
-            : 'Your email is confirmed. Welcome to the Hash Community Platform.',
+            : 'Your email is confirmed. Welcome to Shiggy Trails.',
         );
         setState('done');
       })

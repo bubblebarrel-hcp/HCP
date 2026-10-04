@@ -15,10 +15,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "HCP Admin",
-    template: "%s · HCP Admin",
+    default: "Shiggy Trails Admin",
+    template: "%s · Shiggy Trails Admin",
   },
-  description: "Platform administration for the Hash Community Platform.",
+  description: "Platform administration for Shiggy Trails.",
   robots: { index: false, follow: false },
 };
 

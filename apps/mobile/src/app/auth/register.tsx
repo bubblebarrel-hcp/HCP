@@ -152,7 +152,7 @@ export default function RegisterScreen() {
     <ThemedView type="canvas" style={styles.flex}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <ThemedText type="title">Join the Hash Community Platform</ThemedText>
+          <ThemedText type="title">Join Shiggy Trails</ThemedText>
           <ThemedText themeColor="textSecondary">
             Your details stay private. Other hashers only see your hash handle — or “Just {f.firstName.trim() || 'your first name'}” until your kennel names you.
           </ThemedText>

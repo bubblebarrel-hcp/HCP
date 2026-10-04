@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   // Null covers both "no such run" and "not yours to see". Neither gets a
   // title that says which, and neither says "not found" — a member opening
   // their own kennel's members-only run would see that lie in the tab.
-  if (!data) return shareMetadata({ title: 'Run', description: 'A run on the Hash Community Platform.' });
+  if (!data) return shareMetadata({ title: 'Run', description: 'A run on Shiggy Trails.' });
 
   const run = data.run;
   const hares = run.hares.map((h) => h.displayName).filter(Boolean);

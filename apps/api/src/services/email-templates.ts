@@ -1,7 +1,7 @@
 import { env } from '../config/env';
 import { WORDMARK_CID, WORDMARK_HEIGHT, WORDMARK_WIDTH, type Sticker } from './email-assets';
 
-// One shell for every HCP email: wordmark, a tinted panel holding a white card,
+// One shell for every Shiggy Trails email: wordmark, a tinted panel holding a white card,
 // a sign-off strip, the landscape, three links on an orange base, small print.
 // Tables and inline styles only: mail clients ignore everything else.
 //

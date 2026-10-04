@@ -139,7 +139,7 @@ export default function PrivacyPage() {
         <CardHeader>
           <CardTitle>Step away for a while</CardTitle>
           <CardDescription>
-            Deactivating takes your profile, photos, posts and reels off HCP and signs you out. Kennel records that
+            Deactivating takes your profile, photos, posts and reels off Shiggy Trails and signs you out. Kennel records that
             name you stay as they are. Nothing is removed: sign in again and everything is back.
           </CardDescription>
         </CardHeader>

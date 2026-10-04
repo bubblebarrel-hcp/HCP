@@ -174,7 +174,7 @@ export function Header() {
         <div className="flex min-w-0 items-center gap-2">
           <Link
             href="/"
-            aria-label="Hash Community Platform home"
+            aria-label="Shiggy Trails home"
             className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <BrandMark />
@@ -193,7 +193,7 @@ export function Header() {
           </span>
           {/* Plain GET form: search works without JavaScript */}
           <form action="/search" role="search" className="relative hidden sm:block">
-            <label htmlFor="global-search" className="sr-only">Search HCP</label>
+            <label htmlFor="global-search" className="sr-only">Search Shiggy Trails</label>
             <Search
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden
@@ -202,7 +202,7 @@ export function Header() {
               id="global-search"
               name="q"
               type="search"
-              placeholder="Search HCP"
+              placeholder="Search Shiggy Trails"
               className="h-10 w-56 rounded-full bg-muted pl-9 pr-4 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:w-64"
             />
           </form>
@@ -217,7 +217,7 @@ export function Header() {
         <div className="flex items-center justify-end gap-2">
           <Link
             href="/search"
-            aria-label="Search HCP"
+            aria-label="Search Shiggy Trails"
             className="grid h-10 w-10 place-items-center rounded-full bg-muted sm:hidden"
           >
             <Search className="h-5 w-5" aria-hidden />
@@ -234,7 +234,7 @@ export function Header() {
                 <Link href="/auth/login">Log in</Link>
               </Button>
               <Button asChild size="sm">
-                <Link href="/auth/register">Join HCP</Link>
+                <Link href="/auth/register">Join Shiggy Trails</Link>
               </Button>
             </>
           )}

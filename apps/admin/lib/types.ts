@@ -1,4 +1,4 @@
-// Response shapes from the HCP API (apps/api). Keep in step with the services.
+// Response shapes from the Shiggy Trails API (apps/api). Keep in step with the services.
 
 export interface Page<T> {
   items: T[];

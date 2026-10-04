@@ -65,8 +65,8 @@ export const guestSchema = Joi.object({
   email: email.required(),
   phone: optionalText(30),
   consent: Joi.boolean().valid(true).required().messages({
-    'any.only': 'Guests must agree to HCP storing their details.',
-    'any.required': 'Guests must agree to HCP storing their details.',
+    'any.only': 'Guests must agree to Shiggy Trails storing their details.',
+    'any.required': 'Guests must agree to Shiggy Trails storing their details.',
   }),
   // Hares and officers adding a walk-in at the venue may check them in at once.
   checkIn: Joi.boolean().default(false),

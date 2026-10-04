@@ -28,14 +28,14 @@ function firstLine(body: string, max = 70) {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const data = await load(id);
-  if (!data) return shareMetadata({ title: 'Post', description: 'A post on the Hash Community Platform.' });
+  if (!data) return shareMetadata({ title: 'Post', description: 'A post on Shiggy Trails.' });
 
   const post = data.post;
   return shareMetadata({
     // A post has no title, so the preview leads with who wrote it and lets the
     // words be the description rather than inventing a headline from them.
-    title: `${post.author.name} on HCP`,
-    description: firstLine(post.body, 200) || 'A post on the Hash Community Platform.',
+    title: `A post by ${post.author.name}`,
+    description: firstLine(post.body, 200) || 'A post on Shiggy Trails.',
     image: post.photos[0]?.url,
   });
 }

@@ -98,7 +98,7 @@ export function GuestDialog({
       <DialogContent
         title={officer ? 'Add a guest' : 'Register as a guest'}
         description={
-          officer ? 'For someone hashing without an HCP account.' : 'No account needed. The hares will know you are coming.'
+          officer ? 'For someone hashing without a Shiggy Trails account.' : 'No account needed. The hares will know you are coming.'
         }
       >
         <form onSubmit={submit} noValidate className="space-y-4" data-testid="guest-dialog">
@@ -151,7 +151,7 @@ export function GuestDialog({
                 onChange={(e) => set('consent', e.target.checked)}
               />
               <span>
-                {officer ? 'The guest agrees' : 'I agree'} that HCP stores this name and email to record the run.
+                {officer ? 'The guest agrees' : 'I agree'} that Shiggy Trails stores this name and email to record the run.
               </span>
             </label>
             {errors.consent && (

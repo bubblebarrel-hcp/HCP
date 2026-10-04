@@ -67,7 +67,7 @@ export const env = {
   personEncryptionKey: required('PERSON_ENCRYPTION_KEY'),
 
   // Comma-separated: web and admin in dev, two real domains in production.
-  // HCP uses 3010/3011 so it can run alongside other local projects.
+  // Shiggy Trails uses 3010/3011 so it can run alongside other local projects.
   corsOrigins: optional('CORS_ORIGINS', 'http://localhost:3010,http://localhost:3011')
     .split(',')
     .map((o) => o.trim())
@@ -103,7 +103,7 @@ export const env = {
   // Resend. Without a key, notifications stay in-app only and say so.
   email: {
     apiKey: process.env.RESEND_API_KEY ?? '',
-    from: optional('EMAIL_FROM', 'HCP <onboarding@resend.dev>'),
+    from: optional('EMAIL_FROM', 'Shiggy Trails <onboarding@resend.dev>'),
     replyTo: process.env.EMAIL_REPLY_TO ?? '',
     configured: Boolean(process.env.RESEND_API_KEY),
   },

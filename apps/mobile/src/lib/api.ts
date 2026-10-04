@@ -115,6 +115,6 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 
 export function errorMessage(err: unknown, fallback = 'Something went wrong') {
   if (err instanceof ApiError) return err.message;
-  if (err instanceof TypeError) return 'Cannot reach HCP. Check your connection.';
+  if (err instanceof TypeError) return 'Cannot reach Shiggy Trails. Check your connection.';
   return fallback;
 }

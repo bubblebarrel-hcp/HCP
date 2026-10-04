@@ -44,7 +44,7 @@ export default function AdminLoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <BrandMark className="mb-2 h-14 w-14" />
-          <CardTitle className="text-2xl">HCP Admin</CardTitle>
+          <CardTitle className="text-2xl">Shiggy Trails Admin</CardTitle>
           <CardDescription>Platform administrators only.</CardDescription>
         </CardHeader>
         <CardContent>

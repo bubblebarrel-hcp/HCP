@@ -139,7 +139,7 @@ export function PendingKennelQueue({ onChanged }: { onChanged?: () => void } = {
           <div className="h-24 animate-pulse rounded bg-muted" aria-busy />
         ) : queue.items.length === 0 ? (
           <p className="py-2 text-sm text-muted-foreground" data-testid="pending-queue-empty">
-            Nothing waiting. Every kennel on HCP has been dealt with.
+            Nothing waiting. Every kennel on Shiggy Trails has been dealt with.
           </p>
         ) : (
           <ul className="divide-y divide-border">
