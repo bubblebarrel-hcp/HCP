@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { PhotoTags } from '@/components/social/PhotoTags';
+import { ReportDialog } from '@/components/social/ReportDialog';
+import { useAuth } from '@/context/AuthContext';
 import { ACCEPTED_IMAGES, MAX_UPLOAD_BYTES, fileSize, uploadPhoto } from '@/lib/media';
 import type { MediaAsset, MediaTarget } from '@/lib/types';
 import { bleedCard } from '@/lib/utils';
@@ -56,6 +58,7 @@ export function RunMedia({
   canContribute: boolean;
   title?: string;
 }) {
+  const { user } = useAuth();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<MediaAsset[]>([]);
@@ -222,6 +225,17 @@ export function RunMedia({
                 </div>
                 {/* Who is in it, and asking somebody to be tagged (D60). */}
                 {open.moderationState === 'APPROVED' && <PhotoTags mediaId={open.id} />}
+                {user && open.moderationState === 'APPROVED' && (
+                  <ReportDialog
+                    targetType="MEDIA_ASSET"
+                    targetId={open.id}
+                    trigger={
+                      <button type="button" className="text-sm text-muted-foreground hover:underline" data-testid="photo-report">
+                        Report this photo
+                      </button>
+                    }
+                  />
+                )}
                 {canModerate && open.moderationState === 'PENDING' && (
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
                     <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden />

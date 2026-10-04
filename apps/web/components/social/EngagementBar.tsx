@@ -1,6 +1,9 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import { Bookmark, Eye, Heart, MessageCircle, Repeat2, Share2, SmilePlus } from 'lucide-react';
+import { Bookmark, Eye, Flag, Heart, MessageCircle, Repeat2, Share2, SmilePlus } from 'lucide-react';
+import { AfterReport } from '@/components/social/AfterReport';
+import { ReportDialog } from '@/components/social/ReportDialog';
+import { REPORTABLE } from '@/lib/moderation';
 import { CommentThread } from '@/components/social/CommentThread';
 import { ShareDialog } from '@/components/social/ShareDialog';
 import { Button } from '@/components/ui/button';
@@ -314,6 +317,22 @@ export function EngagementBar({
             </button>
           }
         />
+
+        {/* Telling the people who look after Shiggy Trails (D61). Not on a trail
+            report, a run or a capsule, which are a kennel's record, and not on
+            your own. */}
+        {user && !isMine && REPORTABLE[segment] && (
+          <ReportDialog
+            targetType={REPORTABLE[segment]!}
+            targetId={id}
+            afterSend={authorId ? <AfterReport userId={authorId} /> : undefined}
+            trigger={
+              <button type="button" aria-label="Report" title="Report" className={buttonClass} data-testid="engagement-report">
+                <Flag className="h-4 w-4" aria-hidden />
+              </button>
+            }
+          />
+        )}
 
         <button
           type="button"

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -21,6 +22,7 @@ export function SafetyMenu({
   onBlocked?: () => void;
 }) {
   const theme = useTheme();
+  const router = useRouter();
   const [state, setState] = useState<BlockKind | null>(initial);
   const [busy, setBusy] = useState(false);
 
@@ -37,6 +39,8 @@ export function SafetyMenu({
     }
   }
 
+  const button = [styles.button, { borderColor: theme.border }];
+
   function confirmBlock() {
     Alert.alert(
       `Block ${name}?`,
@@ -48,9 +52,14 @@ export function SafetyMenu({
     );
   }
 
-  const button = [styles.button, { borderColor: theme.border }];
   return (
     <View style={styles.row}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => router.push({ pathname: '/report/[type]/[id]', params: { type: 'USER', id: hasherId } })}
+        style={button}>
+        <ThemedText type="smallBold">Report</ThemedText>
+      </Pressable>
       {state === 'BLOCK' ? (
         <Pressable accessibilityRole="button" disabled={busy} onPress={() => void set('BLOCK', false)} style={button}>
           <ThemedText type="smallBold">Unblock</ThemedText>

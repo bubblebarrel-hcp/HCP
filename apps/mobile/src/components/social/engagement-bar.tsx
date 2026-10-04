@@ -9,6 +9,7 @@ import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { WEB_URL } from '@/lib/api';
 import { getEngagement, reshare, setBookmarked, setLiked, unreshare } from '@/lib/social';
+import { REPORTABLE } from '@/lib/moderation';
 import { REACTIONS, reactionLabel } from '@/lib/reactions';
 import type { Engagement, ReactionKind, SubjectSegment } from '@/lib/types';
 
@@ -198,6 +199,18 @@ export function EngagementBar({
         <Pressable accessibilityRole="button" accessibilityLabel="Share" onPress={onShare} style={styles.button}>
           <Icon name={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }} size={19} color={theme.textSecondary} />
         </Pressable>
+
+        {/* Telling the people who look after Shiggy Trails (D61). Not on a trail
+            report, a run or a capsule, and not on your own. */}
+        {!signedOut && !isMine && REPORTABLE[segment] && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Report"
+            onPress={() => router.push({ pathname: '/report/[type]/[id]', params: { type: REPORTABLE[segment]!, id, ...(authorId ? { by: authorId } : {}) } })}
+            style={styles.button}>
+            <Icon name={{ ios: 'flag', android: 'flag', web: 'flag' }} size={18} color={theme.textSecondary} />
+          </Pressable>
+        )}
 
         <Pressable
           accessibilityRole="button"

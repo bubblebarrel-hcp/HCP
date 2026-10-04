@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { ActionDialog } from '@/components/membership/ActionDialog';
 import { MentionTextarea } from '@/components/social/MentionTextarea';
 import { RichText } from '@/components/social/RichText';
+import { AfterReport } from '@/components/social/AfterReport';
+import { ReportDialog } from '@/components/social/ReportDialog';
 import { useAuth } from '@/context/AuthContext';
 import {
   addComment,
@@ -242,6 +244,18 @@ function CommentRow({
                     }
                   />
                 </>
+              )}
+              {user && !comment.isMine && comment.author && (
+                <ReportDialog
+                  targetType="COMMENT"
+                  targetId={comment.id}
+                  afterSend={<AfterReport userId={comment.author.id} />}
+                  trigger={
+                    <button type="button" className="hover:underline" data-testid="comment-report">
+                      Report
+                    </button>
+                  }
+                />
               )}
               {canModerate && !comment.isMine && (
                 <ActionDialog

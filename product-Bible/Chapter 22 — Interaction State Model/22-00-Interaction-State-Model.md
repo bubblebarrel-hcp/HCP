@@ -188,6 +188,40 @@ A follow is interest, not belonging: it grants no membership, no vote and no aut
 
 A profile has an audience (`Audience`: PUBLIC, FOLLOWERS, ONLY_ME). FOLLOWERS makes a follow Pending; ONLY_ME takes no new follows. A kennel follow is always Active.
 
+## A.8c Block and Mute (D60)
+
+One row per (who, whom), reused rather than duplicated. It only removes things; it never opens a channel (D8).
+
+| State | Meaning | Enters from |
+|---|---|---|
+| Muted | One way and silent. The muted hasher's things leave the muter's lists and notifications; their page and links still open. The muted hasher is not told and loses nothing | None; or Blocked is undone |
+| Blocked | Both ways. Neither sees the other's posts, reels or photos, follows, or notifies the other; existing follows end; the blocked one's page is a 404 to them | None, or Muted |
+| Ended | `endedAt` set. The row is reused if it happens again | Muted or Blocked |
+
+## A.8d Photo Tag (D60)
+
+A claim about somebody else, so a request.
+
+| State | Meaning | Enters from |
+|---|---|---|
+| Pending | Asked. Shows to the two people it is between and nobody else | Tagging somebody else |
+| Approved | They said yes. Shows on the photo and on their profile. Self-tags start here | Pending |
+| Declined | They said no. Final: they cannot be asked again about the same photo | Pending |
+| Removed | Taken off by the tagged hasher, whoever tagged them, or whoever took the photo. The row stays | Pending or Approved |
+
+## A.8e Report (D61)
+
+A request for a person to look. Being reported changes nothing about what was reported, however many people report it.
+
+| State | Meaning | Enters from |
+|---|---|---|
+| Open | Filed and waiting. In the queue ordered by priority, then age | Filing |
+| InReview | Somebody picked it up, left a note, or a kennel handed it to platform staff | Open |
+| Actioned | A moderator took the content down, warned the hasher, reset their identity or suspended them. Closed | Open or InReview |
+| Dismissed | Looked at; no breach found. Closed | Open or InReview |
+
+A closed report is never reopened: something new is a new report. Every decision is a `ModerationAction` row, which is append-only.
+
 ## A.9 Identity Trust Level (Sub-state of Identity, Cross-Cutting)
 
 Owning Domain: Annex 08M (FR-ID-010).

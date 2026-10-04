@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BellOff, ShieldBan } from 'lucide-react';
+import { BellOff, Flag, ShieldBan } from 'lucide-react';
+import { AfterReport } from '@/components/social/AfterReport';
+import { ReportDialog } from '@/components/social/ReportDialog';
 import { toast } from 'sonner';
 import { ActionDialog } from '@/components/membership/ActionDialog';
 import { Button } from '@/components/ui/button';
@@ -54,6 +56,16 @@ export function SafetyMenu({ hasherId, name }: { hasherId: string; name: string 
 
   return (
     <div className="mt-3 flex flex-wrap gap-2" data-testid="safety-menu">
+      <ReportDialog
+        targetType="USER"
+        targetId={hasherId}
+        afterSend={state ? undefined : <AfterReport userId={hasherId} />}
+        trigger={
+          <Button type="button" variant="outline" size="sm" data-testid="report-hasher">
+            <Flag className="h-4 w-4" aria-hidden /> Report
+          </Button>
+        }
+      />
       {state === 'BLOCK' ? (
         <Button type="button" variant="outline" size="sm" onClick={() => void set('BLOCK', false)} data-testid="unblock">
           <ShieldBan className="h-4 w-4" aria-hidden /> Unblock

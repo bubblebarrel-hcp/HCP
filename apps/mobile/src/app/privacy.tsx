@@ -198,6 +198,12 @@ export default function PrivacyScreen() {
         </Pressable>
         <Pressable
           accessibilityRole="button"
+          onPress={() => router.push('/reports')}
+          style={({ pressed }) => [styles.row, { backgroundColor: theme.card, opacity: pressed ? 0.8 : 1 }]}>
+          <ThemedText type="smallBold">My reports</ThemedText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           onPress={() => router.push('/photo-tags')}
           style={({ pressed }) => [styles.row, { backgroundColor: theme.card, opacity: pressed ? 0.8 : 1 }]}>
           <ThemedText type="smallBold">Photo tags waiting for me</ThemedText>

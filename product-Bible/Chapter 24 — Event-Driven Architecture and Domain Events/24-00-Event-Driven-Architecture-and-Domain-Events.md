@@ -211,6 +211,10 @@ D41 reels, D50 follows and engagement, D51 posts. A reel and a post belong to th
 | `ContentMentioned` | D59: words newly name one or more hashers with @username; one event per publish or edit, naming only the newly mentioned | Social Service | Notification |
 | `HasherBlocked` / `HasherUnblocked` / `HasherMuted` / `HasherUnmuted` | D60: a hasher blocks, mutes, or undoes either | Social Service | Notification (suppression), Feed |
 | `PhotoTagRequested` / `PhotoTagApproved` | D60: a hasher asks to tag another in a photo; the tagged hasher says yes | Social Service | Notification |
+| `ReportFiled` | D61: a hasher reports a person, post, reel, comment or photo; urgent ones notify platform staff | Moderation Service | Notification |
+| `ReportResolved` | D61: a report is closed, Actioned or Dismissed; tells the reporter in one line | Moderation Service | Notification |
+| `ModerationActionTaken` | D61: a moderator does anything about a report, including notes and handing it up | Moderation Service | Audit |
+| `ModerationWarningIssued` | D61: a moderator warns a hasher, or resets their identity, in words the hasher reads | Moderation Service | Notification |
 | `PollVoted` | D60: a hasher answers, or changes their answer to, a poll on a post | Social Service | None yet |
 
 ## Notification Events

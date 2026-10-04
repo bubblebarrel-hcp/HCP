@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Camera, ShieldBan, UserCheck } from 'lucide-react';
+import { ArrowLeft, Camera, Flag, ShieldBan, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { AudiencePicker } from '@/components/profile/AudiencePicker';
@@ -189,6 +189,12 @@ export default function PrivacyPage() {
             <Link href="/account/photo-tags" data-testid="to-photo-tags">
               <Camera className="h-4 w-4" aria-hidden />
               Photo tags
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/account/reports" data-testid="to-my-reports">
+              <Flag className="h-4 w-4" aria-hidden />
+              My reports
             </Link>
           </Button>
         </CardContent>

@@ -792,6 +792,59 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         recipients: [taggerId],
       };
     }
+    // Reports (D61). Only an urgent one wakes platform staff: the rest wait in
+    // the queue, which is where staff look.
+    case 'ReportFiled': {
+      if (Number(payload.priority) < 2) return null;
+      return {
+        category: C.SAFETY,
+        priority: P.HIGH,
+        title: 'An urgent report is waiting',
+        body: 'Somebody may be at risk. Open the moderation queue.',
+        contextType: 'Report',
+        contextId: event.aggregateId,
+        kennelId: null,
+        recipients: await platformAdminIds(),
+        pushByDefault: true,
+      };
+    }
+    // The reporter hears the outcome in one line, and never what was done to
+    // anybody.
+    case 'ReportResolved': {
+      const reporterId = str(payload, 'reporterId');
+      if (!reporterId) return null;
+      const actioned = str(payload, 'outcome') === 'ACTIONED';
+      return {
+        category: C.SYSTEM,
+        priority: P.LOW,
+        title: actioned ? 'We took action on your report' : 'We reviewed your report',
+        body: actioned
+          ? 'Thank you for telling us. Something was done about it.'
+          : 'We did not find a breach of the rules this time. Thank you for telling us.',
+        contextType: 'Report',
+        contextId: event.aggregateId,
+        kennelId: null,
+        recipients: [reporterId],
+      };
+    }
+    // A moderator has something to say to a hasher. The words are theirs.
+    case 'ModerationWarningIssued': {
+      const targetUserId = str(payload, 'targetUserId');
+      if (!targetUserId) return null;
+      const reset = str(payload, 'kind') === 'RESET_IDENTITY';
+      return {
+        category: C.SYSTEM,
+        priority: P.HIGH,
+        title: reset ? 'Your name and picture were reset' : 'A moderator has a warning for you',
+        body: str(payload, 'message') ?? 'Please read the community rules.',
+        contextType: 'Moderation',
+        contextId: null,
+        kennelId: null,
+        recipients: [targetUserId],
+        pushByDefault: true,
+        emailByDefault: true,
+      };
+    }
     case 'ContentCommentRemoved': {
       const commentId = str(payload, 'commentId');
       if (!commentId) return null;

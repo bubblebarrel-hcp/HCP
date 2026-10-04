@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Building2, LayoutDashboard, LogOut, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Building2, Flag, LayoutDashboard, LogOut, Users } from 'lucide-react';
+import api from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import { BrandMark } from '@/components/brand/HashLogo';
 import { ThemeToggleButton } from '@/components/ui/theme-toggle';
@@ -12,12 +14,29 @@ const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/kennels', label: 'Kennels', icon: Building2 },
   { href: '/users', label: 'Hashers', icon: Users },
+  { href: '/reports', label: 'Reports', icon: Flag },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  // Open reports, so staff see there is something waiting without opening it (D61).
+  const [open, setOpen] = useState<{ open: number; urgent: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      api
+        .get<{ data: { open: number; urgent: number } }>('/admin/reports/counts')
+        .then((res) => alive && setOpen(res.data.data))
+        .catch(() => undefined);
+    void load();
+    const timer = setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [pathname]);
 
   return (
     <aside className="flex w-full flex-col border-b border-border bg-card md:min-h-screen md:w-60 md:border-b-0 md:border-r">
@@ -46,6 +65,18 @@ export function Sidebar() {
             >
               <Icon className="h-4 w-4" aria-hidden />
               {label}
+              {href === '/reports' && open && open.open > 0 && (
+                <span
+                  className={cn(
+                    'ml-auto rounded-full px-2 py-0.5 text-xs font-semibold',
+                    open.urgent > 0 ? 'bg-destructive text-white' : 'bg-primary text-primary-foreground',
+                  )}
+                  data-testid="reports-badge"
+                  aria-label={`${open.open} open reports${open.urgent ? `, ${open.urgent} urgent` : ''}`}
+                >
+                  {open.open}
+                </span>
+              )}
             </Link>
           );
         })}

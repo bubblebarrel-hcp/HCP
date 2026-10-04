@@ -27,6 +27,7 @@ import hareRoutes from './routes/hare.routes';
 import postRoutes from './routes/post.routes';
 import entityRoutes from './routes/entity.routes';
 import safetyRoutes from './routes/safety.routes';
+import moderationRoutes from './routes/moderation.routes';
 import engagementRoutes from './routes/engagement.routes';
 import followRoutes from './routes/follow.routes';
 import profileRoutes from './routes/profile.routes';
@@ -108,6 +109,8 @@ app.use('/api/v1', postRoutes);
 app.use('/api/v1', entityRoutes);
 // Blocks, mentions inbox, photo tags (D60)
 app.use('/api/v1', safetyRoutes);
+// Reports and a kennel's moderation queue (D61)
+app.use('/api/v1', moderationRoutes);
 app.use('/api/v1', engagementRoutes);
 app.use('/api/v1', followRoutes);
 app.use('/api/v1', profileRoutes);

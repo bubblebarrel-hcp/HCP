@@ -132,6 +132,9 @@ export function routeFor(data: Record<string, unknown> | undefined): string | nu
     case 'FollowRequest':
       return '/follow-requests';
     // Somebody tagged you in a photo and wants your yes (D60).
+    // The outcome of something you reported (D61).
+    case 'Report':
+      return '/reports';
     case 'PhotoTag':
       return '/photo-tags';
     // A like or a comment names the thing it was on (D50).

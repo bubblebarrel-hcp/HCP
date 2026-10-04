@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/feed/avatar';
@@ -27,6 +27,8 @@ function timeAgo(iso: string) {
 
 function CommentRow({ comment, reply }: { comment: ContentComment; reply?: boolean }) {
   const theme = useTheme();
+  const router = useRouter();
+  const { user } = useAuth();
   const gone = comment.status !== 'VISIBLE';
   return (
     <View style={[styles.commentRow, reply && styles.replyRow]}>
@@ -46,6 +48,15 @@ function CommentRow({ comment, reply }: { comment: ContentComment; reply?: boole
           <ThemedText type="small" themeColor="textSecondary">{timeAgo(comment.createdAt)}</ThemedText>
           {comment.editedAt ? <ThemedText type="small" themeColor="textSecondary">· edited</ThemedText> : null}
           {comment.likes > 0 ? <ThemedText type="small" themeColor="textSecondary">· {comment.likes} likes</ThemedText> : null}
+          {user && !gone && comment.author && comment.author.id !== user.id ? (
+            <ThemedText
+              type="small"
+              themeColor="textSecondary"
+              accessibilityRole="link"
+              onPress={() => router.push({ pathname: '/report/[type]/[id]', params: { type: 'COMMENT', id: comment.id, by: comment.author!.id } })}>
+              · Report
+            </ThemedText>
+          ) : null}
         </View>
       </View>
     </View>

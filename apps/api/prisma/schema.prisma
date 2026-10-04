@@ -764,6 +764,7 @@ model User {
   pollVotes               PollVote[]
   photoTagsOfMe           PhotoTag[]                @relation("PhotoTagged")
   photoTagsMade           PhotoTag[]                @relation("PhotoTagger")
+  reportsFiled            ContentReport[]           @relation("ReportReporter")
 
   @@index([hashHandle])
   @@index([homeKennelId])
@@ -2889,4 +2890,110 @@ model LinkPreview {
   failedAt    DateTime?
 
   posts Post[]
+}
+
+// ───────────────────── Part M — Reports and moderation (D61) ─────────────────────
+
+enum ReportTargetType {
+  USER
+  POST
+  REEL
+  COMMENT
+  MEDIA_ASSET
+}
+
+enum ReportReason {
+  SPAM
+  SCAM
+  HARASSMENT
+  HATE
+  VIOLENCE
+  SEXUAL
+  PRIVATE_INFO
+  SELF_HARM
+  // Only on a hasher: somebody pretending to be somebody else.
+  IMPERSONATION
+  OTHER
+}
+
+// Ch.22: Open -> InReview -> Actioned | Dismissed. Nothing is deleted, and a
+// resolved report stays resolved; a new problem is a new report.
+enum ReportStatus {
+  OPEN
+  IN_REVIEW
+  ACTIONED
+  DISMISSED
+}
+
+enum ModerationActionKind {
+  // Looked at it and it is fine. Closes the report.
+  DISMISS
+  // Takes the post, reel, comment or photo down. Closes the report.
+  REMOVE_CONTENT
+  // Tells the hasher a rule was broken, without taking anything away. Closes it.
+  WARN_USER
+  // Platform staff only. Ends every session and blocks login. Closes it.
+  SUSPEND_USER
+  // Platform staff only. Clears the handle, picture, banner and bio and gives a
+  // neutral username: what impersonation is fixed with. Closes it.
+  RESET_IDENTITY
+  // A kennel moderator hands it to platform staff. Keeps it open.
+  ESCALATE
+  // Somebody picks it up, or leaves a note for the next. Keeps it open.
+  NOTE
+}
+
+// What somebody told us (D61). The reporter is confidential: nothing the target
+// can read ever names them. \`snapshot\` is what was reported as it was when it was
+// reported, so editing or deleting it afterwards does not erase the evidence.
+model ContentReport {
+  id                 String           @id @default(uuid()) @db.Uuid
+  reporterId         String           @db.Uuid
+  targetType         ReportTargetType
+  targetId           String           @db.Uuid
+  // The hasher answerable for it: the author, or the hasher themself.
+  targetUserId       String?          @db.Uuid
+  // The kennel whose moderators may also see it, when it was made in one.
+  kennelId           String?          @db.Uuid
+  reason             ReportReason
+  details            String?
+  // Impersonation only: the real hasher being copied. The reporter, when it is
+  // them; somebody else, named by the reporter, when it is not.
+  impersonatedUserId String?          @db.Uuid
+  snapshot           Json
+  status             ReportStatus     @default(OPEN)
+  // 0 normal, 1 high, 2 urgent. Set from the reason when it is filed.
+  priority           Int              @default(0)
+  escalatedAt        DateTime?
+  assignedToId       String?          @db.Uuid
+  resolvedById       String?          @db.Uuid
+  resolvedAt         DateTime?
+  resolutionNote     String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  reporter User               @relation("ReportReporter", fields: [reporterId], references: [id])
+  actions  ModerationAction[]
+
+  @@index([status, priority, createdAt])
+  @@index([targetType, targetId])
+  @@index([kennelId, status])
+  @@index([reporterId, createdAt])
+  @@index([targetUserId])
+}
+
+// Append-only: what a moderator did about a report, and when. The history a
+// hasher has with moderation is read from here.
+model ModerationAction {
+  id        String               @id @default(uuid()) @db.Uuid
+  reportId  String               @db.Uuid
+  actorId   String               @db.Uuid
+  kind      ModerationActionKind
+  note      String?
+  createdAt DateTime             @default(now())
+
+  report ContentReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, createdAt])
+  @@index([actorId, createdAt])
 }
