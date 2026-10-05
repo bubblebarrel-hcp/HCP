@@ -1,9 +1,22 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 
 import { api } from '@/lib/api';
+
+// expo-notifications throws at import time in Expo Go on Android (SDK 53+
+// removed remote push from it). A static import would take every route down
+// with it, so load it defensively: null means "no push in this runtime" and the
+// app carries on with in-app notifications only. A development build gets the
+// real module.
+export const Notifications: typeof import('expo-notifications') | null = (() => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-notifications');
+  } catch {
+    return null;
+  }
+})();
 
 // Registering this handset for push (D12).
 //
@@ -15,7 +28,7 @@ import { api } from '@/lib/api';
 
 // A notification arriving while the app is open should still be seen. Safe to
 // call on web, where it warns and does nothing.
-Notifications.setNotificationHandler({
+Notifications?.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
     shouldShowList: true,
@@ -26,7 +39,11 @@ Notifications.setNotificationHandler({
 
 export type PushOutcome =
   | { ok: true; token: string }
-  | { ok: false; reason: 'web' | 'simulator' | 'denied' | 'unconfigured' | 'error'; message: string };
+  | {
+      ok: false;
+      reason: 'web' | 'unavailable' | 'simulator' | 'denied' | 'unconfigured' | 'error';
+      message: string;
+    };
 
 /**
  * Expo needs to know which project a token belongs to. `eas init` writes this
@@ -39,7 +56,7 @@ function projectId(): string | null {
 }
 
 async function ensureAndroidChannel() {
-  if (Platform.OS !== 'android') return;
+  if (Platform.OS !== 'android' || !Notifications) return;
   // Android decides how loudly to interrupt from the channel, not the message,
   // so the channel has to exist before the first notification lands.
   await Notifications.setNotificationChannelAsync('default', {
@@ -58,6 +75,14 @@ export async function registerForPush(): Promise<PushOutcome> {
   // a browser on a real machine.
   if (Platform.OS === 'web') {
     return { ok: false, reason: 'web', message: 'Push works in the Shiggy Trails phone app. Browser notifications are not built yet.' };
+  }
+
+  if (!Notifications) {
+    return {
+      ok: false,
+      reason: 'unavailable',
+      message: 'Push is not available in Expo Go. Use a development build to receive push notifications.',
+    };
   }
 
   // A simulator has no push service behind it, so there is no token to get.
@@ -108,7 +133,7 @@ export async function registerForPush(): Promise<PushOutcome> {
 export async function unregisterForPush(): Promise<void> {
   try {
     const id = projectId();
-    if (!id || !Device.isDevice || Platform.OS === 'web') return;
+    if (!Notifications || !id || !Device.isDevice || Platform.OS === 'web') return;
     const { granted } = await Notifications.getPermissionsAsync();
     if (!granted) return;
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: id });

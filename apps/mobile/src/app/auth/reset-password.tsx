@@ -1,109 +1,105 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { CheckCircle2 } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import { ThemedText } from '@/components/themed-text';
+import { HashLogo } from '@/components/brand/hash-logo';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input } from '@/components/ui/web-ui';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
 
+// Set a new password, as the web lays it out (app/auth/reset-password/page.tsx).
+// The link in the email carries the token; without one there is nothing to reset.
 export default function ResetPasswordScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ token?: string }>();
-  const [token, setToken] = useState(params.token ?? '');
+  const { token } = useLocalSearchParams<{ token?: string }>();
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
 
   async function submit() {
-    setError(null);
-    if (!token.trim()) {
-      setError('Paste the token from your email.');
-      return;
-    }
-    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
-      setError('Password needs 8+ characters with a letter and a number.');
-      return;
-    }
+    if (!token) return;
+    if (password.length < 8) return setError('At least 8 characters');
+    if (!/[A-Za-z]/.test(password)) return setError('Include at least one letter');
+    if (!/[0-9]/.test(password)) return setError('Include at least one number');
+    setError(undefined);
     setBusy(true);
     try {
-      await api('/auth/password/reset', { method: 'POST', body: { token: token.trim(), password } });
-      setDone(true);
+      await api('/auth/password/reset', { method: 'POST', body: { token, password } });
+      Alert.alert('Password reset. You can log in with your new password.');
+      router.replace('/account');
     } catch (err) {
-      setError(errorMessage(err, 'That link is invalid or has expired'));
+      Alert.alert('That did not work', errorMessage(err, 'That reset link is no longer valid.'));
     } finally {
       setBusy(false);
     }
   }
 
-  const inputStyle = [styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }];
-
-  if (done) {
-    return (
-      <ThemedView type="canvas" style={styles.center}>
-        <ThemedText type="title">Password updated</ThemedText>
-        <ThemedText themeColor="textSecondary" style={styles.centerText}>
-          Every other session was signed out. Log in with your new password.
-        </ThemedText>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.replace('/account')}
-          style={({ pressed }) => [styles.button, { backgroundColor: theme.primary, opacity: pressed ? 0.7 : 1 }]}>
-          <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Go to log in</ThemedText>
-        </Pressable>
-      </ThemedView>
-    );
-  }
-
   return (
-    <ThemedView type="canvas" style={styles.container}>
-      <ThemedText type="title">Set a new password</ThemedText>
-      <View style={styles.field}>
-        <ThemedText type="small" themeColor="textSecondary">Reset token</ThemedText>
-        <TextInput
-          value={token}
-          onChangeText={setToken}
-          placeholder="Paste the token from your email"
-          placeholderTextColor={theme.textSecondary}
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={inputStyle}
-        />
-      </View>
-      <View style={styles.field}>
-        <ThemedText type="small" themeColor="textSecondary">New password</ThemedText>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoCapitalize="none"
-          autoComplete="new-password"
-          style={inputStyle}
-        />
-        <ThemedText type="small" themeColor="textSecondary">8+ characters with a letter and a number</ThemedText>
-      </View>
-
-      {error && <ThemedText style={{ color: theme.danger }}>{error}</ThemedText>}
-
-      <Pressable
-        accessibilityRole="button"
-        onPress={submit}
-        disabled={busy}
-        style={({ pressed }) => [styles.button, { backgroundColor: theme.primary, opacity: pressed || busy ? 0.7 : 1 }]}>
-        {busy ? <ActivityIndicator color={theme.onPrimary} /> : <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Reset password</ThemedText>}
-      </Pressable>
+    <ThemedView type="canvas" style={styles.screen}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
+        <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+          {!token ? (
+            <Card bleed={false} >
+              <View testID="reset-invalid">
+                <CardHeader>
+                  <CardTitle style={styles.title}>That link is missing a token</CardTitle>
+                  <CardDescription>Ask for a fresh reset link from the sign-in page.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" style={styles.start} onPress={() => router.replace('/auth/forgot-password')}>
+                    Reset my password
+                  </Button>
+                </CardContent>
+              </View>
+            </Card>
+          ) : (
+            <Card bleed={false}>
+              <CardHeader>
+                <View style={styles.mark}>
+                  <HashLogo size={56} color={theme.text} />
+                </View>
+                <View style={styles.titleRow}>
+                  <CheckCircle2 size={24} color={theme.primaryStrong} />
+                  <CardTitle style={styles.title}>Set a new password</CardTitle>
+                </View>
+                <CardDescription>This link works once and lasts 1 hour.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <View style={styles.form}>
+                  <Field label="New password" error={error} hint="8+ characters with a letter and a number">
+                    <Input
+                      testID="reset-password"
+                      secureTextEntry
+                      autoComplete="new-password"
+                      autoCapitalize="none"
+                      value={password}
+                      onChangeText={setPassword}
+                      onSubmitEditing={() => void submit()}
+                      accessibilityLabel="New password"
+                    />
+                  </Field>
+                  <Button testID="reset-submit" disabled={busy} onPress={() => void submit()}>
+                    {busy ? 'Resetting…' : 'Reset password'}
+                  </Button>
+                </View>
+              </CardContent>
+            </Card>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: Spacing.three, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four, gap: Spacing.three },
-  centerText: { textAlign: 'center' },
-  field: { gap: 4 },
-  input: { borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: 12, fontSize: 16 },
-  button: { borderRadius: Spacing.two, paddingVertical: 14, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  screen: { flex: 1 },
+  page: { width: '100%', maxWidth: 448, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 64 },
+  mark: { marginBottom: 8 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  title: { fontSize: 24, lineHeight: 32 },
+  form: { gap: 16 },
+  start: { alignSelf: 'flex-start' },
 });

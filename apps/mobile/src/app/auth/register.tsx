@@ -1,20 +1,24 @@
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Check } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
+import { HashLogo } from '@/components/brand/hash-logo';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { Select } from '@/components/ui/select';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input } from '@/components/ui/web-ui';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
 
-type Theme = ReturnType<typeof useTheme>;
+// The register page, as the web lays it out (app/auth/register/page.tsx): one
+// card, four sections (About you, Contact & location, Emergency contact,
+// Account), the terms checkbox, a large full-width button and the way back to
+// log in. Mirrors apps/api/src/validators/auth.validator.ts and the web's Zod
+// schema: change all three together. D5: full biodata is required; only the hash
+// handle is ever shown publicly.
 
-// Mirrors apps/api/src/validators/auth.validator.ts (Joi) and the web Zod
-// schema at apps/web/app/auth/register/page.tsx. Change all three together.
-// D5: full biodata is required; only the hash handle is ever shown publicly.
-
-const GENDERS: { value: string; label: string }[] = [
+const GENDERS = [
   { value: 'PREFER_NOT_TO_SAY', label: 'Prefer not to say' },
   { value: 'FEMALE', label: 'Female' },
   { value: 'MALE', label: 'Male' },
@@ -22,7 +26,7 @@ const GENDERS: { value: string; label: string }[] = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-interface Form {
+interface Values {
   firstName: string;
   middleName: string;
   lastName: string;
@@ -44,186 +48,197 @@ interface Form {
   password: string;
 }
 
-const initial: Form = {
+const defaults: Values = {
   firstName: '', middleName: '', lastName: '', hashHandle: '', dateOfBirth: '',
   gender: 'PREFER_NOT_TO_SAY', phone: '', nationality: '', country: '', stateProvince: '', city: '',
   addressLine: '', occupation: '', languages: '', emergencyContactName: '', emergencyContactPhone: '',
   emergencyContactRelationship: '', email: '', password: '',
 };
 
-const REQUIRED: (keyof Form)[] = [
-  'firstName', 'lastName', 'dateOfBirth', 'phone', 'nationality', 'country', 'stateProvince', 'city',
-  'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship', 'email', 'password',
-];
+type Errors = Partial<Record<keyof Values | 'acceptTerms', string>>;
 
-function FormField({
-  label,
-  value,
-  onChangeText,
-  theme,
-  keyboardType = 'default',
-  secure,
-  autoCapitalize = 'sentences',
-}: {
-  label: string;
-  value: string;
-  onChangeText: (v: string) => void;
-  theme: Theme;
-  keyboardType?: 'email-address' | 'phone-pad' | 'default';
-  secure?: boolean;
-  autoCapitalize?: 'none' | 'words' | 'sentences';
-}) {
-  return (
-    <View style={styles.field}>
-      <ThemedText type="small" themeColor="textSecondary">{label}</ThemedText>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholderTextColor={theme.textSecondary}
-        keyboardType={keyboardType}
-        secureTextEntry={secure}
-        autoCapitalize={autoCapitalize}
-        autoCorrect={false}
-        style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
-      />
-    </View>
-  );
+function validate(v: Values, acceptTerms: boolean): Errors {
+  const e: Errors = {};
+  const required = (key: keyof Values, label: string, max = 80) => {
+    const value = v[key].trim();
+    if (!value) e[key] = `${label} is required`;
+    else if (value.length > max) e[key] = `${label} is too long`;
+  };
+  required('firstName', 'First name');
+  required('lastName', 'Last name');
+  required('phone', 'Phone', 40);
+  required('nationality', 'Nationality');
+  required('country', 'Country');
+  required('stateProvince', 'State / province');
+  required('city', 'City');
+  required('emergencyContactName', 'Emergency contact name', 120);
+  required('emergencyContactPhone', 'Emergency contact phone', 40);
+  required('emergencyContactRelationship', 'Relationship', 60);
+  if (!v.dateOfBirth) e.dateOfBirth = 'Date of birth is required';
+  else if (Number.isNaN(Date.parse(v.dateOfBirth)) || new Date(v.dateOfBirth) >= new Date()) e.dateOfBirth = 'Enter a valid past date';
+  const email = v.email.trim();
+  if (!email) e.email = 'Email is required';
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = 'Enter a valid email';
+  if (v.password.length < 8) e.password = 'At least 8 characters';
+  else if (!/[A-Za-z]/.test(v.password)) e.password = 'Include at least one letter';
+  else if (!/[0-9]/.test(v.password)) e.password = 'Include at least one number';
+  if (!acceptTerms) e.acceptTerms = 'You must accept the Terms of Service and Privacy Policy';
+  return e;
 }
 
-function validate(f: Form): string | null {
-  for (const key of REQUIRED) {
-    if (!f[key].trim()) return 'Fill in every required field.';
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.dateOfBirth.trim()) || Number.isNaN(Date.parse(f.dateOfBirth)) || new Date(f.dateOfBirth) >= new Date()) {
-    return 'Enter date of birth as YYYY-MM-DD, in the past.';
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) return 'Enter a valid email.';
-  if (f.password.length < 8 || !/[A-Za-z]/.test(f.password) || !/[0-9]/.test(f.password)) {
-    return 'Password needs 8+ characters with a letter and a number.';
-  }
-  return null;
+function Section({ title, description, first, children }: { title: string; description?: string; first?: boolean; children: React.ReactNode }) {
+  const theme = useTheme();
+  return (
+    <View style={[styles.section, !first && { borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 24 }]}>
+      <View>
+        <ThemedText style={styles.sectionTitle}>{title}</ThemedText>
+        {description ? <ThemedText themeColor="textSecondary" style={styles.sm}>{description}</ThemedText> : null}
+      </View>
+      <View style={styles.fields}>{children}</View>
+    </View>
+  );
 }
 
 export default function RegisterScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const [f, setF] = useState<Form>(initial);
+  const [v, setV] = useState<Values>(defaults);
   const [acceptTerms, setAcceptTerms] = useState(false);
+  const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const set = (key: keyof Form) => (value: string) => setF((prev) => ({ ...prev, [key]: value }));
+  const set = (key: keyof Values) => (value: string) => setV((prev) => ({ ...prev, [key]: value }));
 
   async function submit() {
-    setError(null);
-    const problem = validate(f);
-    if (problem) {
-      setError(problem);
-      return;
-    }
-    if (!acceptTerms) {
-      setError('You must accept the Terms of Service and Privacy Policy.');
-      return;
-    }
+    const found = validate(v, acceptTerms);
+    setErrors(found);
+    if (Object.keys(found).length > 0) return;
     setBusy(true);
     try {
-      const data = await api<{ emailSentTo: string }>('/auth/register', {
+      await api('/auth/register', {
         method: 'POST',
         body: {
-          ...f,
-          email: f.email.trim().toLowerCase(),
-          middleName: f.middleName.trim() || undefined,
-          hashHandle: f.hashHandle.trim() || undefined,
-          addressLine: f.addressLine.trim() || undefined,
-          occupation: f.occupation.trim() || undefined,
-          languages: f.languages.split(',').map((l) => l.trim()).filter(Boolean),
+          ...v,
+          email: v.email.trim().toLowerCase(),
+          middleName: v.middleName.trim() || undefined,
+          hashHandle: v.hashHandle.trim() || undefined,
+          addressLine: v.addressLine.trim() || undefined,
+          occupation: v.occupation.trim() || undefined,
+          languages: v.languages.split(',').map((l) => l.trim()).filter(Boolean),
           acceptTerms: true,
         },
       });
-      router.replace({ pathname: '/auth/verify', params: { email: data.emailSentTo } });
+      // D31: no session yet. Send them to confirm their address rather than
+      // welcoming them into an app they cannot use.
+      router.replace({ pathname: '/auth/verify', params: { sent: v.email.trim().toLowerCase() } });
     } catch (err) {
-      setError(errorMessage(err, 'Could not create your account'));
+      Alert.alert('Could not create your account', errorMessage(err, 'Could not create your account'));
     } finally {
       setBusy(false);
     }
   }
 
+  const text = (
+    name: keyof Values,
+    label: string,
+    opts: { hint?: string; keyboardType?: 'email-address' | 'phone-pad' | 'default'; secure?: boolean; autoCapitalize?: 'none' | 'words' | 'sentences'; placeholder?: string } = {},
+  ) => (
+    <Field label={label} error={errors[name]} hint={opts.hint}>
+      <Input
+        testID={`register-${name}`}
+        value={v[name]}
+        onChangeText={set(name)}
+        keyboardType={opts.keyboardType}
+        secureTextEntry={opts.secure}
+        autoCapitalize={opts.autoCapitalize ?? 'sentences'}
+        autoCorrect={false}
+        placeholder={opts.placeholder}
+        accessibilityLabel={label}
+      />
+    </Field>
+  );
+
+  const handle = v.hashHandle.trim() || `Just ${v.firstName.trim() || 'your first name'}`;
+
   return (
-    <ThemedView type="canvas" style={styles.flex}>
+    <ThemedView type="canvas" style={styles.screen}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <ThemedText type="title">Join Shiggy Trails</ThemedText>
-          <ThemedText themeColor="textSecondary">
-            Your details stay private. Other hashers only see your hash handle — or “Just {f.firstName.trim() || 'your first name'}” until your kennel names you.
-          </ThemedText>
+        <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+          <Card bleed={false}>
+            <CardHeader>
+              <View style={styles.mark}>
+                <HashLogo size={56} color={theme.text} />
+              </View>
+              <CardTitle style={styles.title}>Join Shiggy Trails</CardTitle>
+              <CardDescription>
+                Your details stay private. Other hashers only see your hash handle, or{' '}
+                <ThemedText style={[styles.sm, styles.bold]}>“{handle}”</ThemedText> until your kennel names you.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <View style={styles.form}>
+                <Section title="About you" first>
+                  {text('firstName', 'First name')}
+                  {text('lastName', 'Last name')}
+                  {text('middleName', 'Middle name (optional)')}
+                  {text('hashHandle', 'Hash handle (optional)', { hint: 'Leave blank if you have not been named yet.' })}
+                  {text('dateOfBirth', 'Date of birth', { placeholder: 'YYYY-MM-DD', autoCapitalize: 'none' })}
+                  <Field label="Gender" error={errors.gender}>
+                    <Select testID="register-gender" value={v.gender} onChange={set('gender')} options={GENDERS} />
+                  </Field>
+                  {text('nationality', 'Nationality')}
+                  {text('occupation', 'Occupation (optional)')}
+                  {text('languages', 'Languages (optional)', { hint: 'Comma separated, e.g. English, Igbo' })}
+                </Section>
 
-          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>About you</ThemedText>
-          <FormField label="First name" value={f.firstName} onChangeText={set('firstName')} theme={theme} autoCapitalize="words" />
-          <FormField label="Last name" value={f.lastName} onChangeText={set('lastName')} theme={theme} autoCapitalize="words" />
-          <FormField label="Middle name (optional)" value={f.middleName} onChangeText={set('middleName')} theme={theme} autoCapitalize="words" />
-          <FormField label="Hash handle (optional)" value={f.hashHandle} onChangeText={set('hashHandle')} theme={theme} />
-          <FormField label="Date of birth (YYYY-MM-DD)" value={f.dateOfBirth} onChangeText={set('dateOfBirth')} theme={theme} />
-          <View style={styles.field}>
-            <ThemedText type="small" themeColor="textSecondary">Gender</ThemedText>
-            <View style={styles.chipRow}>
-              {GENDERS.map((g) => {
-                const active = f.gender === g.value;
-                return (
+                <Section title="Contact & location">
+                  {text('phone', 'Phone', { keyboardType: 'phone-pad' })}
+                  {text('country', 'Country')}
+                  {text('stateProvince', 'State / province')}
+                  {text('city', 'City')}
+                  {text('addressLine', 'Address (optional)')}
+                </Section>
+
+                <Section title="Emergency contact" description="Used only by run organisers in an emergency.">
+                  {text('emergencyContactName', 'Name')}
+                  {text('emergencyContactPhone', 'Phone', { keyboardType: 'phone-pad' })}
+                  {text('emergencyContactRelationship', 'Relationship')}
+                </Section>
+
+                <Section title="Account">
+                  {text('email', 'Email', { keyboardType: 'email-address', autoCapitalize: 'none' })}
+                  {text('password', 'Password', { secure: true, autoCapitalize: 'none', hint: '8+ characters with a letter and a number' })}
+                </Section>
+
+                <View style={styles.terms}>
                   <Pressable
-                    key={g.value}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                    onPress={() => set('gender')(g.value)}
-                    style={({ pressed }) => [
-                      styles.chip,
-                      { backgroundColor: active ? theme.primary : theme.backgroundElement, opacity: pressed ? 0.8 : 1 },
-                    ]}>
-                    <ThemedText type="small" style={{ color: active ? theme.onPrimary : theme.text }}>{g.label}</ThemedText>
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: acceptTerms }}
+                    testID="register-acceptTerms"
+                    onPress={() => setAcceptTerms((on) => !on)}
+                    style={styles.termsRow}>
+                    <View style={[styles.box, { borderColor: acceptTerms ? theme.primary : theme.border, backgroundColor: acceptTerms ? theme.primary : 'transparent' }]}>
+                      {acceptTerms && <Check size={12} color={theme.onPrimary} />}
+                    </View>
+                    <ThemedText style={styles.termsText}>I accept the Terms of Service and Privacy Policy.</ThemedText>
                   </Pressable>
-                );
-              })}
-            </View>
-          </View>
-          <FormField label="Nationality" value={f.nationality} onChangeText={set('nationality')} theme={theme} />
-          <FormField label="Occupation (optional)" value={f.occupation} onChangeText={set('occupation')} theme={theme} />
-          <FormField label="Languages (optional, comma separated)" value={f.languages} onChangeText={set('languages')} theme={theme} />
+                  {errors.acceptTerms ? (
+                    <ThemedText accessibilityRole="alert" style={[styles.xs, { color: theme.danger }]}>{errors.acceptTerms}</ThemedText>
+                  ) : null}
+                </View>
 
-          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>Contact & location</ThemedText>
-          <FormField label="Phone" value={f.phone} onChangeText={set('phone')} theme={theme} keyboardType="phone-pad" />
-          <FormField label="Country" value={f.country} onChangeText={set('country')} theme={theme} />
-          <FormField label="State / province" value={f.stateProvince} onChangeText={set('stateProvince')} theme={theme} />
-          <FormField label="City" value={f.city} onChangeText={set('city')} theme={theme} />
-          <FormField label="Address (optional)" value={f.addressLine} onChangeText={set('addressLine')} theme={theme} />
-
-          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>Emergency contact</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">Used only by run organisers in an emergency.</ThemedText>
-          <FormField label="Name" value={f.emergencyContactName} onChangeText={set('emergencyContactName')} theme={theme} autoCapitalize="words" />
-          <FormField label="Phone" value={f.emergencyContactPhone} onChangeText={set('emergencyContactPhone')} theme={theme} keyboardType="phone-pad" />
-          <FormField label="Relationship" value={f.emergencyContactRelationship} onChangeText={set('emergencyContactRelationship')} theme={theme} />
-
-          <ThemedText type="smallBold" themeColor="textSecondary" style={styles.section}>Account</ThemedText>
-          <FormField label="Email" value={f.email} onChangeText={set('email')} theme={theme} keyboardType="email-address" autoCapitalize="none" />
-          <FormField label="Password" value={f.password} onChangeText={set('password')} theme={theme} secure autoCapitalize="none" />
-          <ThemedText type="small" themeColor="textSecondary">8+ characters with a letter and a number</ThemedText>
-
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: acceptTerms }}
-            onPress={() => setAcceptTerms((v) => !v)}
-            style={styles.termsRow}>
-            <View style={[styles.checkbox, { borderColor: theme.border, backgroundColor: acceptTerms ? theme.primary : 'transparent' }]} />
-            <ThemedText type="small" style={styles.termsText}>I accept the Terms of Service and Privacy Policy.</ThemedText>
-          </Pressable>
-
-          {error && <ThemedText style={{ color: theme.danger }}>{error}</ThemedText>}
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={submit}
-            disabled={busy}
-            style={({ pressed }) => [styles.button, { backgroundColor: theme.primary, opacity: pressed || busy ? 0.7 : 1 }]}>
-            {busy ? <ActivityIndicator color={theme.onPrimary} /> : <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Create account</ThemedText>}
-          </Pressable>
+                <Button size="lg" testID="register-submit" disabled={busy} onPress={() => void submit()}>
+                  {busy ? 'Creating your account…' : 'Create account'}
+                </Button>
+              </View>
+              <ThemedText themeColor="textSecondary" style={styles.footer}>
+                Already hashing with us?{' '}
+                <ThemedText style={[styles.link, { color: theme.primaryStrong }]} onPress={() => router.replace('/account')}>
+                  Log in
+                </ThemedText>
+              </ThemedText>
+            </CardContent>
+          </Card>
         </ScrollView>
       </KeyboardAvoidingView>
     </ThemedView>
@@ -232,14 +247,22 @@ export default function RegisterScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  scroll: { padding: Spacing.three, gap: Spacing.two, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center', paddingBottom: Spacing.six },
-  section: { marginTop: Spacing.two },
-  field: { gap: 4 },
-  input: { borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: 12, fontSize: 16 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.one },
-  chip: { borderRadius: 999, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, minHeight: 40, justifyContent: 'center' },
-  termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two, minHeight: 44, paddingVertical: Spacing.two },
-  checkbox: { width: 20, height: 20, borderWidth: 1, borderRadius: 4, marginTop: 2 },
-  termsText: { flex: 1 },
-  button: { borderRadius: Spacing.two, paddingVertical: 14, minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: Spacing.two },
+  screen: { flex: 1 },
+  // mx-auto max-w-3xl px-4 py-12
+  page: { width: '100%', maxWidth: 768, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 48 },
+  mark: { marginBottom: 8 },
+  title: { fontSize: 24, lineHeight: 32 },
+  form: { gap: 24 },
+  section: { gap: 16 },
+  sectionTitle: { fontSize: 16, lineHeight: 24, fontWeight: '600' },
+  fields: { gap: 16 },
+  sm: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  xs: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
+  bold: { fontWeight: '700' },
+  terms: { gap: 8 },
+  termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, minHeight: 44 },
+  box: { marginTop: 2, width: 16, height: 16, borderRadius: 3, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  termsText: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  footer: { marginTop: 24, textAlign: 'center', fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  link: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
 });

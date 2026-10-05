@@ -1,16 +1,20 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, UserRound } from 'lucide-react';
+import { Menu, Plus, UserRound } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { PhotoPostDialog } from '@/components/feed/PhotoPostDialog';
 import { isActive, primaryNav, type NavItem } from '@/components/layout/nav';
 import { cn } from '@/lib/utils';
 
 // Phone-width tab bar. Desktop gets the same destinations in the top bar.
+// The + in the middle posts photos from anywhere (signed in), or goes to log in.
 export function BottomNav() {
   const { user } = useAuth();
   const pathname = usePathname();
+  const [posting, setPosting] = useState(false);
 
   const items: NavItem[] = [
     ...primaryNav.slice(0, 3),
@@ -19,13 +23,38 @@ export function BottomNav() {
       : { label: 'Log in', icon: UserRound, href: '/auth/login', match: (p) => p.startsWith('/auth') },
   ];
 
+  const plus = (
+    <li key="post" className="grid place-items-center">
+      {user ? (
+        <button
+          type="button"
+          aria-label="Post photos"
+          onClick={() => setPosting(true)}
+          data-testid="nav-post"
+          className="grid h-9 w-12 place-items-center rounded-xl bg-primary text-primary-foreground active:opacity-80"
+        >
+          <Plus className="h-6 w-6" strokeWidth={2.5} aria-hidden />
+        </button>
+      ) : (
+        <Link
+          href="/auth/login"
+          aria-label="Post photos"
+          data-testid="nav-post"
+          className="grid h-9 w-12 place-items-center rounded-xl bg-primary text-primary-foreground active:opacity-80"
+        >
+          <Plus className="h-6 w-6" strokeWidth={2.5} aria-hidden />
+        </Link>
+      )}
+    </li>
+  );
+
   return (
     <nav
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      <ul className="grid grid-cols-4">
-        {items.map((item) => {
+      <ul className="grid grid-cols-5">
+        {items.flatMap((item, index) => {
           const Icon = item.icon;
           const active = isActive(item, pathname);
           const content = (
@@ -35,7 +64,7 @@ export function BottomNav() {
             </>
           );
           const base = 'flex h-14 flex-col items-center justify-center gap-0.5';
-          return (
+          const entry = (
             <li key={item.label}>
               {item.href ? (
                 <Link
@@ -53,8 +82,11 @@ export function BottomNav() {
               )}
             </li>
           );
+          // The + sits between Kennels and Runs, matching the app.
+          return index === 2 ? [plus, entry] : [entry];
         })}
       </ul>
+      <PhotoPostDialog open={posting} onOpenChange={setPosting} />
     </nav>
   );
 }

@@ -1,320 +1,241 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Camera, Check, Flag, ShieldBan, UserCheck } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
-import { UsernameCard } from '@/components/profile/username-card';
+import { AudiencePicker } from '@/components/profile/audience-picker';
+import { PasswordConfirmDialog } from '@/components/profile/password-confirm-dialog';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, Subpage } from '@/components/ui/web-ui';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { errorMessage } from '@/lib/api';
 import { deactivateAccount, deleteAccount, getPrivacy, setMilestoneSharing, setPrivacy } from '@/lib/social';
 import type { Audience } from '@/lib/types';
 
-// Privacy and account (D57): who sees what a hasher makes, stepping away for a
-// while, and leaving for good.
-
-const OPTIONS: { value: Audience; label: string; hint: string }[] = [
-  { value: 'PUBLIC', label: 'Public', hint: 'Anyone on Shiggy Trails, signed in or not, can see your photos, posts and reels.' },
-  {
-    value: 'FOLLOWERS',
-    label: 'Followers',
-    hint: 'Your profile is locked. People ask to follow you, and only the ones you approve see your photos, posts and reels.',
-  },
-  { value: 'ONLY_ME', label: 'Only me', hint: 'Nobody sees them but you, and nobody can follow you.' },
-];
-
-type Danger = 'deactivate' | 'delete';
-
+// Privacy and account (D57), as the web lays it out (app/account/privacy/page.tsx):
+// who sees what a hasher makes, milestones in the feed, blocking and tags,
+// stepping away for a while, and leaving for good.
 export default function PrivacyScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { user, logout } = useAuth();
-  const [level, setLevel] = useState<Audience | null>(null);
+  const { user, loading, logout, refreshUser } = useAuth();
+  const [level, setLevel] = useState<Audience>('PUBLIC');
   const [pending, setPending] = useState(0);
+  const [saving, setSaving] = useState(false);
   // Whether a milestone may appear in the feed as a card (D60).
   const [milestones, setMilestones] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [danger, setDanger] = useState<Danger | null>(null);
-  const [password, setPassword] = useState('');
-  const [typed, setTyped] = useState('');
-  const [working, setWorking] = useState(false);
-  const [dangerError, setDangerError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const data = await getPrivacy();
-      setLevel(data.profileVisibility);
-      setPending(data.pendingRequests);
-      setMilestones(data.shareMilestones);
-    } catch (err) {
-      setNote(errorMessage(err, 'Could not load your privacy settings'));
-    }
-  }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (user) load();
-  }, [user, load]);
+    if (!loading && !user) router.replace('/account');
+  }, [loading, user, router]);
 
-  async function choose(next: Audience) {
-    if (next === level) return;
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    getPrivacy()
+      .then((data) => {
+        if (!alive) return;
+        setMilestones(data.shareMilestones);
+        setLevel(data.profileVisibility);
+        setPending(data.pendingRequests);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+
+  async function change(next: Audience) {
     const before = level;
     setLevel(next);
     setSaving(true);
-    setNote(null);
     try {
       const data = await setPrivacy(next);
       setPending(data.pendingRequests);
-      setNote(
-        next === 'PUBLIC'
-          ? 'Your profile is public.'
-          : next === 'FOLLOWERS'
-            ? 'Your profile is locked. People now have to ask to follow you.'
-            : 'Your profile is just for you.',
-      );
+      await refreshUser();
     } catch (err) {
       setLevel(before);
-      setNote(errorMessage(err, 'Could not change your privacy'));
+      Alert.alert('Could not change your privacy', errorMessage(err, 'Could not change your privacy'));
     } finally {
       setSaving(false);
     }
   }
 
-  function openDanger(next: Danger) {
-    setDanger((current) => (current === next ? null : next));
-    setPassword('');
-    setTyped('');
-    setDangerError(null);
-  }
-
-  async function confirmDanger() {
-    if (!danger) return;
-    setWorking(true);
-    setDangerError(null);
+  async function changeMilestones(next: boolean) {
+    setMilestones(next);
     try {
-      if (danger === 'deactivate') await deactivateAccount(password);
-      else await deleteAccount(password);
-      await logout();
-      router.replace('/');
+      await setMilestoneSharing(next);
     } catch (err) {
-      setDangerError(errorMessage(err, 'That did not work'));
-    } finally {
-      setWorking(false);
+      setMilestones(!next);
+      Alert.alert('Could not save that', errorMessage(err, 'Could not save that'));
     }
   }
 
-  if (!user) {
+  async function deactivate(password: string) {
+    try {
+      await deactivateAccount(password);
+    } catch (err) {
+      throw new Error(errorMessage(err, 'Could not deactivate your account'));
+    }
+    await logout();
+    router.replace('/');
+  }
+
+  async function removeAccount(password: string) {
+    try {
+      await deleteAccount(password);
+    } catch (err) {
+      throw new Error(errorMessage(err, 'Could not delete your account'));
+    }
+    await logout();
+    router.replace('/');
+  }
+
+  if (loading || !user) {
     return (
-      <ThemedView type="canvas" style={styles.center}>
-        <ThemedText themeColor="textSecondary">Log in to manage your privacy.</ThemedText>
-      </ThemedView>
+      <Subpage>
+        <Skeleton height={384} />
+      </Subpage>
     );
   }
 
-  const ready = password.length > 0 && (danger !== 'delete' || typed === 'DELETE');
-  const inputStyle = [styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }];
-
   return (
-    <ThemedView type="canvas" style={styles.flex}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <ThemedText type="subtitle" accessibilityRole="header">Who can see what I make</ThemedText>
-        <ThemedText themeColor="textSecondary">
-          This covers your photos, posts and reels. Each reel can be narrower than this, never wider. Your name,
-          picture and bio stay visible so people can find you and ask to follow.
-        </ThemedText>
-
-        {level === null ? (
-          <ActivityIndicator color={theme.primary} />
-        ) : (
-          <View style={styles.options} accessibilityRole="radiogroup">
-            {OPTIONS.map((option) => {
-              const selected = level === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected, disabled: saving }}
-                  disabled={saving}
-                  onPress={() => choose(option.value)}
-                  style={({ pressed }) => [
-                    styles.option,
-                    {
-                      backgroundColor: theme.card,
-                      borderColor: selected ? theme.primary : theme.border,
-                      opacity: pressed || saving ? 0.8 : 1,
-                    },
-                  ]}>
-                  <ThemedText type="smallBold">{option.label}</ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">{option.hint}</ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
-        {note && <ThemedText type="small" themeColor="textSecondary">{note}</ThemedText>}
-        {level !== null && level !== 'PUBLIC' && pending > 0 && (
-          <ThemedText type="small" themeColor="textSecondary">
-            {pending} {pending === 1 ? 'person is' : 'people are'} waiting for your yes. Making your profile public lets
-            them all in.
-          </ThemedText>
-        )}
-
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/follow-requests')}
-          style={({ pressed }) => [styles.row, { backgroundColor: theme.card, opacity: pressed ? 0.8 : 1 }]}>
-          <ThemedText type="smallBold">Follow requests{pending > 0 ? ` (${pending})` : ''}</ThemedText>
-        </Pressable>
-
-        <View style={styles.dangerBlock}>
-          <ThemedText type="smallBold">Milestones in the feed</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            When you pass 10, 50 or 100 runs, the people who can see your profile may get a card for it. Turning it off
-            only removes the card: the milestone stays on your Hash Passport.
-          </ThemedText>
-          <View style={styles.switchRow}>
-            <ThemedText style={styles.flex}>Show my milestones as cards</ThemedText>
-            <Switch
-              value={milestones}
-              accessibilityLabel="Show my milestones as cards in the feed"
-              onValueChange={(next) => {
-                setMilestones(next);
-                setMilestoneSharing(next).catch(() => setMilestones(!next));
-              }}
-            />
-          </View>
-        </View>
-
-        <UsernameCard />
-
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/blocked')}
-          style={({ pressed }) => [styles.row, { backgroundColor: theme.card, opacity: pressed ? 0.8 : 1 }]}>
-          <ThemedText type="smallBold">Blocked and muted</ThemedText>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/reports')}
-          style={({ pressed }) => [styles.row, { backgroundColor: theme.card, opacity: pressed ? 0.8 : 1 }]}>
-          <ThemedText type="smallBold">My reports</ThemedText>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/photo-tags')}
-          style={({ pressed }) => [styles.row, { backgroundColor: theme.card, opacity: pressed ? 0.8 : 1 }]}>
-          <ThemedText type="smallBold">Photo tags waiting for me</ThemedText>
-        </Pressable>
-
-        <View style={styles.dangerBlock}>
-          <ThemedText type="smallBold">Step away for a while</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Deactivating takes your profile, photos, posts and reels off Shiggy Trails and signs you out. Kennel records that name
-            you stay as they are. Nothing is removed: log in again and everything is back.
-          </ThemedText>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => openDanger('deactivate')}
-            style={({ pressed }) => [styles.row, { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.8 : 1 }]}>
-            <ThemedText type="smallBold">Deactivate my account</ThemedText>
-          </Pressable>
-        </View>
-
-        <View style={styles.dangerBlock}>
-          <ThemedText type="smallBold">Delete my account</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            This cannot be undone. Your name, handle, picture, details, login, follows, posts, reels and their photos are
-            removed. Runs you attended, trail reports and Run Capsules that mention you stay, because they are a
-            kennel&apos;s record, and show you as &ldquo;Deleted hasher&rdquo;. If you hold an office in a kennel, resign it
-            first.
-          </ThemedText>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => openDanger('delete')}
-            style={({ pressed }) => [styles.row, { backgroundColor: theme.danger, opacity: pressed ? 0.8 : 1 }]}>
-            <ThemedText type="smallBold" style={styles.onDanger}>Delete my account</ThemedText>
-          </Pressable>
-        </View>
-
-        {danger && (
-          <View style={[styles.confirm, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <ThemedText type="smallBold">
-              {danger === 'delete' ? 'Delete your account for good?' : 'Deactivate your account?'}
-            </ThemedText>
-            <TextInput
-              accessibilityLabel="Your password"
-              placeholder="Your password"
-              placeholderTextColor={theme.textSecondary}
-              secureTextEntry
-              autoComplete="current-password"
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                setDangerError(null);
-              }}
-              style={inputStyle}
-            />
-            {danger === 'delete' && (
-              <TextInput
-                accessibilityLabel="Type DELETE to confirm"
-                placeholder="Type DELETE to confirm"
-                placeholderTextColor={theme.textSecondary}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                value={typed}
-                onChangeText={setTyped}
-                style={inputStyle}
-              />
+    <Subpage back="Back to account" onBack={() => router.replace('/account')}>
+      <Card bleed={false}>
+        <View testID="privacy-visibility">
+          <CardHeader>
+            <CardTitle style={styles.title}>Who can see what I make</CardTitle>
+            <CardDescription>
+              This covers your photos, posts and reels. Each reel can be narrower than this, never wider. Your name, picture
+              and bio stay visible so people can find you and ask to follow.
+            </CardDescription>
+          </CardHeader>
+          <CardContent style={styles.body}>
+            <AudiencePicker value={level} onChange={(next) => void change(next)} disabled={saving} />
+            {level !== 'PUBLIC' && pending > 0 && (
+              <ThemedText themeColor="textSecondary" style={styles.sm}>
+                {pending} {pending === 1 ? 'person is' : 'people are'} waiting for your yes. Making your profile public lets them all in.
+              </ThemedText>
             )}
-            {dangerError && <ThemedText type="small" style={{ color: theme.danger }}>{dangerError}</ThemedText>}
-            <View style={styles.confirmActions}>
-              <Pressable
-                accessibilityRole="button"
-                disabled={working}
-                onPress={() => openDanger(danger)}
-                style={({ pressed }) => [styles.small, { backgroundColor: theme.backgroundElement, opacity: pressed ? 0.8 : 1 }]}>
-                <ThemedText type="smallBold">Cancel</ThemedText>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: !ready || working }}
-                disabled={!ready || working}
-                onPress={confirmDanger}
-                style={({ pressed }) => [
-                  styles.small,
-                  { backgroundColor: theme.danger, opacity: !ready || working ? 0.45 : pressed ? 0.8 : 1 },
-                ]}>
-                {working ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <ThemedText type="smallBold" style={styles.onDanger}>
-                    {danger === 'delete' ? 'Delete my account' : 'Deactivate'}
-                  </ThemedText>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        )}
-      </ScrollView>
-    </ThemedView>
+            <Button variant="outline" size="sm" testID="to-follow-requests" style={styles.start} onPress={() => router.push('/follow-requests')}>
+              <UserCheck size={16} color={theme.text} />
+              <ThemedText style={styles.buttonLabel}>{`Follow requests${pending > 0 ? ` (${pending})` : ''}`}</ThemedText>
+            </Button>
+          </CardContent>
+        </View>
+      </Card>
+
+      <Card bleed={false}>
+        <View testID="privacy-milestones">
+          <CardHeader>
+            <CardTitle>Milestones in the feed</CardTitle>
+            <CardDescription>
+              When you pass 10, 50 or 100 runs, the people who can see your profile may get a card for it. Turning it off only
+              removes the card: the milestone stays on your Hash Passport.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: milestones }}
+              testID="milestones-toggle"
+              onPress={() => void changeMilestones(!milestones)}
+              style={styles.checkRow}>
+              <View style={[styles.box, { borderColor: milestones ? theme.primary : theme.border, backgroundColor: milestones ? theme.primary : 'transparent' }]}>
+                {milestones && <Check size={12} color={theme.onPrimary} />}
+              </View>
+              <ThemedText style={styles.sm}>Show my milestones as cards in the feed</ThemedText>
+            </Pressable>
+          </CardContent>
+        </View>
+      </Card>
+
+      <Card bleed={false}>
+        <View testID="privacy-safety">
+          <CardHeader>
+            <CardTitle>Blocking and tags</CardTitle>
+            <CardDescription>Who you have blocked or muted, and photo tags waiting for your yes.</CardDescription>
+          </CardHeader>
+          <CardContent style={styles.wrapRow}>
+            <Button variant="outline" size="sm" testID="to-blocked" onPress={() => router.push('/blocked')}>
+              <ShieldBan size={16} color={theme.text} />
+              <ThemedText style={styles.buttonLabel}>Blocked and muted</ThemedText>
+            </Button>
+            <Button variant="outline" size="sm" testID="to-photo-tags" onPress={() => router.push('/photo-tags')}>
+              <Camera size={16} color={theme.text} />
+              <ThemedText style={styles.buttonLabel}>Photo tags</ThemedText>
+            </Button>
+            <Button variant="outline" size="sm" testID="to-my-reports" onPress={() => router.push('/reports')}>
+              <Flag size={16} color={theme.text} />
+              <ThemedText style={styles.buttonLabel}>My reports</ThemedText>
+            </Button>
+          </CardContent>
+        </View>
+      </Card>
+
+      <Card bleed={false}>
+        <View testID="privacy-deactivate">
+          <CardHeader>
+            <CardTitle>Step away for a while</CardTitle>
+            <CardDescription>
+              Deactivating takes your profile, photos, posts and reels off Shiggy Trails and signs you out. Kennel records that
+              name you stay as they are. Nothing is removed: sign in again and everything is back.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PasswordConfirmDialog
+              title="Deactivate your account?"
+              description="Your profile, photos, posts and reels disappear and you are signed out. Signing in again brings everything back."
+              confirmLabel="Deactivate"
+              onConfirm={deactivate}
+              trigger={(open) => (
+                <Button variant="outline" testID="deactivate-open" style={styles.start} onPress={open}>
+                  Deactivate my account
+                </Button>
+              )}
+            />
+          </CardContent>
+        </View>
+      </Card>
+
+      <Card bleed={false} style={{ borderColor: theme.danger + '66' }}>
+        <View testID="privacy-delete">
+          <CardHeader>
+            <CardTitle>Delete my account</CardTitle>
+            <CardDescription>
+              This cannot be undone. Your name, handle, picture, details, login, follows, posts, reels and their photos are
+              removed. Runs you attended, trail reports and Run Capsules that mention you stay, because they are a kennel’s
+              record, and show you as “Deleted hasher”. If you hold an office in a kennel, resign it first.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PasswordConfirmDialog
+              title="Delete your account for good?"
+              description="Everything described on the page is removed and you cannot get it back."
+              confirmLabel="Delete my account"
+              typeWord="DELETE"
+              onConfirm={removeAccount}
+              trigger={(open) => (
+                <Button variant="destructive" testID="delete-open" style={styles.start} onPress={open}>
+                  Delete my account
+                </Button>
+              )}
+            />
+          </CardContent>
+        </View>
+      </Card>
+    </Subpage>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four },
-  scroll: { padding: Spacing.three, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center', paddingBottom: Spacing.six },
-  options: { gap: Spacing.two },
-  option: { borderWidth: 2, borderRadius: Spacing.three, padding: Spacing.three, gap: Spacing.one, minHeight: 64 },
-  row: { minHeight: 48, borderRadius: Spacing.two, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.three },
-  dangerBlock: { gap: Spacing.two, marginTop: Spacing.two },
-  onDanger: { color: '#ffffff' },
-  confirm: { borderWidth: 1, borderRadius: Spacing.three, padding: Spacing.three, gap: Spacing.two },
-  confirmActions: { flexDirection: 'row', gap: Spacing.two, justifyContent: 'flex-end' },
-  small: { minHeight: 44, minWidth: 96, borderRadius: Spacing.two, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.three },
-  input: { borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: 12, fontSize: 16 },
+  title: { fontSize: 24, lineHeight: 32 },
+  body: { gap: 16 },
+  sm: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  start: { alignSelf: 'flex-start' },
+  buttonLabel: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  wrapRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
+  box: { width: 16, height: 16, borderRadius: 3, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 });

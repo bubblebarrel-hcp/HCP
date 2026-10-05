@@ -33,3 +33,24 @@ export function initials(name: string) {
   const words = name.replace(/^Just\s+/i, '').split(/\s+/).filter(Boolean);
   return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? '?').slice(0, 2)).toUpperCase();
 }
+
+// "Sat, 4 Oct 2026, 14:30" in the run's own time zone (web lib/runs.ts formatRunDate).
+export function formatRunDate(iso: string, timeZone: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(iso));
+}
+
+export const reportStatusLabel = {
+  DRAFT: 'Draft',
+  SCRIBE_EDITING: 'Being written',
+  REVIEW: 'In review',
+  PUBLISHED: 'Published',
+  ARCHIVED: 'Archived',
+} as const;

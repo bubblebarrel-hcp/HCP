@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { BookOpen, Footprints, Video } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
+import { HashLogo } from '@/components/brand/hash-logo';
 import { Avatar } from '@/components/feed/avatar';
 import { ReelComposer } from '@/components/feed/reel-composer';
 import { MentionInput } from '@/components/social/mention-input';
@@ -34,6 +37,7 @@ export function Composer({
   onPosted: () => void;
 }) {
   const theme = useTheme();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reeling, setReeling] = useState(false);
   const [body, setBody] = useState('');
@@ -95,24 +99,45 @@ export function Composer({
 
   return (
     <>
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <View style={styles.row}>
+      {/* The web composer on a phone (components/feed/Composer.tsx): a bleed card
+          with the avatar and a filled input, then a divider and three icon-only
+          shortcuts: reel, trail reports, runs. */}
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.rowTop}>
           <Avatar name={name} src={avatarUrl} position={avatarPosition} />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Write a post"
+            testID="composer-input"
             onPress={() => setOpen(true)}
-            style={[styles.pill, { borderColor: theme.border }]}>
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            style={[styles.pill, { backgroundColor: theme.backgroundElement }]}>
+            <ThemedText themeColor="textSecondary" numberOfLines={1} style={styles.pillText}>
               What&apos;s on trail, {name}?
             </ThemedText>
           </Pressable>
+        </View>
+        <View style={[styles.shortcuts, { borderTopColor: theme.border }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Post a reel"
+            testID="composer-reel"
             onPress={() => setReeling(true)}
-            style={[styles.reelButton, { borderColor: theme.primary }]}>
-            <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>Reel</ThemedText>
+            style={({ pressed }) => [styles.shortcut, pressed && { backgroundColor: theme.backgroundElement }]}>
+            <Video size={20} color={theme.primaryStrong} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Trail reports"
+            onPress={() => router.push('/trail-reports' as never)}
+            style={({ pressed }) => [styles.shortcut, pressed && { backgroundColor: theme.backgroundElement }]}>
+            <BookOpen size={20} color={theme.primaryStrong} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Runs"
+            onPress={() => router.push('/runs')}
+            style={({ pressed }) => [styles.shortcut, pressed && { backgroundColor: theme.backgroundElement }]}>
+            <Footprints size={20} color={theme.primaryStrong} />
           </Pressable>
         </View>
       </View>
@@ -256,40 +281,54 @@ export function Composer({
   );
 }
 
-// Shown in place of the composer to signed-out visitors.
+// Shown in place of the composer to signed-out visitors (web WelcomeCard.tsx).
 export function WelcomeCard({ onLogin }: { onLogin: () => void }) {
   const theme = useTheme();
+  const router = useRouter();
   return (
-    <View style={[styles.card, { backgroundColor: theme.card }]}>
-      <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>ON ON</ThemedText>
+    <View style={[styles.card, styles.welcome, { backgroundColor: theme.card, borderColor: theme.border }]} testID="welcome-card">
+      <View style={styles.row}>
+        <HashLogo size={48} color={theme.text} />
+        <ThemedText style={[styles.onOn, { color: theme.primaryStrong }]}>ON ON</ThemedText>
+      </View>
       <ThemedText style={styles.welcomeTitle}>A digital home for the worldwide Hash House Harriers.</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        Find a kennel, join a run, follow the trail, and keep every story.
-      </ThemedText>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onLogin}
-        style={({ pressed }) => [styles.button, { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 }]}>
-        <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Log in or create an account</ThemedText>
-      </Pressable>
+      <ThemedText themeColor="textSecondary">Find a kennel, join a run, follow the trail, and keep every story.</ThemedText>
+      <View style={styles.welcomeButtons}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push('/auth/register')}
+          style={({ pressed }) => [styles.button, styles.buttonFill, { backgroundColor: theme.primary, opacity: pressed ? 0.8 : 1 }]}>
+          <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Create your account</ThemedText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onLogin}
+          style={({ pressed }) => [styles.button, styles.buttonFill, { borderWidth: 1, borderColor: theme.border, opacity: pressed ? 0.8 : 1 }]}>
+          <ThemedText type="smallBold">Log in</ThemedText>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { padding: Spacing.three, gap: Spacing.two },
+  // Card with p-3 and border-y: edge to edge on a phone.
+  card: { padding: 12, gap: Spacing.two, borderTopWidth: 1, borderBottomWidth: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  pill: {
-    flex: 1,
-    minHeight: 40,
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: Spacing.three,
-    justifyContent: 'center',
-  },
-  reelButton: { minHeight: 40, paddingHorizontal: Spacing.three, borderRadius: 20, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  welcomeTitle: { fontSize: 20, lineHeight: 26, fontWeight: '700' },
-  button: { marginTop: Spacing.one, minHeight: 44, borderRadius: Spacing.two, alignItems: 'center', justifyContent: 'center' },
+  rowTop: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
+  // rounded-2xl bg-muted px-4 py-2.5, 15pt text.
+  pill: { flex: 1, minHeight: 40, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10, justifyContent: 'center' },
+  pillText: { fontSize: 15, lineHeight: 20 },
+  // mt-3 grid-cols-3 gap-1 border-t pt-2; each shortcut is h-10 rounded-lg.
+  shortcuts: { flexDirection: 'row', gap: 4, marginTop: 4, borderTopWidth: 1, paddingTop: 8 },
+  shortcut: { flex: 1, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  // p-5; text-sm font-semibold uppercase tracking-widest; text-2xl font-bold.
+  welcome: { padding: 20, gap: 12 },
+  onOn: { fontSize: 14, lineHeight: 20, fontWeight: '600', letterSpacing: 2.8 },
+  welcomeTitle: { fontSize: 24, lineHeight: 32, fontWeight: '700', letterSpacing: -0.4 },
+  welcomeButtons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  buttonFill: { paddingHorizontal: 16, flexGrow: 1 },
+  button: { minHeight: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   modal: { flex: 1 },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.three, paddingTop: Spacing.six, paddingBottom: Spacing.two },
   headerButton: { minHeight: 44, minWidth: 60, justifyContent: 'center' },

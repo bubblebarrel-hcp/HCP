@@ -1,88 +1,112 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { MailCheck } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
+import { HashLogo } from '@/components/brand/hash-logo';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input } from '@/components/ui/web-ui';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 
-// Same non-enumerating shape as email verification: always answers success,
-// whatever the address, so an attacker cannot use this to test which emails
-// are registered.
+// Forgot password, as the web lays it out (app/auth/forgot-password/page.tsx).
 export default function ForgotPasswordScreen() {
   const theme = useTheme();
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState<string | null>(null);
 
   async function submit() {
-    if (!email.trim()) return;
+    const trimmed = email.trim();
+    if (!trimmed) return setError('Enter your email');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return setError('Enter a valid email');
+    setError(undefined);
     setBusy(true);
     try {
-      await api('/auth/password/forgot', { method: 'POST', body: { email: email.trim().toLowerCase() } });
+      // The API always answers the same way, registered or not: nothing to
+      // branch on here, just show the same confirmation either way.
+      await api('/auth/password/forgot', { method: 'POST', body: { email: trimmed } });
+    } catch {
+      // Same confirmation either way.
     } finally {
-      setSent(true);
       setBusy(false);
+      setSent(trimmed);
     }
   }
 
-  const inputStyle = [styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }];
-
-  if (sent) {
-    return (
-      <ThemedView type="canvas" style={styles.center}>
-        <ThemedText type="title">Check your email</ThemedText>
-        <ThemedText themeColor="textSecondary" style={styles.centerText}>
-          If {email.trim()} has an account, a reset link is on its way.
-        </ThemedText>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/auth/reset-password')}
-          style={styles.link}>
-          <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>I have my token</ThemedText>
-        </Pressable>
-      </ThemedView>
-    );
-  }
-
   return (
-    <ThemedView type="canvas" style={styles.container}>
-      <ThemedText type="title">Forgot your password?</ThemedText>
-      <ThemedText themeColor="textSecondary">We will email you a link to set a new one.</ThemedText>
-      <View style={styles.field}>
-        <ThemedText type="small" themeColor="textSecondary">Email</ThemedText>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="you@example.com"
-          placeholderTextColor={theme.textSecondary}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          onSubmitEditing={submit}
-          style={inputStyle}
-        />
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        onPress={submit}
-        disabled={busy || !email.trim()}
-        style={({ pressed }) => [styles.button, { backgroundColor: theme.primary, opacity: pressed || busy ? 0.7 : 1 }]}>
-        {busy ? <ActivityIndicator color={theme.onPrimary} /> : <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Send reset link</ThemedText>}
-      </Pressable>
+    <ThemedView type="canvas" style={styles.screen}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
+        <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+          <Card bleed={false}>
+            <CardHeader>
+              <View style={styles.mark}>
+                <HashLogo size={56} color={theme.text} />
+              </View>
+              <CardTitle style={styles.title}>Reset your password</CardTitle>
+              <CardDescription>We will email you a link to set a new one.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {sent ? (
+                <View style={styles.sent} testID="forgot-sent">
+                  <View style={styles.sentTitle}>
+                    <MailCheck size={24} color={theme.primaryStrong} />
+                    <ThemedText style={styles.semibold}>Check your email</ThemedText>
+                  </View>
+                  <ThemedText themeColor="textSecondary" style={styles.sm}>
+                    If {sent} has an account, a reset link is on its way. It lasts 1 hour and works once.
+                  </ThemedText>
+                  <Button variant="outline" style={styles.start} onPress={() => router.replace('/account')}>
+                    Back to sign in
+                  </Button>
+                </View>
+              ) : (
+                <View style={styles.form}>
+                  <Field label="Email" error={error}>
+                    <Input
+                      testID="forgot-email"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                      keyboardType="email-address"
+                      value={email}
+                      onChangeText={setEmail}
+                      onSubmitEditing={() => void submit()}
+                      accessibilityLabel="Email"
+                    />
+                  </Field>
+                  <Button testID="forgot-submit" disabled={busy} onPress={() => void submit()}>
+                    {busy ? 'Sending…' : 'Send reset link'}
+                  </Button>
+                  <ThemedText
+                    style={[styles.link, { color: theme.primaryStrong }]}
+                    accessibilityRole="link"
+                    onPress={() => router.replace('/account')}>
+                    Back to sign in
+                  </ThemedText>
+                </View>
+              )}
+            </CardContent>
+          </Card>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: Spacing.three, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four, gap: Spacing.three },
-  centerText: { textAlign: 'center' },
-  field: { gap: 4 },
-  input: { borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: 12, fontSize: 16 },
-  button: { borderRadius: Spacing.two, paddingVertical: 14, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  link: { alignItems: 'center', padding: Spacing.two, minHeight: 44, justifyContent: 'center' },
+  screen: { flex: 1 },
+  // mx-auto flex max-w-md px-4 py-16
+  page: { width: '100%', maxWidth: 448, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 64 },
+  mark: { marginBottom: 8 },
+  title: { fontSize: 24, lineHeight: 32 },
+  form: { gap: 16 },
+  sent: { gap: 16 },
+  sentTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  semibold: { fontSize: 16, lineHeight: 24, fontWeight: '600' },
+  sm: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  start: { alignSelf: 'flex-start' },
+  link: { textAlign: 'center', fontSize: 14, lineHeight: 20, fontWeight: '500' },
 });

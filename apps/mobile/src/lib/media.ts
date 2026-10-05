@@ -52,7 +52,7 @@ export function fileSize(bytes: number) {
 
 // `slot` is the item's place in the post. It is the idempotency key, so a retry
 // of the same item on the same reel resumes rather than uploads twice.
-export async function uploadAsset(asset: ImagePickerAsset, target: { type: 'REEL'; id: string }, slot: number) {
+export async function uploadAsset(asset: ImagePickerAsset, target: { type: 'REEL' | 'POST'; id: string }, slot: number) {
   const kind = assetKind(asset);
   const mimeType = assetMimeType(asset);
 

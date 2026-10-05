@@ -290,6 +290,7 @@ export interface Reel {
   author: { id: string; name: string; avatarUrl: string | null };
   kennel: { id: string; slug: string; shortName: string; primaryColor: string | null } | null;
   run: { id: string; runNumber: number | null; title: string | null } | null;
+  event?: { id: string; slug: string; title: string } | null;
   items: ReelItem[];
   itemCount: number;
   isMine: boolean;
@@ -409,6 +410,8 @@ export interface SessionUser {
   displayName: string;
   avatarUrl?: string | null;
   avatarPosition?: string | null;
+  bannerUrl?: string | null;
+  bannerPosition?: string | null;
   // Who sees what they make: posts, photos and reels (D57).
   profileVisibility?: Audience;
   emailVerified: boolean;
@@ -513,32 +516,152 @@ export type RunStatus =
   | 'ARCHIVED'
   | 'CANCELLED';
 
+export type RunType =
+  | 'REGULAR'
+  | 'FULL_MOON'
+  | 'RED_DRESS'
+  | 'CAMPOUT'
+  | 'CHARITY'
+  | 'INTERHASH'
+  | 'NASH_HASH'
+  | 'THEMED'
+  | 'SPECIAL';
+
+export type RunVisibility = 'PUBLIC' | 'MEMBERS_ONLY' | 'INVITE_ONLY';
+
 export interface RunSummary {
   id: string;
   runNumber: number;
   title: string;
   status: RunStatus;
+  runType?: RunType;
+  visibility?: RunVisibility;
   startsAt: string;
   timeZone: string;
   meetingPointName: string | null;
+  capacity?: number | null;
   goingCount: number;
+  hares?: { displayName: string; isLead: boolean }[];
   kennel: { name: string; shortName: string; slug: string; primaryColor?: string | null };
 }
 
-// Only the parts of the detail this app uses. The API returns more.
+// A date a kennel has set and nobody is haring yet (D44).
+export interface RunNeedingHare {
+  id: string;
+  runNumber: number | null;
+  title: string;
+  startsAt: string;
+  timeZone: string;
+  meetingPointName: string | null;
+  kennel: { slug: string; shortName: string; primaryColor: string | null } | null;
+  offerCount: number;
+}
+
+export interface RunParticipant {
+  id: string;
+  kind: 'hasher' | 'guest';
+  displayName: string;
+  rsvpStatus: RsvpStatus;
+  isVisitor: boolean;
+  isVirginRun: boolean;
+  homeKennel: string | null;
+  checkedInAt: string | null;
+  checkInMethod: string | null;
+  // D23: null unless the viewer operates this run (a hare or run.manage).
+  contact: { email: string; phone: string | null } | null;
+}
+
+export interface RunAward {
+  id: string;
+  title: string;
+  reason: string | null;
+  isDownDown: boolean;
+  recipient: string | null;
+}
+
+export interface RunViewer {
+  signedIn: boolean;
+  isMember: boolean;
+  isHare: boolean;
+  canSeeNames: boolean;
+  participation: { id: string; rsvpStatus: RsvpStatus; checkedInAt: string | null; isVisitor: boolean } | null;
+  canRespond: boolean;
+  rsvpBlockedReason: string | null;
+  goingBlockedReason: string | null;
+  canCheckIn: boolean;
+  checkInBlockedReason: string | null;
+  canRegisterAsGuest: boolean;
+  canManage: boolean;
+  canOperate: boolean;
+  canChangeVisibility: boolean;
+  canEdit: boolean;
+  nextStep: { action: string; label: string } | null;
+  canPause: boolean;
+  canResume: boolean;
+  canCancel: boolean;
+  canSkipCircle: boolean;
+  canRecordCircle: boolean;
+  canCorrectAttendance: boolean;
+  canAddGuest: boolean;
+}
+
+// The whole run as the API sends it (apps/web lib/types.ts RunDetail).
 export interface RunDetail extends Omit<RunSummary, 'goingCount'> {
-  theme?: string | null;
-  description?: string | null;
-  meetingAddress?: string | null;
-  hashCash?: string | null;
-  cancelReason?: string | null;
-  posterUrl?: string | null;
-  counts: { going: number; maybe: number; checkedIn: number };
-  viewer: {
-    canRespond: boolean;
-    canSeeNames: boolean;
-    participation: { rsvpStatus: RsvpStatus; checkedInAt: string | null } | null;
-  };
+  kennel: RunSummary['kennel'] & { timeZone?: string; downDownsEnabled?: boolean };
+  description: string | null;
+  theme: string | null;
+  meetingAddress: string | null;
+  hashCash: string | null;
+  posterUrl: string | null;
+  allowVisitors: boolean;
+  allowGuests?: boolean;
+  isPaused?: boolean;
+  cancelReason: string | null;
+  circleSkipReason: string | null;
+  counts: { going: number; maybe: number; checkedIn: number; visitors: number; guests: number };
+  pauses: { pausedAt: string; resumedAt: string | null; reason: string | null }[];
+  circle: {
+    startedAt: string | null;
+    endedAt: string | null;
+    songs: string[];
+    announcements: string | null;
+    notes: string | null;
+    awards: RunAward[];
+  } | null;
+  participants: RunParticipant[] | null;
+  timeline: { id: string; type: string; occurredAt: string; actor: string | null; reason: string | null }[] | null;
+  viewer: RunViewer;
+}
+
+export type HareOfferStatus = 'OFFERED' | 'ACCEPTED' | 'DECLINED' | 'WITHDRAWN';
+
+export interface HareOffer {
+  id: string;
+  message: string | null;
+  wantsLead: boolean;
+  status: HareOfferStatus;
+  reason: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  hasher: { id: string; name: string; avatarUrl: string | null };
+  isMine: boolean;
+}
+
+export interface HareOffers {
+  items: HareOffer[];
+  canAnswer: boolean;
+  canOffer: boolean;
+}
+
+export type CapsuleStatus = 'PLANNED' | 'PREPARING' | 'LIVE' | 'DRAFT' | 'PENDING_PUBLICATION' | 'PUBLISHED' | 'ARCHIVED' | 'LEGACY';
+
+export interface RunCapsule {
+  id: string;
+  runId: string;
+  status: CapsuleStatus;
+  summary: string | null;
+  timeline: unknown[];
+  viewer: { awaitingReport: boolean };
 }
 
 // ─── Governance (D32, mobile slice: positions/appointments; delegations and
@@ -594,7 +717,7 @@ export interface LeadershipEntry {
 export interface NotificationItem {
   id: string;
   category: string;
-  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
   status: string;
   title: string;
   body: string;
@@ -642,4 +765,78 @@ export interface NotificationPreferences {
     devices: { id: string; platform: 'IOS' | 'ANDROID' | 'WEB'; lastSeenAt: string }[];
     quietHours: { start: string; end: string } | null;
   };
+}
+
+// ─── Trail reports (D29): the reader's view. Writing stays on the web. ───
+
+export type TrailReportStatus = 'DRAFT' | 'SCRIBE_EDITING' | 'REVIEW' | 'PUBLISHED' | 'ARCHIVED';
+
+export interface TrailReport {
+  id: string;
+  runId: string;
+  status: TrailReportStatus;
+  title: string;
+  // Null on list rows, which carry no body.
+  body: string | null;
+  publishedAt: string | null;
+  scribe: string;
+  run: {
+    id: string;
+    runNumber: number;
+    title: string;
+    startsAt: string;
+    timeZone: string;
+    posterUrl: string | null;
+    kennel: { name: string; shortName: string; slug: string };
+  };
+  citation: string | null;
+  reviewers: string[];
+  viewer: { canEdit: boolean };
+}
+
+// ─── Search (web SearchResults) and saved items ───
+
+export interface SearchResults {
+  query: string;
+  kennels: PublicKennel[];
+  runs: {
+    id: string;
+    runNumber: number;
+    title: string;
+    startsAt: string;
+    timeZone: string;
+    kennel: { shortName: string; primaryColor: string | null };
+  }[];
+  reports: { id: string; title: string; publishedAt: string; run: { runNumber: number; kennel: { shortName: string; primaryColor: string | null } } }[];
+  hashers: { id: string; name: string; username: string | null; avatarUrl: string | null; homeKennel: { shortName: string } | null }[];
+  capsules: {
+    id: string;
+    summary: string | null;
+    run: { runNumber: number; title: string; startsAt: string; kennel: { shortName: string; primaryColor: string | null } };
+  }[];
+  tags: { tag: string; count: number }[];
+  total: number;
+}
+
+export interface Bookmark {
+  id: string;
+  subjectType: SubjectType;
+  subjectSegment: SubjectSegment;
+  subjectId: string;
+  note: string | null;
+  savedAt: string;
+  // False once the thing has gone private or been taken down. The row still
+  // lists so it can be unsaved.
+  available: boolean;
+  label: string | null;
+  href: string | null;
+}
+
+export interface IdentityTimelineEntry {
+  id: string;
+  type: string;
+  title: string;
+  refType: string | null;
+  refId: string | null;
+  occurredAt: string;
 }

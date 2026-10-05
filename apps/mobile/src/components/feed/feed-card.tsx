@@ -203,6 +203,7 @@ function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> })
 
 function ReportCard({ item }: { item: Extract<FeedItem, { kind: 'REPORT' }> }) {
   const theme = useTheme();
+  const router = useRouter();
   return (
     <View style={styles.padded}>
       <Attribution name={item.author} authorId={item.authorId} kennel={item.kennel} at={item.at} iconName={{ ios: 'book', android: 'menu_book', web: 'menu_book' }} />
@@ -211,7 +212,7 @@ function ReportCard({ item }: { item: Extract<FeedItem, { kind: 'REPORT' }> }) {
         <ThemedText themeColor="textSecondary">Run #{item.run.runNumber ?? '—'}{item.run.title ? ` · ${item.run.title}` : ''}</ThemedText>
       ) : null}
       {item.excerpt ? <ThemedText style={{ marginTop: Spacing.one }}>{item.excerpt}</ThemedText> : null}
-      <Pressable accessibilityRole="link" onPress={() => Linking.openURL(`${WEB_URL}/reports/${item.id}`)} style={styles.readMore}>
+      <Pressable accessibilityRole="link" onPress={() => router.push(`/trail-reports/${item.id}` as never)} style={styles.readMore}>
         <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>Read the trail report →</ThemedText>
       </Pressable>
     </View>
@@ -276,7 +277,7 @@ export function FeedCard({ item }: { item: FeedEntry }) {
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 12, overflow: 'hidden' },
+  card: { borderTopWidth: 1, borderBottomWidth: 1, borderRadius: 0, overflow: 'hidden' },
   padded: { padding: Spacing.three },
   attribution: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   attributionText: { flex: 1, minWidth: 0, gap: 2 },

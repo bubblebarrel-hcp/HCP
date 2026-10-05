@@ -1,13 +1,16 @@
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from 'expo-router';
-import * as Notifications from 'expo-notifications';
 import * as SplashScreen from 'expo-splash-screen';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { BottomNav } from '@/components/bottom-nav';
+import { AppHeader } from '@/components/feed/app-header';
 import { AuthProvider } from '@/context/auth';
 import { ThemePreferenceProvider, useThemePreference } from '@/context/theme-preference';
-import { routeFor } from '@/lib/push';
+import { Notifications, routeFor } from '@/lib/push';
 import { useTheme } from '@/hooks/use-theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -22,7 +25,8 @@ SplashScreen.preventAutoHideAsync();
 // hook count stays stable.
 function PushRouting() {
   const router = useRouter();
-  const response = Notifications.useLastNotificationResponse();
+  // Only mounted when Notifications loaded (see Shell), so the hook is stable.
+  const response = Notifications!.useLastNotificationResponse();
 
   useEffect(() => {
     if (!response) return;
@@ -36,24 +40,28 @@ function PushRouting() {
   return null;
 }
 
-// Screens pushed on top of the tab group. Headers are themed plainly here;
-// each screen still renders its own in-content heading for the tab-group look,
-// so this bar mainly carries the native back gesture/button.
+// Screens pushed on top of the tab group. The web app has one header on every
+// page, so there is no per-screen navigation bar here: the shared AppHeader is
+// drawn once by Shell, and going back is the platform's own gesture or button.
 function PushedScreens() {
   const theme = useTheme();
   return (
     <Stack
       screenOptions={{
-        headerTintColor: theme.primaryStrong,
-        headerStyle: { backgroundColor: theme.card },
-        headerShadowVisible: false,
+        headerShown: false,
         contentStyle: { backgroundColor: theme.canvas },
       }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="(tabs)" />
       <Stack.Screen name="run/[id]" options={{ title: 'Run' }} />
+      <Stack.Screen name="trail-reports/index" options={{ title: 'Trail reports' }} />
+      <Stack.Screen name="trail-reports/[id]" options={{ title: 'Trail report' }} />
       <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
+      <Stack.Screen name="search" options={{ title: 'Search' }} />
+      <Stack.Screen name="saved" options={{ title: 'Saved' }} />
+      <Stack.Screen name="settings/notifications" options={{ title: 'Notification settings' }} />
       <Stack.Screen name="passport" options={{ title: 'Hash Passport' }} />
       <Stack.Screen name="kennels/[slug]/index" options={{ title: 'Kennel' }} />
+      <Stack.Screen name="kennels/[slug]/runs" options={{ title: 'Kennel runs' }} />
       <Stack.Screen name="kennels/[slug]/officers" options={{ title: 'Officers' }} />
       <Stack.Screen name="comments/[segment]/[id]" options={{ title: 'Comments' }} />
       <Stack.Screen name="hashers/[id]" options={{ title: 'Hasher' }} />
@@ -63,7 +71,6 @@ function PushedScreens() {
       <Stack.Screen name="follow-requests" options={{ title: 'Follow requests' }} />
       <Stack.Screen name="tags/[tag]" options={{ title: 'Tag' }} />
       <Stack.Screen name="u/[username]" options={{ title: 'Hasher' }} />
-      <Stack.Screen name="mentions" options={{ title: 'Mentions' }} />
       <Stack.Screen name="blocked" options={{ title: 'Blocked and muted' }} />
       <Stack.Screen name="photo-tags" options={{ title: 'Photo tags' }} />
       <Stack.Screen name="report/[type]/[id]" options={{ title: 'Report' }} />
@@ -76,23 +83,49 @@ function PushedScreens() {
   );
 }
 
+// The header sits above the Stack so it is on every screen, as the web's sticky
+// header is on every page: the status bar area is painted in the header's own
+// colour, then the 56pt bar, then the screen.
+function Frame() {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.canvas }}>
+      <View style={{ backgroundColor: theme.card, paddingTop: insets.top }}>
+        <AppHeader onSearch={() => router.push('/search' as never)} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <PushedScreens />
+      </View>
+      <BottomNav />
+    </View>
+  );
+}
+
 function Shell() {
   const { scheme } = useThemePreference();
   return (
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
         <AnimatedSplashOverlay />
-        {Platform.OS !== 'web' && <PushRouting />}
-        <PushedScreens />
+        {Platform.OS !== 'web' && Notifications && <PushRouting />}
+        <Frame />
       </AuthProvider>
     </ThemeProvider>
   );
 }
 
 export default function TabLayout() {
+  // Gesture Handler needs a root view above every GestureDetector (the feed's
+  // pull-to-refresh uses one).
   return (
-    <ThemePreferenceProvider>
-      <Shell />
-    </ThemePreferenceProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemePreferenceProvider>
+          <Shell />
+        </ThemePreferenceProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

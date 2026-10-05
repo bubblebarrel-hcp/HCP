@@ -1,35 +1,19 @@
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { TabList, TabSlot, TabTrigger, Tabs } from 'expo-router/ui';
 
-import { useTheme } from '@/hooks/use-theme';
-
-// Facebook-style top-level tabs. No messaging tab: Shiggy Trails has no direct messaging (D8).
+// The tab group's screens (Home, Runs, Kennels, Menu). Its own bar is hidden: the
+// visible bottom navigation is BottomNav, drawn once by the shared frame in
+// app/_layout.tsx so it sits under every screen, pushed ones included, as the web
+// app's fixed bar does. The triggers stay so the group still knows its routes.
 export default function AppTabs() {
-  const colors = useTheme();
-
   return (
-    <NativeTabs
-      backgroundColor={colors.card}
-      indicatorColor={colors.backgroundSelected}
-      labelStyle={{ selected: { color: colors.primaryStrong } }}>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="kennels">
-        <NativeTabs.Trigger.Label>Kennels</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'person.3', selected: 'person.3.fill' }} md="groups" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="runs">
-        <NativeTabs.Trigger.Label>Runs</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: 'figure.run', selected: 'figure.run' }} md="directions_run" />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="account">
-        <NativeTabs.Trigger.Label>Menu</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="line.3.horizontal" md="menu" />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <Tabs>
+      <TabSlot style={{ flex: 1 }} />
+      <TabList style={{ display: 'none' }}>
+        <TabTrigger name="index" href="/" />
+        <TabTrigger name="kennels" href="/kennels" />
+        <TabTrigger name="runs" href="/runs" />
+        <TabTrigger name="account" href="/account" />
+      </TabList>
+    </Tabs>
   );
 }

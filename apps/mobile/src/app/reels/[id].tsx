@@ -83,7 +83,7 @@ export default function ReelScreen() {
   const [state, setState] = useState<'loading' | 'ready' | 'unavailable' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
 
-  const page = Math.min(width, MaxContentWidth) - Spacing.three * 2;
+  const page = Math.min(width, MaxContentWidth);
   const size = { width: page, height: Math.round(page * 1.25) };
 
   const load = useCallback(async () => {
@@ -220,33 +220,35 @@ export default function ReelScreen() {
   return (
     <ThemedView type="canvas" style={styles.flex}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={[styles.card, { backgroundColor: theme.card }]}>
-          <View style={styles.padded}>
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel={`${reel.author.name}'s profile`}
-              onPress={() => router.push(`/hashers/${reel.author.id}`)}
-              style={styles.author}>
-              <Avatar
-                name={reel.author.name}
-                size={44}
-                src={reel.author.avatarUrl}
-                color={brandColor(reel.kennel?.primaryColor)}
-              />
-              <View style={styles.authorText}>
-                <ThemedText type="smallBold" numberOfLines={1}>{reel.author.name}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                  {reel.publishedAt ? formatDate(reel.publishedAt) : ''}
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]} testID="reel-page">
+          <View style={styles.header}>
+            <Avatar
+              name={reel.author.name}
+              size={40}
+              src={reel.author.avatarUrl}
+              color={brandColor(reel.kennel?.primaryColor)}
+            />
+            <View style={styles.authorText}>
+              <ThemedText style={styles.sm}>
+                <ThemedText style={[styles.sm, styles.medium]} onPress={() => router.push(`/hashers/${reel.author.id}`)}>
+                  {reel.author.name}
                 </ThemedText>
-              </View>
-            </Pressable>
-            {where && (
-              <Pressable accessibilityRole="link" onPress={where.onPress} style={styles.where}>
-                <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>{where.label}</ThemedText>
-              </Pressable>
-            )}
-            {reel.caption ? <RichText text={reel.caption} style={styles.caption} /> : null}
+                {where ? (
+                  <>
+                    {' · '}
+                    <ThemedText style={[styles.sm, { color: theme.primaryStrong }]} onPress={where.onPress}>
+                      {where.label}
+                    </ThemedText>
+                  </>
+                ) : null}
+              </ThemedText>
+              {reel.publishedAt ? (
+                <ThemedText themeColor="textSecondary" style={styles.sm}>{formatDate(reel.publishedAt)}</ThemedText>
+              ) : null}
+            </View>
           </View>
+
+          {reel.caption ? <RichText text={reel.caption} style={styles.caption} /> : null}
 
           {/* The pager: one item per page, in the order they were added. */}
           <ScrollView
@@ -331,17 +333,18 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four, gap: Spacing.two },
   centerText: { textAlign: 'center' },
-  scroll: { padding: Spacing.three, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center', paddingBottom: Spacing.six },
-  card: { borderRadius: Spacing.three, overflow: 'hidden' },
-  padded: { padding: Spacing.three, gap: Spacing.two },
-  author: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 44 },
+  scroll: { maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center', paddingVertical: 16, paddingBottom: 32, gap: 16 },
+  // overflow-hidden rounded-none border-x-0: edge to edge, a line above and below.
+  card: { overflow: 'hidden', borderTopWidth: 1, borderBottomWidth: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16 },
   authorText: { flex: 1, minWidth: 0 },
-  where: { minHeight: 44, justifyContent: 'center' },
-  caption: { fontSize: 16, lineHeight: 23 },
+  sm: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  medium: { fontWeight: '500' },
+  caption: { paddingHorizontal: 16, paddingBottom: 12, fontSize: 15, lineHeight: 22, fontWeight: '400' },
   black: { backgroundColor: '#000000' },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingVertical: Spacing.two },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  owner: { gap: Spacing.two, paddingHorizontal: Spacing.one },
+  owner: { gap: Spacing.two, paddingHorizontal: 16 },
   actions: { flexDirection: 'row', gap: Spacing.two },
   action: {
     minHeight: 44,

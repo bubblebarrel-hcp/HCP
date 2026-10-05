@@ -150,7 +150,8 @@ export async function declineFollowRequest(followerId: string) {
 }
 
 export async function followKennel(slug: string, follow: boolean) {
-  return api(`/kennels/${slug}/follow`, { method: follow ? 'POST' : 'DELETE' });
+  const data = await api<{ counts: { followers: number } }>(`/kennels/${slug}/follow`, { method: follow ? 'POST' : 'DELETE' });
+  return data.counts.followers;
 }
 
 export async function hasherProfile(id: string) {

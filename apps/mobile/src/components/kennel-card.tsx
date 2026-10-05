@@ -2,44 +2,52 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/web-ui';
 import { verificationLabels } from '@/lib/format';
 import type { PublicKennel } from '@/lib/types';
 
+// The kennel card from the web app (components/KennelCard.tsx): the short name
+// and, once verified, a soft-primary badge; city, country and meeting day; the
+// motto, three lines of description and the active member count.
 export function KennelCard({ kennel }: { kennel: PublicKennel }) {
-  const theme = useTheme();
   const router = useRouter();
   const verified = verificationLabels[kennel.verificationLevel];
   return (
     <Pressable
       accessibilityRole="button"
+      testID="kennel-card"
       onPress={() => router.push(`/kennels/${kennel.slug}`)}
-      style={({ pressed }) => [styles.card, { backgroundColor: theme.card, opacity: pressed ? 0.85 : 1 }]}>
-      <View style={styles.cardHeader}>
-        <ThemedText type="smallBold" style={styles.cardTitle}>{kennel.shortName}</ThemedText>
-        {verified && (
-          <ThemedText type="small" style={[styles.badge, { color: theme.primaryStrong, borderColor: theme.primary }]}>
-            {verified}
+      style={({ pressed }) => ({ opacity: pressed ? 0.85 : 1 })}>
+      <Card>
+        <CardHeader>
+          <View style={styles.titleRow}>
+            <CardTitle style={styles.title}>{kennel.shortName}</CardTitle>
+            {verified && <Badge tone="soft-primary">{verified}</Badge>}
+          </View>
+          <CardDescription>
+            {kennel.city}, {kennel.country}
+            {kennel.meetingDay ? ` · ${kennel.meetingDay}s` : ''}
+          </CardDescription>
+        </CardHeader>
+        <CardContent style={styles.content}>
+          {kennel.motto ? <ThemedText style={styles.motto}>“{kennel.motto}”</ThemedText> : null}
+          <ThemedText themeColor="textSecondary" numberOfLines={3} style={styles.small}>
+            {kennel.description}
           </ThemedText>
-        )}
-      </View>
-      <ThemedText type="small" themeColor="textSecondary">
-        {kennel.city}, {kennel.country}
-        {kennel.meetingDay ? ` · ${kennel.meetingDay}s` : ''}
-      </ThemedText>
-      {kennel.motto && <ThemedText type="small" style={styles.motto}>“{kennel.motto}”</ThemedText>}
-      <ThemedText type="small" themeColor="textSecondary">
-        {kennel.activeMemberCount} active {kennel.activeMemberCount === 1 ? 'member' : 'members'}
-      </ThemedText>
+          <ThemedText themeColor="textSecondary" style={styles.xs}>
+            {kennel.activeMemberCount} active {kennel.activeMemberCount === 1 ? 'member' : 'members'}
+          </ThemedText>
+        </CardContent>
+      </Card>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: Spacing.three, padding: Spacing.three, gap: Spacing.one },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.two },
-  cardTitle: { fontSize: 18, lineHeight: 24, flexShrink: 1 },
-  badge: { borderWidth: 1, borderRadius: 999, paddingHorizontal: Spacing.two, fontSize: 12, lineHeight: 18 },
-  motto: { fontStyle: 'italic' },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  title: { flexShrink: 1 },
+  content: { gap: 12 },
+  motto: { fontSize: 14, lineHeight: 20, fontStyle: 'italic', fontWeight: '400' },
+  small: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  xs: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
 });

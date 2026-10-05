@@ -1,375 +1,376 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { History, ShieldCheck, UserPlus, Users } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 
-import { Avatar } from '@/components/feed/avatar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { ActionDialog } from '@/components/ui/action-dialog';
+import { Select } from '@/components/ui/select';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Skeleton } from '@/components/ui/web-ui';
+import { MaxContentWidth } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
+import { useTheme } from '@/hooks/use-theme';
+import { WEB_URL, api, errorMessage } from '@/lib/api';
 import { formatDate } from '@/lib/format';
-import { api, errorMessage } from '@/lib/api';
-import type { AppointableMember, LeadershipEntry, OfficerPosition, PositionsResponse } from '@/lib/types';
+import type { LeadershipEntry, PositionsResponse } from '@/lib/types';
 
-// Who holds which office (D32). Defining positions, standing roles and
-// delegations is kennel.manage desk work and stays on the web, same split as
-// trail planning; this screen covers filling and vacating a seat, which any
-// officer.appoint holder can do from a phone at a run.
+// How a kennel is run (Annex 08L, D32), as the web lays it out
+// (app/kennels/[slug]/officers/page.tsx): the offices and who holds them, who is
+// standing in, and the leadership timeline. Every control is gated on what the
+// viewer holds. Defining offices and handing authority over are desk work and open
+// on the web.
 
-type Tab = 'positions' | 'history';
+const permissionLabel: Record<string, string> = {
+  'membership.review': 'Review join requests',
+  'membership.suspend': 'Suspend and reinstate members',
+  'membership.remove': 'Remove members',
+  'membership.invite': 'Invite new members',
+  'officer.appoint': 'Appoint officers',
+  'kennel.manage': 'Manage the kennel and its offices',
+  'run.manage': 'Create and run the kennel’s runs',
+  'run.visibility.change': 'Change run privacy',
+  'trail.manage': 'Plan and release trails',
+  'report.publish': 'Publish trail reports',
+  'media.moderate': 'Moderate photos',
+};
 
-function EndModal({
-  visible,
-  onClose,
-  onConfirm,
-  title,
-  actionLabel,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onConfirm: (reason: string) => void;
-  title: string;
-  actionLabel: string;
-}) {
-  const theme = useTheme();
-  const [reason, setReason] = useState('');
+const appointmentStatusLabel: Record<string, string> = {
+  NOMINATED: 'Nominated',
+  APPOINTED: 'Appointed',
+  ACTIVE: 'Serving',
+  TERM_ENDED: 'Term ended',
+  RESIGNED: 'Resigned',
+  REVOKED: 'Revoked',
+  HISTORICAL: 'Historical',
+};
 
-  function close() {
-    setReason('');
-    onClose();
-  }
-
-  function confirm() {
-    const value = reason.trim();
-    setReason('');
-    onConfirm(value);
-  }
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
-      <View style={styles.modalBackdrop}>
-        <View style={[styles.modalCard, { backgroundColor: theme.card }]}>
-          <ThemedText type="subtitle">{title}</ThemedText>
-          <TextInput
-            value={reason}
-            onChangeText={setReason}
-            placeholder="Reason (required)"
-            placeholderTextColor={theme.textSecondary}
-            multiline
-            style={[styles.textarea, { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement }]}
-          />
-          <View style={styles.modalRow}>
-            <Pressable accessibilityRole="button" onPress={close} style={styles.modalButton}>
-              <ThemedText type="smallBold">Cancel</ThemedText>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={reason.trim().length < 3}
-              onPress={confirm}
-              style={[styles.modalButton, { backgroundColor: theme.primary, opacity: reason.trim().length < 3 ? 0.5 : 1 }]}>
-              <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>{actionLabel}</ThemedText>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+interface Delegation {
+  id: string;
+  permissions: string[];
+  reason: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  from: string;
+  to: string;
+  live: boolean;
+  canRevoke: boolean;
 }
 
-function PickMemberModal({
-  visible,
-  members,
-  onClose,
-  onPick,
-}: {
-  visible: boolean;
-  members: AppointableMember[];
-  onClose: () => void;
-  onPick: (userId: string) => void;
-}) {
-  const theme = useTheme();
-  return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={[styles.modalCard, { backgroundColor: theme.card }]}>
-          <ThemedText type="subtitle">Appoint</ThemedText>
-          <ScrollView style={styles.memberList}>
-            {members.map((m) => (
-              <Pressable
-                key={m.userId}
-                accessibilityRole="button"
-                onPress={() => onPick(m.userId)}
-                style={({ pressed }) => [styles.memberRow, { opacity: pressed ? 0.7 : 1 }]}>
-                <Avatar name={m.name} size={32} />
-                <ThemedText type="smallBold">{m.name}</ThemedText>
-              </Pressable>
-            ))}
-            {members.length === 0 && (
-              <ThemedText themeColor="textSecondary">No active members to choose from.</ThemedText>
-            )}
-          </ScrollView>
-          <Pressable accessibilityRole="button" onPress={onClose} style={styles.modalButton}>
-            <ThemedText type="smallBold">Cancel</ThemedText>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-function PositionCard({
-  position,
-  canAppoint,
-  members,
-  onAppointed,
-  busyId,
-  setBusyId,
-  myUserId,
-}: {
-  position: OfficerPosition;
-  canAppoint: boolean;
-  members: AppointableMember[];
-  onAppointed: () => void;
-  busyId: string | null;
-  setBusyId: (id: string | null) => void;
-  myUserId: string | null;
-}) {
-  const theme = useTheme();
-  const [picking, setPicking] = useState(false);
-  const [ending, setEnding] = useState<{ appointmentId: string; own: boolean } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function appoint(userId: string) {
-    setPicking(false);
-    setBusyId(position.id);
-    setError(null);
-    try {
-      await api(`/positions/${position.id}/appointments`, { method: 'POST', body: { userId } });
-      onAppointed();
-    } catch (err) {
-      setError(errorMessage(err, 'Could not appoint'));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function end(appointmentId: string, own: boolean, reason: string) {
-    setEnding(null);
-    setBusyId(appointmentId);
-    setError(null);
-    try {
-      await api(`/appointments/${appointmentId}/${own ? 'resigned' : 'revoked'}`, { method: 'POST', body: { reason } });
-      onAppointed();
-    } catch (err) {
-      setError(errorMessage(err, 'That did not work'));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <ThemedText type="smallBold">{position.title}</ThemedText>
-      {position.description ? <ThemedText themeColor="textSecondary">{position.description}</ThemedText> : null}
-      {position.isMismanagement ? (
-        <ThemedText type="small" style={{ color: theme.primaryStrong }}>Mismanagement</ThemedText>
-      ) : null}
-
-      {position.holders.length === 0 ? (
-        <ThemedText themeColor="textSecondary">Vacant</ThemedText>
-      ) : (
-        position.holders.map((h) => {
-          const own = h.userId === myUserId;
-          return (
-            <View key={h.appointmentId} style={styles.holderRow}>
-              <Avatar name={h.name} size={32} />
-              <View style={styles.holderText}>
-                <ThemedText type="smallBold">{h.name}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">Since {formatDate(h.startDate)}</ThemedText>
-              </View>
-              {canAppoint || own ? (
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={busyId === h.appointmentId}
-                  onPress={() => setEnding({ appointmentId: h.appointmentId, own })}
-                  style={styles.smallAction}>
-                  <ThemedText type="small" style={{ color: theme.danger }}>{own ? 'Resign' : 'Revoke'}</ThemedText>
-                </Pressable>
-              ) : null}
-            </View>
-          );
-        })
-      )}
-
-      {canAppoint && (
-        <Pressable
-          accessibilityRole="button"
-          disabled={busyId === position.id}
-          onPress={() => setPicking(true)}
-          style={styles.smallAction}>
-          {busyId === position.id ? (
-            <ActivityIndicator color={theme.primary} />
-          ) : (
-            <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>+ Appoint</ThemedText>
-          )}
-        </Pressable>
-      )}
-
-      {error && <ThemedText type="small" style={{ color: theme.danger }}>{error}</ThemedText>}
-
-      <PickMemberModal visible={picking} members={members} onClose={() => setPicking(false)} onPick={appoint} />
-      <EndModal
-        visible={Boolean(ending)}
-        onClose={() => setEnding(null)}
-        onConfirm={(reason) => ending && end(ending.appointmentId, ending.own, reason)}
-        title={ending?.own ? 'Resign this position' : 'Revoke this appointment'}
-        actionLabel={ending?.own ? 'Resign' : 'Revoke'}
-      />
-    </View>
-  );
+function delegationState(d: Delegation) {
+  if (d.revokedAt) return { label: 'Revoked', tone: 'danger' as const };
+  if (d.live) return { label: 'Live', tone: 'primary' as const };
+  if (new Date(d.expiresAt) <= new Date()) return { label: 'Expired', tone: 'muted' as const };
+  return { label: 'Scheduled', tone: 'accent' as const };
 }
 
 export default function OfficersScreen() {
-  const theme = useTheme();
-  const { user } = useAuth();
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const [tab, setTab] = useState<Tab>('positions');
+  const theme = useTheme();
+  const router = useRouter();
+  const { loading } = useAuth();
   const [positions, setPositions] = useState<PositionsResponse | null>(null);
-  const [history, setHistory] = useState<LeadershipEntry[] | null>(null);
+  const [leadership, setLeadership] = useState<LeadershipEntry[]>([]);
+  const [delegations, setDelegations] = useState<{ items: Delegation[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [appointTo, setAppointTo] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
-    setError(null);
-    try {
-      const data = await api<PositionsResponse>(`/kennels/${slug}/positions`);
-      setPositions(data);
-    } catch (err) {
-      setError(errorMessage(err, 'Could not load officers'));
-    }
-  }, [slug]);
-
-  const loadHistory = useCallback(async () => {
-    try {
-      const data = await api<{ items: LeadershipEntry[] }>(`/kennels/${slug}/leadership`);
-      setHistory(data.items);
-    } catch {
-      setHistory([]);
-    }
+    const [p, l, d] = await Promise.all([
+      api<PositionsResponse>(`/kennels/${slug}/positions`),
+      api<{ items: LeadershipEntry[] }>(`/kennels/${slug}/leadership`),
+      api<{ items: Delegation[] }>(`/kennels/${slug}/delegations`),
+    ]);
+    setPositions(p);
+    setLeadership(l.items);
+    setDelegations(d);
   }, [slug]);
 
   useEffect(() => {
+    if (loading) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [load]);
+    load()
+      .then(() => setError(null))
+      .catch((err) => setError(errorMessage(err, 'You cannot see how this kennel is run.')));
+  }, [load, loading]);
 
-  useEffect(() => {
-    if (tab === 'history' && history === null) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      loadHistory();
+  async function run(fn: () => Promise<unknown>) {
+    setBusy(true);
+    try {
+      await fn();
+      await load();
+    } catch (err) {
+      Alert.alert('That did not work', errorMessage(err, 'That did not work'));
+    } finally {
+      setBusy(false);
     }
-  }, [tab, history, loadHistory]);
+  }
+
+  // ActionDialog keeps itself open when onConfirm throws, so the failure surfaces
+  // here and is then rethrown rather than swallowed.
+  async function mutate(fn: () => Promise<unknown>) {
+    try {
+      await fn();
+      await load();
+    } catch (err) {
+      Alert.alert('That did not work', errorMessage(err, 'That did not work'));
+      throw err;
+    }
+  }
+
+  const shell = (children: React.ReactNode) => (
+    <ThemedView type="canvas" style={styles.screen}>
+      <View style={styles.safe}>
+        <ScrollView contentContainerStyle={styles.page}>{children}</ScrollView>
+      </View>
+    </ThemedView>
+  );
 
   if (error) {
-    return (
-      <ThemedView type="canvas" style={styles.center}>
-        <ThemedText style={{ color: theme.danger }}>{error}</ThemedText>
-      </ThemedView>
+    return shell(
+      <Card style={styles.denied}>
+        <ThemedText style={styles.semibold} testID="officers-denied">{error}</ThemedText>
+        <Button variant="outline" style={styles.back} onPress={() => router.replace(`/kennels/${slug}`)}>
+          Back to the kennel
+        </Button>
+      </Card>,
     );
   }
+  if (!positions || !delegations) return shell(<Skeleton height={384} />);
 
-  if (!positions) {
-    return (
-      <ThemedView type="canvas" style={styles.center}>
-        <ActivityIndicator color={theme.primary} />
-      </ThemedView>
-    );
-  }
+  const { canAppoint, canDefinePositions } = positions.viewer;
 
-  const active = positions.items.filter((p) => !p.archived);
-  const archived = positions.items.filter((p) => p.archived);
+  return shell(
+    <>
+      <Card>
+        <CardHeader>
+          <View style={styles.titleRow}>
+            <ShieldCheck size={20} color={theme.text} />
+            <CardTitle>How this kennel is run</CardTitle>
+          </View>
+          <CardDescription>
+            Offices, who holds them, and who is standing in. Defining an office and filling it are separate permissions.
+          </CardDescription>
+        </CardHeader>
+      </Card>
 
-  return (
-    <ThemedView type="canvas" style={styles.flex}>
-      <SafeAreaView style={styles.safeArea} edges={['bottom']}>
-        <View style={[styles.segment, { backgroundColor: theme.backgroundElement }]}>
-          {(['positions', 'history'] as Tab[]).map((t) => (
-            <Pressable
-              key={t}
-              accessibilityRole="button"
-              accessibilityState={{ selected: tab === t }}
-              onPress={() => setTab(t)}
-              style={[styles.segmentItem, tab === t && { backgroundColor: theme.card }]}>
-              <ThemedText type="smallBold" themeColor={tab === t ? 'text' : 'textSecondary'}>
-                {t === 'positions' ? 'Positions' : 'History'}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
-
-        <ScrollView contentContainerStyle={styles.scroll}>
-          {tab === 'positions' ? (
-            <>
-              {active.map((p) => (
-                <PositionCard
-                  key={p.id}
-                  position={p}
-                  canAppoint={positions.viewer.canAppoint}
-                  members={positions.members}
-                  onAppointed={load}
-                  busyId={busyId}
-                  setBusyId={setBusyId}
-                  myUserId={user?.id ?? null}
-                />
-              ))}
-              {active.length === 0 && (
-                <ThemedText themeColor="textSecondary" style={styles.center}>No positions defined yet.</ThemedText>
-              )}
-              {archived.length > 0 && (
-                <ThemedText type="small" themeColor="textSecondary" style={styles.archivedNote}>
-                  {archived.length} archived position{archived.length === 1 ? '' : 's'} hidden. Manage positions on the web.
+      {/* ─── Positions ─── */}
+      <Card>
+        <View testID="positions-card">
+          <CardHeader style={styles.tight}>
+            <CardTitle>Offices</CardTitle>
+          </CardHeader>
+          <CardContent style={styles.stack}>
+            {positions.items.map((position) => (
+              <View
+                key={position.id}
+                testID="position-row"
+                style={[styles.position, { borderColor: theme.border }, position.archived && { opacity: 0.6 }]}>
+                <View style={styles.wrapRow}>
+                  <ThemedText style={styles.semibold}>{position.title}</ThemedText>
+                  {position.archived && <Badge>Archived</Badge>}
+                  {position.isMismanagement && <Badge>Mismanagement</Badge>}
+                  {position.termMonths ? (
+                    <ThemedText themeColor="textSecondary" style={styles.sm}>{position.termMonths}-month term</ThemedText>
+                  ) : null}
+                </View>
+                {position.permissions && (
+                  <View style={styles.perms}>
+                    {position.permissions.length === 0 ? (
+                      <ThemedText themeColor="textSecondary" style={styles.sm}>No permissions</ThemedText>
+                    ) : (
+                      position.permissions.map((key) => (
+                        <View key={key} style={[styles.perm, { backgroundColor: theme.backgroundElement }]}>
+                          <ThemedText style={styles.permText}>{permissionLabel[key] ?? key}</ThemedText>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                )}
+                <ThemedText style={[styles.sm, styles.holders]}>
+                  {position.holders.length === 0 ? (
+                    <ThemedText themeColor="textSecondary" style={styles.sm}>Vacant</ThemedText>
+                  ) : (
+                    position.holders.map((h) => h.name).join(', ')
+                  )}
                 </ThemedText>
-              )}
-            </>
-          ) : history === null ? (
-            <ActivityIndicator color={theme.primary} />
-          ) : (
-            history.map((h) => (
-              <View key={h.id} style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <ThemedText type="smallBold">{h.position.title}</ThemedText>
-                <ThemedText themeColor="textSecondary">{h.officer}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {formatDate(h.startDate)} – {h.endDate ? formatDate(h.endDate) : h.current ? 'present' : '—'}
-                </ThemedText>
-                {h.endedReason ? <ThemedText type="small" themeColor="textSecondary">{h.endedReason}</ThemedText> : null}
+                {canAppoint && !position.archived && (
+                  <View style={styles.actions}>
+                    <Field label="Appoint">
+                      <Select
+                        testID="appoint-select"
+                        value={appointTo[position.id] ?? ''}
+                        onChange={(value) => setAppointTo((s) => ({ ...s, [position.id]: value }))}
+                        options={[{ value: '', label: 'Choose a member…' }, ...positions.members.map((m) => ({ value: m.userId, label: m.name }))]}
+                      />
+                    </Field>
+                    <View style={styles.wrapRow}>
+                      <Button
+                        size="sm"
+                        disabled={busy || !appointTo[position.id]}
+                        testID="appoint-submit"
+                        onPress={() =>
+                          void run(() => api(`/positions/${position.id}/appointments`, { method: 'POST', body: { userId: appointTo[position.id] } }))
+                        }>
+                        <UserPlus size={16} color={theme.onPrimary} />
+                        <ThemedText style={[styles.buttonLabel, { color: theme.onPrimary }]}>Appoint</ThemedText>
+                      </Button>
+                      {position.holders.map((h) => (
+                        <ActionDialog
+                          key={h.appointmentId}
+                          title={`End ${h.name} in ${position.title}`}
+                          description="The appointment stays on the leadership timeline. Nothing is erased."
+                          confirmLabel="End the appointment"
+                          destructive
+                          text={{ label: 'Why', required: true, placeholder: 'Term completed' }}
+                          onConfirm={({ text }) => mutate(() => api(`/appointments/${h.appointmentId}/term-ended`, { method: 'POST', body: { reason: text } }))}
+                          trigger={(open) => (
+                            <Button size="sm" variant="outline" disabled={busy} testID="end-appointment" onPress={open}>
+                              {`End ${h.name}`}
+                            </Button>
+                          )}
+                        />
+                      ))}
+                      {canDefinePositions && (
+                        <ActionDialog
+                          title={`Retire ${position.title}`}
+                          description="Anyone holding it stops holding it, on the record. The office and its history remain."
+                          confirmLabel="Archive the office"
+                          destructive
+                          text={{ label: 'Why', required: true, placeholder: 'Folded into another role' }}
+                          onConfirm={({ text }) => mutate(() => api(`/positions/${position.id}/archive`, { method: 'POST', body: { reason: text } }))}
+                          trigger={(open) => (
+                            <Button size="sm" variant="outline" disabled={busy} testID="archive-position" onPress={open}>Archive</Button>
+                          )}
+                        />
+                      )}
+                    </View>
+                  </View>
+                )}
               </View>
-            ))
-          )}
-        </ScrollView>
-      </SafeAreaView>
-    </ThemedView>
+            ))}
+            {canDefinePositions && (
+              <View style={[styles.define, { borderTopColor: theme.border }]} testID="define-position">
+                <ThemedText style={styles.medium}>Define an office</ThemedText>
+                <Button variant="outline" size="sm" style={styles.start} onPress={() => Linking.openURL(`${WEB_URL}/kennels/${slug}/officers`)}>
+                  Define offices on the web
+                </Button>
+              </View>
+            )}
+          </CardContent>
+        </View>
+      </Card>
+
+      {/* ─── Delegations ─── */}
+      <Card>
+        <View testID="delegations-card">
+          <CardHeader style={styles.tight}>
+            <View style={styles.titleRow}>
+              <Users size={16} color={theme.text} />
+              <CardTitle>Standing in</CardTitle>
+            </View>
+            <CardDescription>
+              A time-boxed loan of authority you hold. It expires by itself, and stops the moment you lose the permission yourself.
+            </CardDescription>
+          </CardHeader>
+          <CardContent style={styles.stack}>
+            {delegations.items.length === 0 && (
+              <ThemedText themeColor="textSecondary" style={styles.sm}>Nobody is standing in.</ThemedText>
+            )}
+            {delegations.items.map((d) => {
+              const state = delegationState(d);
+              return (
+                <View key={d.id} testID="delegation-row" style={[styles.delegation, { borderColor: theme.border }]}>
+                  <View style={styles.wrapRow}>
+                    <Badge tone={state.tone}>{state.label}</Badge>
+                    <ThemedText style={[styles.sm, styles.medium14]}>{d.from} → {d.to}</ThemedText>
+                    <ThemedText themeColor="textSecondary" style={styles.sm}>until {formatDate(d.expiresAt)}</ThemedText>
+                  </View>
+                  <ThemedText style={[styles.sm, styles.holders]}>{d.permissions.map((k) => permissionLabel[k] ?? k).join(', ')}</ThemedText>
+                  <ThemedText themeColor="textSecondary" style={styles.sm}>“{d.reason}”</ThemedText>
+                  {d.canRevoke && !d.revokedAt && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      style={[styles.start, styles.top]}
+                      testID="delegation-revoke"
+                      onPress={() => void run(() => api(`/delegations/${d.id}/revoke`, { method: 'POST', body: {} }))}>
+                      Take it back
+                    </Button>
+                  )}
+                </View>
+              );
+            })}
+          </CardContent>
+        </View>
+      </Card>
+
+      {/* ─── Leadership timeline (FR-GOV-006) ─── */}
+      <Card>
+        <View testID="leadership-card">
+          <CardHeader style={styles.tight}>
+            <View style={styles.titleRow}>
+              <History size={16} color={theme.text} />
+              <CardTitle>Leadership timeline</CardTitle>
+            </View>
+            <CardDescription>Permanent history. Offices end, they are never erased.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {leadership.length === 0 ? (
+              <ThemedText themeColor="textSecondary" style={styles.sm}>Nobody has held office yet.</ThemedText>
+            ) : (
+              <View style={[styles.timeline, { borderLeftColor: theme.border }]}>
+                {leadership.map((entry) => (
+                  <View key={entry.id}>
+                    <View style={styles.wrapRow}>
+                      <ThemedText style={[styles.sm, styles.medium14]}>{entry.position.title}</ThemedText>
+                      <ThemedText style={styles.sm}>{entry.officer}</ThemedText>
+                      <Badge tone={entry.status === 'ACTIVE' ? 'primary' : entry.status === 'REVOKED' ? 'danger' : 'muted'}>
+                        {appointmentStatusLabel[entry.status] ?? entry.status}
+                      </Badge>
+                    </View>
+                    <ThemedText themeColor="textSecondary" style={styles.sm}>
+                      {formatDate(entry.startDate)}
+                      {entry.endDate ? ` to ${formatDate(entry.endDate)}` : ' to present'}
+                    </ThemedText>
+                    {entry.endedReason ? <ThemedText themeColor="textSecondary" style={styles.sm}>“{entry.endedReason}”</ThemedText> : null}
+                  </View>
+                ))}
+              </View>
+            )}
+          </CardContent>
+        </View>
+      </Card>
+    </>,
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  safeArea: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four },
-  scroll: { padding: Spacing.three, gap: Spacing.two, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center', paddingBottom: Spacing.six },
-  segment: { flexDirection: 'row', gap: Spacing.one, padding: Spacing.one, margin: Spacing.three, borderRadius: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center' },
-  segmentItem: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: Spacing.two },
-  card: { borderWidth: 1, borderRadius: 12, padding: Spacing.three, gap: Spacing.two },
-  holderRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  holderText: { flex: 1, minWidth: 0 },
-  smallAction: { minHeight: 36, justifyContent: 'center' },
-  archivedNote: { textAlign: 'center', padding: Spacing.two },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalCard: { borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: Spacing.four, gap: Spacing.three, maxHeight: '80%' },
-  modalRow: { flexDirection: 'row', gap: Spacing.two, justifyContent: 'flex-end' },
-  modalButton: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, minHeight: 44, justifyContent: 'center', borderRadius: Spacing.two },
-  textarea: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.three, minHeight: 80, fontSize: 16 },
-  memberList: { maxHeight: 300 },
-  memberRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 48, paddingVertical: Spacing.one },
+  screen: { flex: 1, flexDirection: 'row', justifyContent: 'center' },
+  safe: { flex: 1, width: '100%', maxWidth: MaxContentWidth },
+  page: { paddingVertical: 16, paddingBottom: 32, gap: 16 },
+  denied: { padding: 32, alignItems: 'center' },
+  back: { marginTop: 16 },
+  semibold: { fontSize: 16, lineHeight: 24, fontWeight: '600' },
+  medium: { fontSize: 16, lineHeight: 24, fontWeight: '500' },
+  medium14: { fontWeight: '500' },
+  sm: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tight: { paddingBottom: 12 },
+  stack: { gap: 12 },
+  wrapRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  position: { borderWidth: 1, borderRadius: 8, padding: 16 },
+  perms: { marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  perm: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 2 },
+  permText: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
+  holders: { marginTop: 8 },
+  actions: { marginTop: 12, gap: 8 },
+  define: { gap: 12, borderTopWidth: 1, paddingTop: 16 },
+  start: { alignSelf: 'flex-start' },
+  top: { marginTop: 8 },
+  delegation: { borderWidth: 1, borderRadius: 8, padding: 12, gap: 4 },
+  timeline: { borderLeftWidth: 2, paddingLeft: 16, gap: 12 },
+  buttonLabel: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
 });
