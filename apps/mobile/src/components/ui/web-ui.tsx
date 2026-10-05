@@ -208,6 +208,46 @@ export function Input({ style, ...props }: TextInputProps) {
 }
 
 /**
+ * The web's reading-mode switch (flex gap-1 rounded-md bg-muted p-1): the chosen
+ * option sits on a card with a faint shadow, the rest are muted text.
+ */
+export function Segmented<T extends string>({
+  value,
+  onChange,
+  options,
+  testIDPrefix,
+}: {
+  value: T;
+  onChange: (next: T) => void;
+  options: { value: T; label: string; icon?: React.ReactNode; badge?: number }[];
+  testIDPrefix?: string;
+}) {
+  const theme = useTheme();
+  return (
+    <View accessibilityRole="tablist" style={[styles.segmented, { backgroundColor: theme.backgroundElement }]}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            testID={testIDPrefix ? `${testIDPrefix}-${option.value}` : undefined}
+            onPress={() => onChange(option.value)}
+            style={[styles.segment, active && { backgroundColor: theme.card, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1 }]}>
+            {option.icon}
+            <ThemedText style={[styles.segmentText, { color: active ? theme.text : theme.textSecondary, fontWeight: active ? '500' : '400' }]}>
+              {option.label}
+            </ThemedText>
+            {option.badge ? <Badge style={styles.segmentBadge}>{String(option.badge)}</Badge> : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
  * The shell of the web's account sub-pages (privacy, blocked, follow requests...):
  * `mx-auto max-w-3xl space-y-6 px-4 py-12`, with a "Back to ..." link above the
  * first card.
@@ -244,13 +284,17 @@ export function Skeleton({ height = 192 }: { height?: number }) {
 }
 
 const styles = StyleSheet.create({
+  segmented: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, padding: 4, borderRadius: 6 },
+  segment: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, minHeight: 36, borderRadius: 6 },
+  segmentText: { fontSize: 14, lineHeight: 20 },
+  segmentBadge: { paddingHorizontal: 6, paddingVertical: 0 },
   subpage: { width: '100%', maxWidth: 768, alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 48, gap: 24 },
   backLink: { minHeight: 24, justifyContent: 'center' },
   backText: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
   field: { gap: 6 },
   label: { fontSize: 14, lineHeight: 14, fontWeight: '500' },
   hint: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
-  input: { minHeight: 40, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, fontSize: 14 },
+  input: { minHeight: 40, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, fontSize: 14, fontFamily: 'Geist_400Regular' },
   bleed: { borderTopWidth: 1, borderBottomWidth: 1, borderRadius: 0 },
   rounded: { borderWidth: 1, borderRadius: 12 },
   header: { gap: 6, padding: 24 },

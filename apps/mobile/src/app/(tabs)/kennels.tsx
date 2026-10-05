@@ -1,28 +1,33 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { Plus } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { KennelCard } from '@/components/kennel-card';
+import { KennelMap, type KennelPin } from '@/components/map/kennel-map';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Skeleton } from '@/components/ui/web-ui';
 import { MaxContentWidth } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
-import { WEB_URL, api, errorMessage } from '@/lib/api';
+import { api, errorMessage } from '@/lib/api';
 import type { Page, PublicKennel } from '@/lib/types';
 
 // Find a kennel, as the web app lays it out on a phone (app/kennels/page.tsx):
 // a header card with the count, a search box and "Start a kennel", then the
-// kennels twelve to a page with Previous / Next underneath. The web's map card
-// has no native twin yet.
+// kennels twelve to a page with Previous / Next underneath.
 
 const PAGE_SIZE = 12;
 
 export default function KennelsScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { user } = useAuth();
+  // The map shows every kennel, not the page of twelve below it, so it reads from its own
+  // endpoint rather than the paged list.
+  const [pins, setPins] = useState<KennelPin[]>([]);
   const [draft, setDraft] = useState('');
   // The term that was actually searched: web submits a form rather than
   // searching on every keystroke.
@@ -46,6 +51,16 @@ export default function KennelsScreen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let alive = true;
+    api<{ items: KennelPin[] }>('/kennels/map')
+      .then((d) => alive && setPins(d.items))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
 
@@ -93,12 +108,23 @@ export default function KennelsScreen() {
               <Button variant="outline" onPress={search}>Search</Button>
             </View>
             {user && (
-              <Button variant="outline" onPress={() => Linking.openURL(`${WEB_URL}/kennels/new`)} testID="start-kennel" style={styles.start}>
+              <Button variant="outline" onPress={() => router.push('/kennels/new' as never)} testID="start-kennel" style={styles.start}>
                 <Plus size={16} color={theme.text} />
                 <ThemedText style={[styles.startText]}>Start a kennel</ThemedText>
               </Button>
             )}
           </Card>
+
+          {pins.length > 0 && (
+            <Card style={styles.mapCard}>
+              <View testID="kennel-map-card">
+                <KennelMap kennels={pins} />
+                <ThemedText themeColor="textSecondary" style={styles.mapNote}>
+                  {pins.length} {pins.length === 1 ? 'kennel' : 'kennels'} on the map. Select a pin to open one.
+                </ThemedText>
+              </View>
+            </Card>
+          )}
 
           {error ? (
             <Card style={styles.errorCard}>
@@ -152,6 +178,8 @@ const styles = StyleSheet.create({
   page: { paddingVertical: 16, paddingBottom: 32, gap: 16 },
   // mb-4 flex flex-col gap-4 rounded-none border-x-0 p-5
   intro: { padding: 20, gap: 16 },
+  mapCard: { overflow: 'hidden' },
+  mapNote: { paddingHorizontal: 20, paddingVertical: 12, fontSize: 14, lineHeight: 20, fontWeight: '400' },
   h1: { fontSize: 24, lineHeight: 32, fontWeight: '700', letterSpacing: -0.4 },
   lead: { marginTop: 4, fontSize: 16, lineHeight: 24, fontWeight: '400' },
   searchRow: { flexDirection: 'row', gap: 8 },

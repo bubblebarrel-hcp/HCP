@@ -157,3 +157,12 @@ export async function followKennel(slug: string, follow: boolean) {
 export async function hasherProfile(id: string) {
   return api<{ hasher: HasherProfile }>(`/hashers/${id}`);
 }
+
+export async function editComment(commentId: string, body: string) {
+  const data = await api<{ comment: ContentComment }>(`/comments/${commentId}`, { method: 'PATCH', body: { body } });
+  return data.comment;
+}
+
+export async function removeComment(commentId: string, reason: string) {
+  return api(`/comments/${commentId}/remove`, { method: 'POST', body: { reason } });
+}

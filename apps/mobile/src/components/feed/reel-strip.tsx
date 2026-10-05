@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Image, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Pin, Plus, Video } from 'lucide-react-native';
 import { Circle, Svg } from 'react-native-svg';
 import { useRouter } from 'expo-router';
@@ -9,7 +9,7 @@ import { ReelComposer } from '@/components/feed/reel-composer';
 import { ThemedText } from '@/components/themed-text';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
-import { api, WEB_URL } from '@/lib/api';
+import { api } from '@/lib/api';
 import { brandColor } from '@/lib/format';
 import type { Page, Reel } from '@/lib/types';
 
@@ -124,7 +124,7 @@ export function ReelStrip({ refreshKey = 0, authorId }: { refreshKey?: number; a
     <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]} testID="reel-strip">
       <View style={styles.header}>
         <ThemedText type="smallBold" accessibilityRole="header">Reels</ThemedText>
-        <Pressable accessibilityRole="link" onPress={() => Linking.openURL(`${WEB_URL}/reels`)} hitSlop={8}>
+        <Pressable accessibilityRole="link" onPress={() => router.push('/reels' as never)} hitSlop={8}>
           <ThemedText type="small" style={{ color: theme.primaryStrong }}>See all</ThemedText>
         </Pressable>
       </View>

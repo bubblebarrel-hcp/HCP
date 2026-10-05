@@ -1,6 +1,7 @@
 import type { ImagePickerAsset } from 'expo-image-picker';
 
 import { api } from '@/lib/api';
+import type { MediaAsset } from '@/lib/types';
 
 // Photos and videos never pass through our own API: it hands out an upload
 // target, the phone PUTs the bytes straight to storage, then confirms (D28).
@@ -52,7 +53,19 @@ export function fileSize(bytes: number) {
 
 // `slot` is the item's place in the post. It is the idempotency key, so a retry
 // of the same item on the same reel resumes rather than uploads twice.
-export async function uploadAsset(asset: ImagePickerAsset, target: { type: 'REEL' | 'POST'; id: string }, slot: number) {
+export type MediaTarget = { type: 'REEL' | 'POST' | 'PROFILE' | 'KENNEL' | 'RUN' | 'GALLERY' | 'TRAIL' | 'CIRCLE'; id: string };
+
+// Same road as the web's uploadPhoto (apps/web/lib/media.ts): ask for a target, PUT the
+// bytes, confirm. Returns the media id and, once confirmed, its public address.
+export async function uploadAssetFull(asset: ImagePickerAsset, target: MediaTarget, slot: number, caption?: string) {
+  return uploadInternal(asset, target, slot, caption ?? null);
+}
+
+export async function uploadAsset(asset: ImagePickerAsset, target: MediaTarget, slot: number) {
+  return (await uploadInternal(asset, target, slot, null)).id;
+}
+
+async function uploadInternal(asset: ImagePickerAsset, target: MediaTarget, slot: number, caption: string | null) {
   const kind = assetKind(asset);
   const mimeType = assetMimeType(asset);
 
@@ -69,7 +82,7 @@ export async function uploadAsset(asset: ImagePickerAsset, target: { type: 'REEL
       mimeType,
       sizeBytes: bytes.size,
       target,
-      caption: null,
+      caption,
       clientId: `${target.type}:${target.id}:${slot}`,
     },
   });
@@ -81,7 +94,7 @@ export async function uploadAsset(asset: ImagePickerAsset, target: { type: 'REEL
   });
   if (!put.ok) throw new Error(`Storage rejected the upload (${put.status})`);
 
-  await api(`/media/${asked.media.id}/confirm`, {
+  const confirmed = await api<{ media: MediaAsset }>(`/media/${asked.media.id}/confirm`, {
     method: 'POST',
     body: {
       width: asset.width || null,
@@ -89,5 +102,5 @@ export async function uploadAsset(asset: ImagePickerAsset, target: { type: 'REEL
       durationSec: kind === 'VIDEO' && asset.duration ? Math.round(asset.duration / 100) / 10 : null,
     },
   });
-  return asked.media.id;
+  return { id: asked.media.id, url: confirmed?.media?.url ?? null, media: confirmed.media };
 }

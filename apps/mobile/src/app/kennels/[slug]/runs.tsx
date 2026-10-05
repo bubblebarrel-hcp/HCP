@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ArrowLeft, Plus } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -8,7 +8,6 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card } from '@/components/ui/web-ui';
 import { MaxContentWidth } from '@/constants/theme';
-import { WEB_URL } from '@/lib/api';
 import { useTheme } from '@/hooks/use-theme';
 import type { Page, RunSummary } from '@/lib/types';
 
@@ -37,7 +36,7 @@ export default function KennelRunsScreen() {
               <ThemedText accessibilityRole="header" style={styles.h1}>Runs</ThemedText>
             </View>
             {meta?.canPlan && (
-              <Button testID="plan-run" onPress={() => Linking.openURL(`${WEB_URL}/kennels/${slug}/runs/new`)}>
+              <Button testID="plan-run" onPress={() => router.push(`/kennels/${slug}/runs/new` as never)}>
                 <Plus size={16} color={theme.onPrimary} />
                 <ThemedText style={[styles.planText, { color: theme.onPrimary }]}>Plan a run</ThemedText>
               </Button>

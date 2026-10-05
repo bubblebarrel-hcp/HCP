@@ -19,7 +19,7 @@ export function BottomNav() {
   const items: NavItem[] = [
     ...primaryNav.slice(0, 3),
     user
-      ? { label: 'Menu', icon: Menu, href: '/account', match: (p) => p.startsWith('/account') }
+      ? { label: 'Me', icon: Menu, href: '/account', match: (p) => p.startsWith('/account') }
       : { label: 'Log in', icon: UserRound, href: '/auth/login', match: (p) => p.startsWith('/auth') },
   ];
 

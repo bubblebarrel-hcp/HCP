@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
-import { Award, Footprints, Globe2, MapPin, Pin, RefreshCw, Ruler, Share2, Trash2, Users, type LucideIcon } from 'lucide-react-native';
+import { Check, Copy, Pin, RefreshCw, Share2, Trash2 } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 
-import { Avatar } from '@/components/feed/avatar';
+import { PassportView } from '@/components/passport/passport-view';
+import { QrCode } from '@/components/qr-code';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Select } from '@/components/ui/select';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Skeleton } from '@/components/ui/web-ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Field, Input, Skeleton } from '@/components/ui/web-ui';
 import { MaxContentWidth } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
@@ -18,8 +20,8 @@ import type { HashPassport, IdentityTimelineEntry } from '@/lib/types';
 // The Hash Passport, as the web lays it out on a phone (app/passport/page.tsx and
 // components/passport/PassportView.tsx): the header with five stat tiles, Stamps,
 // Milestones, "Where you have hashed", then your memories, the share link and
-// your timeline. The share link opens the system share sheet; the web's QR code
-// and clipboard button have no native twin yet.
+// your timeline. The share link has the web's QR code and Copy button, and also opens
+// the system share sheet.
 
 const memoryKindLabel: Record<string, string> = {
   FAVORITE_TRAIL: 'Favourite trail',
@@ -36,15 +38,6 @@ const timelineTypeLabel: Record<string, string> = {
   TRUST_LEVEL: 'Trust level',
   HASH_NAME: 'Hash name',
 };
-
-function formatKm(metres: number) {
-  if (!metres) return '0 km';
-  return `${(metres / 1000).toFixed(metres >= 10_000 ? 0 : 1)} km`;
-}
-
-function placeLabel(place: { country: string; stateProvince: string | null; city: string | null }) {
-  return [place.city, place.stateProvince, place.country].filter(Boolean).join(', ');
-}
 
 function AddMemoryDialog({ onSaved }: { onSaved: (passport: HashPassport) => void }) {
   const theme = useTheme();
@@ -111,6 +104,7 @@ export default function PassportScreen() {
   const router = useRouter();
   const { user, loading } = useAuth();
   const [passport, setPassport] = useState<HashPassport | null>(null);
+  const [copied, setCopied] = useState(false);
   const [timeline, setTimeline] = useState<IdentityTimelineEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -149,121 +143,9 @@ export default function PassportScreen() {
 
   const shareUrl = passport.shareToken ? `${WEB_URL}/passport/shared/${passport.shareToken}` : null;
 
-  const stats: { label: string; value: string; icon: LucideIcon }[] = [
-    { label: 'Runs attended', value: String(passport.runsAttended), icon: Footprints },
-    { label: 'Trails laid', value: String(passport.trailsLaid), icon: Award },
-    { label: 'Countries hashed', value: String(passport.countriesHashed), icon: Globe2 },
-    { label: 'Kennels', value: String(passport.kennelsJoined), icon: Users },
-    { label: 'Distance', value: formatKm(passport.distanceMeters), icon: Ruler },
-  ];
-
-  const byCountry = passport.places.reduce<Record<string, typeof passport.places>>((acc, place) => {
-    (acc[place.country] ??= []).push(place);
-    return acc;
-  }, {});
-
   return shell(
     <>
-      <Card style={styles.header} >
-        <View testID="passport-header" style={styles.headerRow}>
-          <Avatar name={passport.hasher.displayName} size={56} />
-          <View style={styles.headerText}>
-            <ThemedText style={[styles.eyebrow, { color: theme.primaryStrong }]}>HASH PASSPORT</ThemedText>
-            <ThemedText accessibilityRole="header" testID="passport-name" style={styles.h1}>{passport.hasher.displayName}</ThemedText>
-            <ThemedText themeColor="textSecondary" style={styles.sm}>Hashing since {formatDate(passport.hasher.hashingSince)}</ThemedText>
-          </View>
-        </View>
-        <View testID="passport-stats" style={styles.stats}>
-          {stats.map(({ label, value, icon: Icon }) => (
-            <View key={label} style={[styles.stat, { backgroundColor: theme.backgroundElement }]}>
-              <Icon size={20} color={theme.textSecondary} />
-              <ThemedText style={styles.statValue}>{value}</ThemedText>
-              <ThemedText themeColor="textSecondary" style={styles.xs}>{label}</ThemedText>
-            </View>
-          ))}
-        </View>
-      </Card>
-
-      <Card>
-        <View testID="passport-stamps">
-          <CardHeader style={styles.tight}>
-            <CardTitle>Stamps</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {passport.stamps.length === 0 ? (
-              <ThemedText themeColor="textSecondary" style={styles.sm}>Your first stamp arrives when you check in to a run.</ThemedText>
-            ) : (
-              <View style={styles.stamps}>
-                {passport.stamps.map((stamp) => (
-                  <View key={stamp.id} style={[styles.stamp, { borderColor: theme.accent + '66', backgroundColor: theme.accent + '1a' }]}>
-                    <ThemedText style={[styles.stampLabel, { color: theme.accentStrong }]}>{stamp.label}</ThemedText>
-                    <ThemedText themeColor="textSecondary" style={styles.xs}>{formatDate(stamp.awardedAt)}</ThemedText>
-                  </View>
-                ))}
-              </View>
-            )}
-          </CardContent>
-        </View>
-      </Card>
-
-      <Card>
-        <View testID="passport-milestones">
-          <CardHeader style={styles.tight}>
-            <CardTitle>Milestones</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {passport.milestones.length === 0 ? (
-              <ThemedText themeColor="textSecondary" style={styles.sm}>
-                The first milestone is 10 runs. {passport.runsAttended} so far.
-              </ThemedText>
-            ) : (
-              <View style={styles.list}>
-                {passport.milestones.map((milestone) => (
-                  <View key={milestone.id} style={styles.between}>
-                    <ThemedText style={[styles.sm, styles.semibold]}>{milestone.threshold} runs</ThemedText>
-                    <ThemedText themeColor="textSecondary" style={styles.sm}>{formatDate(milestone.reachedAt)}</ThemedText>
-                  </View>
-                ))}
-              </View>
-            )}
-          </CardContent>
-        </View>
-      </Card>
-
-      <Card>
-        <View testID="passport-places">
-          <CardHeader style={styles.tight}>
-            <CardTitle>Where you have hashed</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {passport.places.length === 0 ? (
-              <ThemedText themeColor="textSecondary" style={styles.sm}>Nowhere yet. That changes on your first run.</ThemedText>
-            ) : (
-              <View style={styles.countries}>
-                {Object.entries(byCountry).map(([country, places]) => (
-                  <View key={country}>
-                    <View style={styles.countryRow}>
-                      <Globe2 size={16} color={theme.primaryStrong} />
-                      <ThemedText style={styles.semibold16}>{country}</ThemedText>
-                      <Badge>{String(places.length)}</Badge>
-                    </View>
-                    <View style={styles.places}>
-                      {places.map((place) => (
-                        <View key={place.id} style={styles.placeRow}>
-                          <MapPin size={14} color={theme.textSecondary} />
-                          <ThemedText themeColor="textSecondary" style={[styles.sm, styles.flex]}>
-                            {placeLabel(place)} · first visit {formatDate(place.firstVisitedAt)}
-                          </ThemedText>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-          </CardContent>
-        </View>
-      </Card>
+      <PassportView passport={passport} />
 
       <Card>
         <View testID="passport-memories">
@@ -326,8 +208,23 @@ export default function PassportScreen() {
             </ThemedText>
             {shareUrl && (
               <View style={styles.shareActions}>
+                <QrCode value={shareUrl} size={128} />
                 <Input readOnly editable={false} value={shareUrl} accessibilityLabel="Share link" testID="share-url" />
                 <View style={styles.wrapRow}>
+                  <Button
+                    variant="outline"
+                    onPress={async () => {
+                      try {
+                        await Clipboard.setStringAsync(shareUrl);
+                        setCopied(true);
+                        Alert.alert('Link copied.');
+                      } catch {
+                        Alert.alert('Could not copy. Select the link instead.');
+                      }
+                    }}>
+                    {copied ? <Check size={16} color={theme.text} /> : <Copy size={16} color={theme.text} />}
+                    <ThemedText style={styles.buttonLabel}>Copy</ThemedText>
+                  </Button>
                   <Button variant="outline" onPress={() => void Share.share({ url: shareUrl, message: shareUrl })}>
                     <Share2 size={16} color={theme.text} />
                     <ThemedText style={styles.buttonLabel}>Share</ThemedText>
@@ -339,6 +236,7 @@ export default function PassportScreen() {
                       try {
                         const data = await api<{ shareToken: string }>('/me/passport/share/rotate', { method: 'POST' });
                         setPassport({ ...passport, shareToken: data.shareToken });
+                        setCopied(false);
                       } catch (err) {
                         Alert.alert('Could not rotate the link', errorMessage(err, 'Could not rotate the link'));
                       }

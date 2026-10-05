@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Check } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { Button, Card } from '@/components/ui/web-ui';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
 import { REPORT_REASONS, TARGET_WORDS, type ReportReason, type ReportTargetType } from '@/lib/moderation';
@@ -103,30 +104,28 @@ export default function ReportScreen() {
     return (
       <ThemedView type="canvas" style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scroll}>
-          <ThemedText type="subtitle" accessibilityRole="header">Thank you</ThemedText>
-          <ThemedText>Your report is with us. We will tell you what we decide.</ThemedText>
-          {who && (
-            <View style={styles.gap}>
-              {after ? (
-                <ThemedText type="small" themeColor="textSecondary">{after}</ThemedText>
-              ) : (
-                <>
-                  <ThemedText type="small" themeColor="textSecondary">Do you want to stop seeing them as well?</ThemedText>
-                  <View style={styles.row}>
-                    <Pressable accessibilityRole="button" onPress={() => void stopSeeing('mute')} style={[styles.chip, { borderColor: theme.border }]}>
-                      <ThemedText type="smallBold">Mute</ThemedText>
-                    </Pressable>
-                    <Pressable accessibilityRole="button" onPress={() => void stopSeeing('block')} style={[styles.chip, { borderColor: theme.border }]}>
-                      <ThemedText type="smallBold" style={{ color: theme.danger }}>Block</ThemedText>
-                    </Pressable>
+          <Card bleed={false} style={styles.card}>
+            <View testID="report-sent" style={styles.sections}>
+              <ThemedText accessibilityRole="header" style={styles.title}>Thank you</ThemedText>
+              <View style={styles.checkLine}>
+                <Check size={20} color={theme.trail} />
+                <ThemedText style={styles.sm}>Your report is with us. We will tell you what we decide.</ThemedText>
+              </View>
+              {who &&
+                (after ? (
+                  <ThemedText themeColor="textSecondary" style={styles.sm}>{after}</ThemedText>
+                ) : (
+                  <View style={styles.sections}>
+                    <ThemedText themeColor="textSecondary" style={styles.sm}>Do you want to stop seeing them as well?</ThemedText>
+                    <View style={styles.row}>
+                      <Button variant="outline" size="sm" onPress={() => void stopSeeing('mute')}>Mute</Button>
+                      <Button variant="outline" size="sm" onPress={() => void stopSeeing('block')}>Block</Button>
+                    </View>
                   </View>
-                </>
-              )}
+                ))}
+              <Button onPress={() => router.back()}>Done</Button>
             </View>
-          )}
-          <Pressable accessibilityRole="button" onPress={() => router.back()} style={[styles.submit, { backgroundColor: theme.primary }]}>
-            <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Done</ThemedText>
-          </Pressable>
+          </Card>
         </ScrollView>
       </ThemedView>
     );
@@ -135,110 +134,131 @@ export default function ReportScreen() {
   return (
     <ThemedView type="canvas" style={styles.flex}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <ThemedText type="subtitle" accessibilityRole="header">Report {TARGET_WORDS[targetType] ?? 'this'}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          We will look at it. They are not told it was you, and nothing happens to it until we have.
-        </ThemedText>
-
-        <View style={styles.gap} accessibilityRole="radiogroup">
-          <ThemedText type="smallBold">What is wrong?</ThemedText>
-          {reasons.map((r) => {
-            const selected = reason === r.value;
-            return (
-              <Pressable
-                key={r.value}
-                accessibilityRole="radio"
-                accessibilityState={{ selected }}
-                accessibilityLabel={`${r.label}. ${r.hint}`}
-                onPress={() => setReason(r.value)}
-                style={[styles.option, { backgroundColor: theme.card, borderColor: selected ? theme.primary : theme.border }]}>
-                <ThemedText type="smallBold">{r.label}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">{r.hint}</ThemedText>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {isImpersonation && (
-          <View style={styles.gap}>
-            <ThemedText type="smallBold">Who are they pretending to be?</ThemedText>
-            <View style={styles.row}>
-              {(['ME', 'OTHER'] as const).map((who) => (
-                <Pressable
-                  key={who}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: impersonating === who }}
-                  onPress={() => setImpersonating(who)}
-                  style={[styles.chip, { borderColor: impersonating === who ? theme.primary : theme.border, backgroundColor: theme.card }]}>
-                  <ThemedText type="smallBold">{who === 'ME' ? 'Me' : 'Somebody else'}</ThemedText>
-                </Pressable>
-              ))}
+        <Card bleed={false} style={styles.card}>
+          <View testID="report-form" style={styles.sections}>
+            <View>
+              <ThemedText accessibilityRole="header" style={styles.title}>Report {TARGET_WORDS[targetType] ?? 'this'}</ThemedText>
+              <ThemedText themeColor="textSecondary" style={styles.sm}>
+                We will look at it. They are not told it was you, and nothing happens to it until we have.
+              </ThemedText>
             </View>
-            {impersonating === 'OTHER' &&
-              (real ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${real.name}. Press to change.`}
-                  onPress={() => setReal(null)}
-                  style={[styles.option, styles.pick, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <Avatar name={real.name} src={real.avatarUrl} size={28} />
-                  <ThemedText type="smallBold" style={styles.flex}>{real.name}</ThemedText>
-                  <ThemedText type="small" style={{ color: theme.primaryStrong }}>Change</ThemedText>
-                </Pressable>
-              ) : (
-                <>
-                  <TextInput
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder="Find the real hasher"
-                    placeholderTextColor={theme.textSecondary}
-                    autoCapitalize="none"
-                    accessibilityLabel="Find the hasher they are pretending to be"
-                    style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
-                  />
-                  {found.map((person) => (
-                    <Pressable
-                      key={person.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${person.name}, @${person.username}`}
-                      onPress={() => setReal(person)}
-                      style={[styles.option, styles.pick, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                      <Avatar name={person.name} src={person.avatarUrl} size={28} />
-                      <ThemedText type="smallBold" style={styles.flex}>{person.name}</ThemedText>
-                      <ThemedText type="small" themeColor="textSecondary">@{person.username}</ThemedText>
-                    </Pressable>
+
+            <View style={styles.gap} accessibilityRole="radiogroup">
+              <ThemedText style={styles.label}>What is wrong?</ThemedText>
+              {reasons.map((r) => {
+                const selected = reason === r.value;
+                return (
+                  <Pressable
+                    key={r.value}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${r.label}. ${r.hint}`}
+                    testID={`report-reason-${r.value}`}
+                    onPress={() => setReason(r.value)}
+                    style={[
+                      styles.option,
+                      { borderColor: selected ? theme.primary : theme.border, backgroundColor: selected ? theme.primary + '0d' : 'transparent' },
+                    ]}>
+                    <View style={[styles.radio, { borderColor: selected ? theme.primary : theme.border }]}>
+                      {selected && <View style={[styles.radioDot, { backgroundColor: theme.primary }]} />}
+                    </View>
+                    <View style={styles.flex}>
+                      <ThemedText style={styles.optionTitle}>{r.label}</ThemedText>
+                      <ThemedText themeColor="textSecondary" style={styles.sm}>{r.hint}</ThemedText>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {isImpersonation && (
+              <View style={[styles.fieldset, { borderColor: theme.border }]} testID="report-impersonation">
+                <ThemedText style={styles.label}>Who are they pretending to be?</ThemedText>
+                {(['ME', 'OTHER'] as const).map((who) => (
+                  <Pressable
+                    key={who}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: impersonating === who }}
+                    testID={who === 'ME' ? 'report-impersonating-me' : 'report-impersonating-other'}
+                    onPress={() => setImpersonating(who)}
+                    style={styles.inline}>
+                    <View style={[styles.radio, { borderColor: impersonating === who ? theme.primary : theme.border }]}>
+                      {impersonating === who && <View style={[styles.radioDot, { backgroundColor: theme.primary }]} />}
+                    </View>
+                    <ThemedText style={styles.sm}>{who === 'ME' ? 'Me' : 'Somebody else'}</ThemedText>
+                  </Pressable>
+                ))}
+                {impersonating === 'OTHER' &&
+                  (real ? (
+                    <View style={[styles.picked, { backgroundColor: theme.backgroundElement }]}>
+                      <Avatar name={real.name} src={real.avatarUrl} size={28} />
+                      <ThemedText numberOfLines={1} style={[styles.flex, styles.optionTitle]}>{real.name}</ThemedText>
+                      <ThemedText style={[styles.sm, { color: theme.primaryStrong }]} onPress={() => setReal(null)}>Change</ThemedText>
+                    </View>
+                  ) : (
+                    <View>
+                      <TextInput
+                        value={query}
+                        onChangeText={setQuery}
+                        placeholder="Find the real hasher"
+                        placeholderTextColor={theme.textSecondary}
+                        autoCapitalize="none"
+                        accessibilityLabel="Find the hasher they are pretending to be"
+                        testID="report-real-input"
+                        style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+                      />
+                      {found.length > 0 && (
+                        <View style={[styles.suggestions, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                          {found.map((person) => (
+                            <Pressable
+                              key={person.id}
+                              accessibilityRole="button"
+                              accessibilityLabel={`${person.name}, @${person.username}`}
+                              testID="report-real-suggestion"
+                              onPress={() => setReal(person)}
+                              style={styles.suggestion}>
+                              <Avatar name={person.name} src={person.avatarUrl} size={28} />
+                              <ThemedText numberOfLines={1} style={[styles.flex, styles.sm]}>{person.name}</ThemedText>
+                              <ThemedText themeColor="textSecondary" style={styles.xs}>@{person.username}</ThemedText>
+                            </Pressable>
+                          ))}
+                        </View>
+                      )}
+                    </View>
                   ))}
-                </>
-              ))}
+              </View>
+            )}
+
+            <View style={styles.gap}>
+              <ThemedText style={styles.label}>Anything we should know?{reason === 'OTHER' ? '' : ' (optional)'}</ThemedText>
+              <TextInput
+                value={details}
+                onChangeText={(next) => setDetails(next.slice(0, 1000))}
+                multiline
+                placeholderTextColor={theme.textSecondary}
+                accessibilityLabel="Details"
+                testID="report-details"
+                style={[styles.input, styles.details, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
+              />
+            </View>
+
+            {reason === 'SELF_HARM' && (
+              <View accessibilityRole="summary" style={[styles.note, { backgroundColor: theme.danger + '1a' }]}>
+                <ThemedText style={styles.sm}>
+                  If somebody is in immediate danger, contact your local emergency services first. We read these reports straight away.
+                </ThemedText>
+              </View>
+            )}
+            {error ? <ThemedText accessibilityRole="alert" style={[styles.sm, { color: theme.danger }]}>{error}</ThemedText> : null}
+
+            <View style={styles.footer}>
+              <Button variant="ghost" onPress={() => router.back()}>Cancel</Button>
+              <Button disabled={!ready || busy} testID="report-submit" onPress={() => void send()}>
+                {busy ? 'Sending…' : 'Send report'}
+              </Button>
+            </View>
           </View>
-        )}
-
-        <View style={styles.gap}>
-          <ThemedText type="smallBold">Anything we should know?{reason === 'OTHER' ? '' : ' (optional)'}</ThemedText>
-          <TextInput
-            value={details}
-            onChangeText={(next) => setDetails(next.slice(0, 1000))}
-            multiline
-            placeholderTextColor={theme.textSecondary}
-            accessibilityLabel="Details"
-            style={[styles.input, styles.details, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
-          />
-        </View>
-
-        {reason === 'SELF_HARM' && (
-          <ThemedText type="small" style={{ color: theme.danger }}>
-            If somebody is in immediate danger, contact your local emergency services first. We read these reports straight away.
-          </ThemedText>
-        )}
-        {error && <ThemedText style={{ color: theme.danger }}>{error}</ThemedText>}
-
-        <Pressable
-          accessibilityRole="button"
-          disabled={!ready || busy}
-          onPress={() => void send()}
-          style={[styles.submit, { backgroundColor: theme.primary, opacity: !ready || busy ? 0.5 : 1 }]}>
-          {busy ? <ActivityIndicator color={theme.onPrimary} /> : <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Send report</ThemedText>}
-        </Pressable>
+        </Card>
       </ScrollView>
     </ThemedView>
   );
@@ -246,13 +266,29 @@ export default function ReportScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  scroll: { padding: Spacing.three, gap: Spacing.three, maxWidth: MaxContentWidth, width: '100%', alignSelf: 'center', paddingBottom: Spacing.six },
-  gap: { gap: Spacing.two },
-  row: { flexDirection: 'row', gap: Spacing.two, flexWrap: 'wrap' },
-  option: { borderWidth: 2, borderRadius: 12, padding: Spacing.three, gap: 2, minHeight: 56 },
-  pick: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, minHeight: 48, borderWidth: 1 },
-  chip: { minHeight: 44, paddingHorizontal: Spacing.three, borderWidth: 2, borderRadius: 22, justifyContent: 'center' },
-  input: { minHeight: 44, borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, fontSize: 16 },
-  details: { minHeight: 90, paddingTop: Spacing.two, textAlignVertical: 'top' },
-  submit: { minHeight: 48, borderRadius: Spacing.two, alignItems: 'center', justifyContent: 'center' },
+  // The web's dialog card: rounded-xl border p-6, on the page.
+  scroll: { maxWidth: 512, width: '100%', alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 32 },
+  card: { padding: 24 },
+  sections: { gap: 16 },
+  title: { fontSize: 18, lineHeight: 22, fontWeight: '600' },
+  sm: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  xs: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
+  label: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  gap: { gap: 6 },
+  row: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  checkLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // flex items-start gap-3 rounded-lg border p-3 text-sm
+  option: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, borderWidth: 1, borderRadius: 8, padding: 12 },
+  optionTitle: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  radio: { marginTop: 3, width: 16, height: 16, borderRadius: 8, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  radioDot: { width: 8, height: 8, borderRadius: 4 },
+  fieldset: { gap: 8, borderWidth: 1, borderRadius: 8, padding: 12 },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 32 },
+  picked: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 6, padding: 8 },
+  input: { minHeight: 40, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, fontSize: 14 },
+  suggestions: { marginTop: 4, borderWidth: 1, borderRadius: 8, padding: 4 },
+  suggestion: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, paddingVertical: 6, minHeight: 44 },
+  details: { minHeight: 80, paddingTop: 8, textAlignVertical: 'top' },
+  note: { borderRadius: 8, padding: 12 },
+  footer: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
 });

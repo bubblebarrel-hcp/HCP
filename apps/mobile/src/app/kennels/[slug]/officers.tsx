@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { History, ShieldCheck, UserPlus, Users } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -7,19 +7,19 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ActionDialog } from '@/components/ui/action-dialog';
 import { Select } from '@/components/ui/select';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Skeleton } from '@/components/ui/web-ui';
+import { DateField } from '@/components/ui/date-field';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input, Skeleton } from '@/components/ui/web-ui';
 import { MaxContentWidth } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
-import { WEB_URL, api, errorMessage } from '@/lib/api';
+import { api, errorMessage } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 import type { LeadershipEntry, PositionsResponse } from '@/lib/types';
 
 // How a kennel is run (Annex 08L, D32), as the web lays it out
 // (app/kennels/[slug]/officers/page.tsx): the offices and who holds them, who is
 // standing in, and the leadership timeline. Every control is gated on what the
-// viewer holds. Defining offices and handing authority over are desk work and open
-// on the web.
+// viewer holds, including defining an office and handing authority over.
 
 const permissionLabel: Record<string, string> = {
   'membership.review': 'Review join requests',
@@ -45,6 +45,13 @@ const appointmentStatusLabel: Record<string, string> = {
   HISTORICAL: 'Historical',
 };
 
+interface DelegationsPage {
+  items: Delegation[];
+  // Who you may hand something to, and for how long at most.
+  members: { userId: string; name: string }[];
+  viewer: { maxDays: number };
+}
+
 interface Delegation {
   id: string;
   permissions: string[];
@@ -64,6 +71,27 @@ function delegationState(d: Delegation) {
   return { label: 'Scheduled', tone: 'accent' as const };
 }
 
+function PermissionChips({ keys, selected, onToggle }: { keys: string[]; selected: string[]; onToggle: (key: string) => void }) {
+  const theme = useTheme();
+  return (
+    <View style={styles.chips}>
+      {keys.map((key) => {
+        const on = selected.includes(key);
+        return (
+          <Pressable
+            key={key}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: on }}
+            onPress={() => onToggle(key)}
+            style={[styles.chip, { borderColor: on ? theme.primary : theme.border, backgroundColor: on ? theme.primary + '1a' : 'transparent' }]}>
+            <ThemedText style={styles.sm}>{permissionLabel[key] ?? key}</ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function OfficersScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const theme = useTheme();
@@ -71,16 +99,18 @@ export default function OfficersScreen() {
   const { loading } = useAuth();
   const [positions, setPositions] = useState<PositionsResponse | null>(null);
   const [leadership, setLeadership] = useState<LeadershipEntry[]>([]);
-  const [delegations, setDelegations] = useState<{ items: Delegation[] } | null>(null);
+  const [delegations, setDelegations] = useState<DelegationsPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [appointTo, setAppointTo] = useState<Record<string, string>>({});
+  const [newPosition, setNewPosition] = useState({ title: '', permissions: [] as string[], termMonths: '' });
+  const [grant, setGrant] = useState({ delegateId: '', permissions: [] as string[], reason: '', expiresAt: '' });
 
   const load = useCallback(async () => {
     const [p, l, d] = await Promise.all([
       api<PositionsResponse>(`/kennels/${slug}/positions`),
       api<{ items: LeadershipEntry[] }>(`/kennels/${slug}/leadership`),
-      api<{ items: Delegation[] }>(`/kennels/${slug}/delegations`),
+      api<DelegationsPage>(`/kennels/${slug}/delegations`),
     ]);
     setPositions(p);
     setLeadership(l.items);
@@ -139,7 +169,7 @@ export default function OfficersScreen() {
   }
   if (!positions || !delegations) return shell(<Skeleton height={384} />);
 
-  const { canAppoint, canDefinePositions } = positions.viewer;
+  const { canAppoint, canDefinePositions, grantableKeys } = positions.viewer;
 
   return shell(
     <>
@@ -253,8 +283,57 @@ export default function OfficersScreen() {
             {canDefinePositions && (
               <View style={[styles.define, { borderTopColor: theme.border }]} testID="define-position">
                 <ThemedText style={styles.medium}>Define an office</ThemedText>
-                <Button variant="outline" size="sm" style={styles.start} onPress={() => Linking.openURL(`${WEB_URL}/kennels/${slug}/officers`)}>
-                  Define offices on the web
+                <Field label="Title">
+                  <Input
+                    testID="new-position-title"
+                    value={newPosition.title}
+                    onChangeText={(title) => setNewPosition((p) => ({ ...p, title }))}
+                    placeholder="Hash Cash"
+                    accessibilityLabel="Title"
+                  />
+                </Field>
+                <Field label="Term (months)">
+                  <Input
+                    value={newPosition.termMonths}
+                    onChangeText={(termMonths) => setNewPosition((p) => ({ ...p, termMonths: termMonths.replace(/[^0-9]/g, '') }))}
+                    keyboardType="number-pad"
+                    accessibilityLabel="Term (months)"
+                  />
+                </Field>
+                <View style={styles.stack}>
+                  <ThemedText style={[styles.sm, styles.medium14]}>What it may do</ThemedText>
+                  <ThemedText themeColor="textSecondary" style={styles.sm}>
+                    Only what you hold yourself. You cannot give away authority you do not have.
+                  </ThemedText>
+                  <PermissionChips
+                    keys={grantableKeys}
+                    selected={newPosition.permissions}
+                    onToggle={(key) =>
+                      setNewPosition((p) => ({
+                        ...p,
+                        permissions: p.permissions.includes(key) ? p.permissions.filter((k) => k !== key) : [...p.permissions, key],
+                      }))
+                    }
+                  />
+                </View>
+                <Button
+                  style={styles.start}
+                  testID="new-position-submit"
+                  disabled={busy || newPosition.title.trim().length < 2}
+                  onPress={() =>
+                    void run(async () => {
+                      await api(`/kennels/${slug}/positions`, {
+                        method: 'POST',
+                        body: {
+                          title: newPosition.title,
+                          permissions: newPosition.permissions,
+                          ...(newPosition.termMonths ? { termMonths: Number(newPosition.termMonths) } : {}),
+                        },
+                      });
+                      setNewPosition({ title: '', permissions: [], termMonths: '' });
+                    })
+                  }>
+                  Define it
                 </Button>
               </View>
             )}
@@ -303,6 +382,62 @@ export default function OfficersScreen() {
                 </View>
               );
             })}
+
+            {grantableKeys.length > 0 && (
+              <View style={[styles.define, { borderTopColor: theme.border }]} testID="grant-delegation">
+                <ThemedText style={styles.medium}>Hand something over</ThemedText>
+                <Field label="To">
+                  <Select
+                    testID="delegate-select"
+                    value={grant.delegateId}
+                    onChange={(delegateId) => setGrant((g) => ({ ...g, delegateId }))}
+                    options={[{ value: '', label: 'Choose a member…' }, ...delegations.members.map((m) => ({ value: m.userId, label: m.name }))]}
+                  />
+                </Field>
+                <Field label={`Until (max ${delegations.viewer.maxDays} days)`}>
+                  <DateField testID="delegate-until" value={grant.expiresAt} onChange={(expiresAt) => setGrant((g) => ({ ...g, expiresAt }))} />
+                </Field>
+                <Field label="Why">
+                  <Input
+                    testID="delegate-reason"
+                    value={grant.reason}
+                    onChangeText={(reason) => setGrant((g) => ({ ...g, reason }))}
+                    placeholder="Away for a fortnight"
+                    accessibilityLabel="Why"
+                  />
+                </Field>
+                <PermissionChips
+                  keys={grantableKeys}
+                  selected={grant.permissions}
+                  onToggle={(key) =>
+                    setGrant((g) => ({
+                      ...g,
+                      permissions: g.permissions.includes(key) ? g.permissions.filter((k) => k !== key) : [...g.permissions, key],
+                    }))
+                  }
+                />
+                <Button
+                  style={styles.start}
+                  testID="delegate-submit"
+                  disabled={busy || !grant.delegateId || grant.permissions.length === 0 || grant.reason.trim().length < 3 || !grant.expiresAt}
+                  onPress={() =>
+                    void run(async () => {
+                      await api(`/kennels/${slug}/delegations`, {
+                        method: 'POST',
+                        body: {
+                          delegateId: grant.delegateId,
+                          permissions: grant.permissions,
+                          reason: grant.reason,
+                          expiresAt: new Date(`${grant.expiresAt}T12:00:00`).toISOString(),
+                        },
+                      });
+                      setGrant({ delegateId: '', permissions: [], reason: '', expiresAt: '' });
+                    })
+                  }>
+                  Hand it over
+                </Button>
+              </View>
+            )}
           </CardContent>
         </View>
       </Card>
@@ -367,6 +502,8 @@ const styles = StyleSheet.create({
   permText: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
   holders: { marginTop: 8 },
   actions: { marginTop: 12, gap: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6, minHeight: 36, justifyContent: 'center' },
   define: { gap: 12, borderTopWidth: 1, paddingTop: 16 },
   start: { alignSelf: 'flex-start' },
   top: { marginTop: 8 },

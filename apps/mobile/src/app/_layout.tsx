@@ -3,6 +3,8 @@ import { Platform, View } from 'react-native';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFonts } from 'expo-font';
+import { Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold } from '@expo-google-fonts/geist';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
@@ -117,6 +119,11 @@ function Shell() {
 }
 
 export default function TabLayout() {
+  // The web app's typeface. Nothing renders until it is in, so the splash stays up
+  // rather than text changing face under the reader.
+  const [fontsLoaded, fontError] = useFonts({ Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold });
+  if (!fontsLoaded && !fontError) return null;
+
   // Gesture Handler needs a root view above every GestureDetector (the feed's
   // pull-to-refresh uses one).
   return (

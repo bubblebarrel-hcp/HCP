@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { DateField } from '@/components/ui/date-field';
 import { Button, Field, Input } from '@/components/ui/web-ui';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -16,7 +17,10 @@ export function ActionDialog({
   confirmLabel = 'Confirm',
   destructive,
   text,
+  until,
   types,
+  typesLabel = 'Join as',
+  defaultType,
   onConfirm,
 }: {
   trigger: (open: () => void) => React.ReactNode;
@@ -24,23 +28,29 @@ export function ActionDialog({
   description?: string;
   confirmLabel?: string;
   destructive?: boolean;
-  text?: { label: string; placeholder?: string; required?: boolean };
+  text?: { label: string; placeholder?: string; required?: boolean; hint?: string; marked?: boolean };
+  // An optional "until" date (YYYY-MM-DD), as in suspending a member for a while.
+  until?: { label: string; hint?: string };
   // A "Join as" list for choices such as a membership type; the first is chosen.
   types?: { value: string; label: string; hint?: string }[];
-  onConfirm: (values: { text: string; type: string }) => Promise<void> | void;
+  typesLabel?: string;
+  defaultType?: string;
+  onConfirm: (values: { text: string; type: string; until: string }) => Promise<void> | void;
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [value, setValue] = useState('');
-  const [type, setType] = useState(types?.[0]?.value ?? '');
+  const [untilValue, setUntilValue] = useState('');
+  const [type, setType] = useState(defaultType ?? types?.[0]?.value ?? '');
 
   async function confirm() {
     setBusy(true);
     try {
-      await onConfirm({ text: value.trim(), type });
+      await onConfirm({ text: value.trim(), type, until: untilValue });
       setOpen(false);
       setValue('');
+      setUntilValue('');
     } catch {
       // Stays open; the caller reported the failure.
     } finally {
@@ -61,7 +71,7 @@ export function ActionDialog({
             {description ? <ThemedText themeColor="textSecondary" style={styles.description}>{description}</ThemedText> : null}
             {types ? (
               <View style={styles.field}>
-                <ThemedText style={styles.typeLabel}>Join as</ThemedText>
+                <ThemedText style={styles.typeLabel}>{typesLabel}</ThemedText>
                 {types.map((t) => {
                   const selected = type === t.value;
                   return (
@@ -80,8 +90,15 @@ export function ActionDialog({
             ) : null}
             {text ? (
               <View style={styles.field}>
-                <Field label={text.label}>
+                <Field label={text.marked ? `${text.label} ${text.required ? '(required)' : '(optional)'}` : text.label} hint={text.hint}>
                   <Input value={value} onChangeText={setValue} placeholder={text.placeholder} multiline style={styles.multiline} />
+                </Field>
+              </View>
+            ) : null}
+            {until ? (
+              <View style={styles.field}>
+                <Field label={`${until.label} (optional)`} hint={until.hint}>
+                  <DateField value={untilValue} onChange={setUntilValue} />
                 </Field>
               </View>
             ) : null}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { Check, Clock, Settings2, ShieldCheck, Sliders } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -8,7 +8,7 @@ import { ActionDialog } from '@/components/ui/action-dialog';
 import { Button } from '@/components/ui/web-ui';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
-import { WEB_URL, api, errorMessage } from '@/lib/api';
+import { api, errorMessage } from '@/lib/api';
 import { typeLabel } from '@/lib/membership';
 import type { MembershipViewer } from '@/lib/types';
 
@@ -181,13 +181,13 @@ export function JoinKennelButton({ slug, shortName }: { slug: string; shortName:
       )}
       {/* Running the kennel itself, as opposed to its membership roll (D34). */}
       {canRunKennel && (
-        <Button size="lg" variant="outline" testID="kennel-settings-link" onPress={() => Linking.openURL(`${WEB_URL}/kennels/${slug}/settings`)}>
+        <Button size="lg" variant="outline" testID="kennel-settings-link" onPress={() => router.push(`/kennels/${slug}/settings` as never)}>
           <Sliders size={16} color={theme.text} />
           <ThemedText style={styles.label}>Kennel settings</ThemedText>
         </Button>
       )}
       {canManage && (
-        <Button size="lg" variant="outline" testID="manage-members" onPress={() => Linking.openURL(`${WEB_URL}/kennels/${slug}/members`)}>
+        <Button size="lg" variant="outline" testID="manage-members" onPress={() => router.push(`/kennels/${slug}/members` as never)}>
           <Settings2 size={16} color={theme.text} />
           <ThemedText style={styles.label}>Manage members</ThemedText>
           {viewer.pendingCount > 0 && (

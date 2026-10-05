@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -20,7 +20,7 @@ import {
 import { MaxContentWidth } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
-import { WEB_URL, api, errorMessage } from '@/lib/api';
+import { api, errorMessage } from '@/lib/api';
 import { brandColor, formatDate } from '@/lib/format';
 import { isPending, statusLabel, statusTone, typeLabel } from '@/lib/membership';
 import type { OwnMembership, Page } from '@/lib/types';
@@ -202,7 +202,7 @@ function MyMemberships() {
                   )
                 )}
                 {m.canManage && (
-                  <Button variant="outline" size="sm" onPress={() => Linking.openURL(`${WEB_URL}/kennels/${m.kennel.slug}/members`)}>
+                  <Button variant="outline" size="sm" onPress={() => router.push(`/kennels/${m.kennel.slug}/members` as never)}>
                     Manage
                   </Button>
                 )}
@@ -238,7 +238,9 @@ export function AccountView() {
               name={user.displayName}
               avatarUrl={user.avatarUrl}
               avatarPosition={user.avatarPosition}
-              bannerUrl={user.bannerUrl}>
+              bannerUrl={user.bannerUrl}
+              bannerPosition={user.bannerPosition}
+              edit={{ kind: 'hasher', id: user.id }}>
               <View style={styles.nameBlock}>
                 <ThemedText accessibilityRole="header" testID="account-display-name" style={styles.h1}>
                   {user.displayName}
@@ -270,7 +272,7 @@ export function AccountView() {
                   <Button variant="outline" size="sm" testID="to-privacy" onPress={() => router.push('/privacy')}>
                     Privacy
                   </Button>
-                  <Button variant="outline" size="sm" onPress={() => Linking.openURL(`${WEB_URL}/account/profile`)}>
+                  <Button variant="outline" size="sm" onPress={() => router.push("/account/profile" as never)}>
                     Edit profile
                   </Button>
                 </View>

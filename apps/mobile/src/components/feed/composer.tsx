@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { BookOpen, Footprints, Video } from 'lucide-react-native';
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { BookOpen, Footprints, ImagePlus, Video, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 
 import { HashLogo } from '@/components/brand/hash-logo';
 import { Avatar } from '@/components/feed/avatar';
@@ -11,12 +12,16 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
+import { MAX_UPLOAD_BYTES, fileSize, uploadAsset } from '@/lib/media';
 import type { Audience, TaggableRun } from '@/lib/types';
 
-// A hasher's own words, straight from the composer (D51): create-draft,
-// publish. The post stays text-only on mobile (photos on a post are still
-// web-only). A reel is the media one, and has its own composer: the "Reel"
-// button beside the pill opens it.
+// A hasher's own post, straight from the composer (D51), the web's three steps:
+// create the draft so photos have somewhere to land, upload them one at a time, then
+// publish: nothing half-uploaded ever reaches the feed. Up to four photos, a poll, a run
+// it is about, and who may read it. A reel is the other kind of thing and has its own
+// composer: the "Reel" button beside the pill opens it.
+const MAX_POST_BODY = 5000;
+const MAX_POST_PHOTOS = 4;
 
 // Who may read the post (D57): it can narrow the hasher's profile, never widen it.
 const AUDIENCES: { value: Audience; label: string; hint: string }[] = [
@@ -44,6 +49,8 @@ export function Composer({
   const [audience, setAudience] = useState<Audience>('PUBLIC');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   // A poll (D60): the words are the question, these are the answers.
   const [pollOn, setPollOn] = useState(false);
   const [pollOptions, setPollOptions] = useState(['', '']);
@@ -53,7 +60,8 @@ export function Composer({
   const [runId, setRunId] = useState<string | null>(null);
 
   const filled = pollOptions.map((o) => o.trim()).filter(Boolean);
-  const pollReady = !pollOn || filled.length >= 2;
+  const pollReady = !pollOn || (filled.length >= 2 && body.trim().length > 0);
+  const ready = (body.trim().length > 0 || photos.length > 0) && pollReady;
 
   // The runs worth tagging are fetched when the box opens, not for everybody who
   // merely loads the feed.
@@ -68,11 +76,34 @@ export function Composer({
     };
   }, [open]);
 
+  async function addPhotos() {
+    const room = MAX_POST_PHOTOS - photos.length;
+    if (room <= 0) {
+      setError(`${MAX_POST_PHOTOS} photos is the limit on a post.`);
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: room,
+      quality: 0.85,
+    });
+    if (result.canceled) return;
+    const tooBig = result.assets.find((a) => a.fileSize !== undefined && a.fileSize > MAX_UPLOAD_BYTES);
+    if (tooBig) {
+      setError(`${tooBig.fileName ?? 'That photo'} is ${fileSize(tooBig.fileSize ?? 0)} — the limit is ${fileSize(MAX_UPLOAD_BYTES)}.`);
+      return;
+    }
+    setError(null);
+    setPhotos((current) => [...current, ...result.assets].slice(0, MAX_POST_PHOTOS));
+  }
+
   async function submit() {
     const value = body.trim();
-    if (!value || !pollReady) return;
+    if (!ready || busy) return;
     setBusy(true);
     setError(null);
+    setProgress(photos.length ? { done: 0, total: photos.length } : null);
     try {
       const draft = await api<{ post: { id: string } }>('/posts', {
         method: 'POST',
@@ -83,8 +114,16 @@ export function Composer({
           ...(pollOn ? { poll: { options: filled, hours: pollHours } } : {}),
         },
       });
+      for (const [index, asset] of photos.entries()) {
+        setProgress({ done: index, total: photos.length });
+        // Sequential on purpose: a failure halfway leaves a draft that was never published
+        // rather than a post with holes in it.
+        await uploadAsset(asset, { type: 'POST', id: draft.post.id }, index);
+      }
+      setProgress(photos.length ? { done: photos.length, total: photos.length } : null);
       await api(`/posts/${draft.post.id}/publish`, { method: 'POST' });
       setBody('');
+      setPhotos([]);
       setPollOn(false);
       setPollOptions(['', '']);
       setRunId(null);
@@ -94,6 +133,7 @@ export function Composer({
       setError(errorMessage(err, 'Could not post that'));
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -153,13 +193,13 @@ export function Composer({
             <ThemedText type="smallBold">New post</ThemedText>
             <Pressable
               accessibilityRole="button"
-              disabled={busy || !body.trim() || !pollReady}
+              disabled={busy || !ready}
               onPress={submit}
               style={styles.headerButton}>
               {busy ? (
                 <ActivityIndicator color={theme.primary} />
               ) : (
-                <ThemedText type="smallBold" style={{ color: body.trim() && pollReady ? theme.primaryStrong : theme.textSecondary }}>
+                <ThemedText type="smallBold" style={{ color: ready ? theme.primaryStrong : theme.textSecondary }}>
                   Post
                 </ThemedText>
               )}
@@ -196,14 +236,41 @@ export function Composer({
             </ThemedText>
             <MentionInput
               value={body}
-              onChangeText={setBody}
+              onChangeText={(next) => setBody(next.slice(0, MAX_POST_BODY))}
               placeholder="What's on trail? Use # for a tag, @ for a hasher."
               placeholderTextColor={theme.textSecondary}
               multiline
               autoFocus
-              maxLength={5000}
               style={[styles.input, { color: theme.text }]}
             />
+
+            {photos.length > 0 && (
+              <View style={styles.photos} testID="composer-photos">
+                {photos.map((asset, index) => (
+                  <View key={`${asset.uri}-${index}`}>
+                    <Image source={{ uri: asset.uri }} accessibilityLabel={asset.fileName ?? 'Photo'} style={[styles.thumb, { borderColor: theme.border }]} />
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${asset.fileName ?? 'photo'}`}
+                      disabled={busy}
+                      onPress={() => setPhotos((current) => current.filter((_, i) => i !== index))}
+                      style={[styles.remove, { backgroundColor: theme.text }]}>
+                      <X size={14} color={theme.background} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <Pressable
+              accessibilityRole="button"
+              testID="composer-add-photo"
+              disabled={busy || photos.length >= MAX_POST_PHOTOS}
+              onPress={() => void addPhotos()}
+              style={[styles.chip, styles.pollToggle, { borderColor: theme.border, backgroundColor: theme.card, flexDirection: 'row', gap: 6, opacity: busy || photos.length >= MAX_POST_PHOTOS ? 0.5 : 1 }]}>
+              <ImagePlus size={16} color={theme.textSecondary} />
+              <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>Photo</ThemedText>
+            </Pressable>
 
             {runs.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.runRow} style={styles.runScroll}>
@@ -271,9 +338,14 @@ export function Composer({
               </View>
             )}
             {error && <ThemedText style={{ color: theme.danger }}>{error}</ThemedText>}
-            <ThemedText type="small" themeColor="textSecondary">
-              Words only here. For a video or photos, post a reel.
-            </ThemedText>
+            {progress ? (
+              <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
+                Photo {Math.min(progress.done + 1, progress.total)} of {progress.total}…
+              </ThemedText>
+            ) : null}
+            {body.length > MAX_POST_BODY - 500 ? (
+              <ThemedText type="small" themeColor="textSecondary">{MAX_POST_BODY - body.length}</ThemedText>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -337,6 +409,9 @@ const styles = StyleSheet.create({
   runScroll: { flexGrow: 0 },
   runRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, alignItems: 'center' },
   pollToggle: { alignSelf: 'flex-start' },
+  photos: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  thumb: { width: 80, height: 80, borderRadius: 8, borderWidth: 1 },
+  remove: { position: 'absolute', right: -6, top: -6, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   poll: { gap: Spacing.two },
   pollInput: { minHeight: 44, borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, fontSize: 16 },
   audience: { flexDirection: 'row', gap: Spacing.two },

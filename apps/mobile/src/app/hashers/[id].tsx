@@ -149,7 +149,9 @@ export default function HasherProfileScreen() {
         avatarUrl={hasher.avatarUrl}
         avatarPosition={hasher.avatarPosition}
         bannerUrl={hasher.bannerUrl}
-        bannerHeight={128}>
+        bannerPosition={hasher.bannerPosition}
+        bannerHeight={128}
+        edit={{ kind: 'hasher', id: hasher.id }}>
         <View style={styles.nameBlock}>
           <ThemedText accessibilityRole="header" testID="hasher-name" style={styles.h1}>{hasher.name}</ThemedText>
           {hasher.username ? (

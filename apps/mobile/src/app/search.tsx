@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { BookOpen, Camera, Footprints, Hash, MapPin, Users, type LucideIcon } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -10,7 +10,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Input } from '@/components/ui/web-ui';
 import { MaxContentWidth } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { WEB_URL, api } from '@/lib/api';
+import { api } from '@/lib/api';
 import { brandColor, formatDate, formatRunDate } from '@/lib/format';
 import type { SearchResults } from '@/lib/types';
 
@@ -200,7 +200,7 @@ export default function SearchScreen() {
                 {data.capsules.map((c) => (
                   <Hit
                     key={c.id}
-                    onPress={() => Linking.openURL(`${WEB_URL}/capsules/${c.id}`)}
+                    onPress={() => router.push(`/capsules/${c.id}` as never)}
                     title={`#${c.run.runNumber} · ${c.run.title}`}
                     subtitle={c.summary ?? `${c.run.kennel.shortName} · ${formatDate(c.run.startsAt)}`}
                     avatarName={c.run.kennel.shortName}

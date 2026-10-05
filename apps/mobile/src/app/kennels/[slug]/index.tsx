@@ -97,7 +97,14 @@ export default function KennelDetailScreen() {
           }>
           {/* Page header, Facebook Page style: cover, picture, name, action, tabs */}
           <View style={[styles.top, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
-            <Branding name={kennel.shortName} color={kennel.primaryColor} avatarUrl={kennel.logoUrl} bannerUrl={kennel.bannerUrl}>
+            <Branding
+              name={kennel.shortName}
+              color={kennel.primaryColor}
+              avatarUrl={kennel.logoUrl}
+              bannerUrl={kennel.bannerUrl}
+              bannerPosition={kennel.bannerPosition}
+              edit={{ kind: 'kennel', id: kennel.id, slug: kennel.slug, shortName: kennel.shortName }}
+              onChanged={() => setRound((n) => n + 1)}>
               <View style={styles.nameBlock}>
                 <ThemedText accessibilityRole="header" testID="kennel-name" style={styles.h1}>{kennel.name}</ThemedText>
                 <ThemedText themeColor="textSecondary" style={styles.sub}>

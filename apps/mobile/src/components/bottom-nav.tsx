@@ -38,7 +38,7 @@ export function BottomNav() {
     { label: 'Kennels', icon: Users, href: '/kennels', match: (p) => p.startsWith('/kennels') },
     { label: 'Runs', icon: Footprints, href: '/runs', match: (p) => p.startsWith('/runs') || p.startsWith('/run/') },
     {
-      label: user ? 'Menu' : 'Log in',
+      label: user ? 'Me' : 'Log in',
       icon: user ? Menu : UserRound,
       href: '/account',
       match: (p) => ACCOUNT_PAGES.some((page) => p.startsWith(page)),
@@ -95,5 +95,5 @@ const styles = StyleSheet.create({
   plusWrap: { width: 52, height: 56, alignItems: 'center', justifyContent: 'center' },
   plus: { width: 44, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   button: { flex: 1, height: 56, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  label: { fontSize: 12, lineHeight: 16, fontWeight: '500' },
+  label: { fontSize: 12, lineHeight: 16, fontFamily: 'Geist_500Medium' },
 });

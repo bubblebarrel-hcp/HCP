@@ -206,6 +206,7 @@ export interface HasherProfile {
   // CSS "x% y%" crop for the round picture; null is centred.
   avatarPosition: string | null;
   bannerUrl: string | null;
+  bannerPosition?: string | null;
   bio: string | null;
   homeKennel: { slug: string; shortName: string; primaryColor: string | null } | null;
   kennels: { slug: string; shortName: string; name: string; primaryColor: string | null }[];
@@ -606,11 +607,16 @@ export interface RunViewer {
 }
 
 // The whole run as the API sends it (apps/web lib/types.ts RunDetail).
-export interface RunDetail extends Omit<RunSummary, 'goingCount'> {
+export interface RunDetail extends Omit<RunSummary, 'goingCount' | 'hares'> {
+  // The run's own wall clock, "YYYY-MM-DDTHH:mm", for the edit form.
+  startsAtLocal?: string;
+  hares?: { userId: string; displayName: string; isLead: boolean }[];
   kennel: RunSummary['kennel'] & { timeZone?: string; downDownsEnabled?: boolean };
   description: string | null;
   theme: string | null;
   meetingAddress: string | null;
+  meetingLatitude?: number | null;
+  meetingLongitude?: number | null;
   hashCash: string | null;
   posterUrl: string | null;
   allowVisitors: boolean;
@@ -655,13 +661,76 @@ export interface HareOffers {
 
 export type CapsuleStatus = 'PLANNED' | 'PREPARING' | 'LIVE' | 'DRAFT' | 'PENDING_PUBLICATION' | 'PUBLISHED' | 'ARCHIVED' | 'LEGACY';
 
+export type SupplementalType = 'PHOTO' | 'SCANNED_NEWSLETTER' | 'INTERVIEW' | 'REFLECTION' | 'DOCUMENT' | 'OTHER';
+
+export interface CapsuleTimelineEntry {
+  at: string;
+  kind: 'RUN' | 'STORY' | 'AWARD' | 'REPORT' | 'ATTENDANCE';
+  label: string;
+  detail?: string;
+  refType?: string;
+  refId?: string;
+}
+
+export interface CapsuleSupplement {
+  id: string;
+  type: SupplementalType;
+  title: string;
+  description: string | null;
+  addedAt: string;
+  media: { id: string; url: string | null; thumbnailUrl: string | null } | null;
+  contributedBy: string;
+}
+
+export interface CapsuleHero {
+  runNumber: number;
+  title: string;
+  theme: string | null;
+  startsAt: string;
+  timeZone: string;
+  place: string;
+  kennel: { name: string; shortName: string; slug: string; primaryColor?: string | null };
+  leadHare: string | null;
+  leadHareId: string | null;
+  scribe: string | null;
+  scribeId: string | null;
+  hares: { userId: string; name: string; isLead: boolean }[];
+  photo: string | null;
+}
+
+export interface RelatedCapsule {
+  id: string;
+  runNumber: number;
+  title: string;
+  startsAt: string;
+  kennel: { slug: string; shortName: string; primaryColor: string | null };
+  reason: 'SAME_HARE' | 'SAME_KENNEL';
+}
+
 export interface RunCapsule {
   id: string;
   runId: string;
   status: CapsuleStatus;
+  isLegacyImport: boolean;
   summary: string | null;
-  timeline: unknown[];
-  viewer: { awaitingReport: boolean };
+  publishedAt: string | null;
+  archivedAt: string | null;
+  hero: CapsuleHero;
+  timeline: CapsuleTimelineEntry[];
+  stats: { attended: number; visitors: number; guests: number; hares: number; photos: number; awards: number; songs: number };
+  // Null unless you are in the hosting kennel (D23).
+  participants: { id: string; userId: string | null; name: string; isVisitor: boolean }[] | null;
+  circle: {
+    songs: string[];
+    announcements: string | null;
+    awards: { id: string; title: string; reason: string | null; isDownDown: boolean; recipientName: string | null }[];
+  } | null;
+  media: { id: string; url: string | null; thumbnailUrl: string | null; caption: string | null; createdAt: string }[];
+  report: { id: string; title: string; publishedAt: string } | null;
+  supplements: CapsuleSupplement[];
+  health: { missingReport: boolean; missingCircle: boolean; noPhotos: boolean; uncaptionedMedia: number } | null;
+  related: RelatedCapsule[];
+  viewer: { canPublish: boolean; canArchive: boolean; canContribute: boolean; awaitingReport: boolean };
 }
 
 // ─── Governance (D32, mobile slice: positions/appointments; delegations and
@@ -771,6 +840,8 @@ export interface NotificationPreferences {
 
 export type TrailReportStatus = 'DRAFT' | 'SCRIBE_EDITING' | 'REVIEW' | 'PUBLISHED' | 'ARCHIVED';
 
+export type StoryCategory = 'TRAIL' | 'BEER_CHECK' | 'CIRCLE' | 'VISITOR' | 'AWARD' | 'SONG' | 'INCIDENT' | 'HUMOR' | 'SAFETY' | 'HISTORICAL' | 'GENERAL';
+
 export interface TrailReport {
   id: string;
   runId: string;
@@ -778,8 +849,12 @@ export interface TrailReport {
   title: string;
   // Null on list rows, which carry no body.
   body: string | null;
+  aiAssisted?: boolean;
   publishedAt: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   scribe: string;
+  scribeId?: string;
   run: {
     id: string;
     runNumber: number;
@@ -789,9 +864,63 @@ export interface TrailReport {
     posterUrl: string | null;
     kennel: { name: string; shortName: string; slug: string };
   };
+  // FR-PUBLISH-008, present only once published.
   citation: string | null;
+  assistants?: string[];
   reviewers: string[];
-  viewer: { canEdit: boolean };
+  viewer: {
+    canEdit: boolean;
+    canPublish: boolean;
+    // Correcting a published report is a different act from publishing one.
+    canRevise: boolean;
+    canReview: boolean;
+    canGovern: boolean;
+    isScribe: boolean;
+  };
+  // Present only on the GET read (for an editor, while a draft awaits a decision).
+  pendingAiSuggestion?: AiDraftSuggestion | null;
+}
+
+// FR-STORY-007. Never applied to report.body until a human decides.
+export interface AiDraftSuggestion {
+  id: string;
+  status: 'PENDING' | 'ACCEPTED' | 'PARTIALLY_ACCEPTED' | 'REJECTED' | 'EXPIRED';
+  model: string;
+  output: string;
+  createdAt: string;
+}
+
+export interface ReportRevision {
+  id: string;
+  version: number;
+  title: string;
+  body?: string;
+  aiAssisted: boolean;
+  isPublication: boolean;
+  reason: string | null;
+  createdAt: string;
+  author: string;
+}
+
+export interface ReportComment {
+  id: string;
+  body: string;
+  anchor: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  author: string;
+}
+
+export interface StoryItem {
+  id: string;
+  category: StoryCategory;
+  source: 'AUTOMATIC' | 'MANUAL';
+  body: string;
+  occurredAt: string;
+  refType: string | null;
+  refId: string | null;
+  createdAt: string;
+  contributedBy: string | null;
 }
 
 // ─── Search (web SearchResults) and saved items ───
@@ -839,4 +968,245 @@ export interface IdentityTimelineEntry {
   refType: string | null;
   refId: string | null;
   occurredAt: string;
+}
+
+// Plan a run (apps/api runs/planning): the kennel's defaults and who can hare.
+export interface RunPlanningContext {
+  kennel: {
+    id: string;
+    name: string;
+    shortName: string;
+    slug: string;
+    timeZone: string;
+    defaultRunVisibility: RunVisibility;
+  };
+  nextRunNumber: number;
+  canChangeVisibility: boolean;
+  members: { userId: string; hashHandle: string | null; displayName: string }[];
+}
+
+// ─── Kennel members and invitations (apps/web lib/types.ts) ───
+
+export const GRANTABLE_ROLES = [
+  'KENNEL_ADMIN',
+  'SCRIBE',
+  'ASSISTANT_SCRIBE',
+  'REVIEWER',
+  'PHOTOGRAPHER',
+  'VOLUNTEER',
+  'MODERATOR',
+  'EVENT_ORGANIZER',
+] as const;
+
+export type GrantableRole = (typeof GRANTABLE_ROLES)[number];
+export type ScopedRole = GrantableRole | 'HARE' | 'CO_HARE';
+
+export interface KennelMember {
+  id: string;
+  status: MembershipStatus;
+  type: MembershipType;
+  startDate: string | null;
+  endDate: string | null;
+  approvedAt: string | null;
+  suspensionReason: string | null;
+  suspendedUntil: string | null;
+  createdAt: string;
+  updatedAt: string;
+  requestNote: string | null;
+  member: { id: string; hashHandle: string | null; displayName: string; avatarUrl: string | null };
+  offices: { appointmentId: string; positionId: string; title: string }[];
+  roles: { assignmentId: string; role: ScopedRole; title: string | null }[];
+}
+
+export interface MembershipTimelineItem {
+  id: string;
+  type: string;
+  fromStatus: MembershipStatus | null;
+  toStatus: MembershipStatus | null;
+  note: string | null;
+  occurredAt: string;
+  actor: { displayName: string } | null;
+}
+
+export type InvitationMethod = 'EMAIL' | 'QR_CODE' | 'LINK';
+export type InvitationStatus = 'pending' | 'accepted' | 'revoked' | 'expired';
+
+export interface MembershipInvitation {
+  id: string;
+  method: InvitationMethod;
+  email: string | null;
+  membershipType: MembershipType;
+  expiresAt: string;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  acceptedByUserId: string | null;
+  status: InvitationStatus;
+}
+
+export interface CreatedInvitation {
+  id: string;
+  method: InvitationMethod;
+  email: string | null;
+  membershipType: MembershipType;
+  expiresAt: string;
+  createdAt: string;
+  token: string;
+  link: string;
+}
+
+// A kennel's own settings (apps/api kennels/:slug/settings). Standing and verification are
+// the platform's to set and arrive read-only.
+export interface KennelSettings {
+  id: string;
+  slug: string;
+  name: string;
+  shortName: string;
+  description: string | null;
+  motto: string | null;
+  meetingDay: string | null;
+  logoUrl: string | null;
+  bannerUrl: string | null;
+  bannerPosition: string | null;
+  landingMessage: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  country: string;
+  stateProvince: string;
+  city: string;
+  timeZone: string;
+  latitude: number | null;
+  longitude: number | null;
+  visibility: 'PUBLIC' | 'UNLISTED' | 'HIDDEN';
+  defaultRunVisibility: RunVisibility;
+  downDownsEnabled: boolean;
+  // null means "use the platform default" (hareNudgeDefaults).
+  hareNudgeSoonDays: number | null;
+  hareNudgeUrgentDays: number | null;
+  hareNudgeDefaults: { soonDays: number; urgentDays: number };
+  status: string;
+  verificationLevel: string;
+  activeMemberCount: number;
+  mismanagementCount: number;
+  mismanagementNeeded: number;
+  viewer: { isFounder: boolean; canAbandon: boolean };
+}
+
+// ─── Trails (apps/api/src/services/trail.service.ts) ───
+
+export type TrailStatus = 'IDEA' | 'DRAFT' | 'PLANNING' | 'REVIEW' | 'LOCKED' | 'HIDDEN' | 'RELEASED' | 'LIVE' | 'COMPLETED' | 'ARCHIVED' | 'HISTORIC';
+export type TrailStyle = 'LIVE_HARE' | 'DEAD_HARE' | 'A_TO_A' | 'A_TO_B' | 'OTHER';
+export type ReleaseMode = 'AT_RUN_START' | 'SCHEDULED' | 'MANUAL' | 'CHECK_IN' | 'GEOFENCE';
+export type WaypointKind = 'START' | 'FINISH' | 'CHECKPOINT' | 'REGROUP' | 'HAZARD' | 'SCENIC' | 'ON_IN' | 'OTHER';
+export type ChalkSymbol = 'ON_ON' | 'CHECK' | 'FALSE_TRAIL' | 'BACK_CHECK' | 'REGROUP' | 'BEER_NEAR' | 'TRUE_TRAIL' | 'ON_IN' | 'HAZARD' | 'CUSTOM';
+
+export interface RouteGeoJson {
+  type: 'LineString';
+  coordinates: [number, number][];
+}
+
+export interface TrailWaypoint {
+  id: string;
+  kind: WaypointKind;
+  label: string | null;
+  latitude: number;
+  longitude: number;
+  sequence: number;
+  notes: string | null;
+}
+
+export interface TrailBeerCheck {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  sequence: number;
+  notes: string | null;
+}
+
+export interface TrailChalk {
+  id: string;
+  symbol: ChalkSymbol;
+  customLabel: string | null;
+  latitude: number;
+  longitude: number;
+  bearingDeg: number | null;
+  sequence: number | null;
+  placedAt: string;
+  placedBy: string;
+}
+
+// Only ever present for planners, or for everyone once the trail is released. The server
+// enforces it; nothing here is invented client-side.
+export interface TrailSecret {
+  notes: string | null;
+  routeGeoJson: RouteGeoJson | null;
+  startLatitude: number | null;
+  startLongitude: number | null;
+  finishLatitude: number | null;
+  finishLongitude: number | null;
+  waypoints: TrailWaypoint[];
+  beerChecks: TrailBeerCheck[];
+  chalk: TrailChalk[];
+}
+
+export interface Trail {
+  id: string;
+  runId: string;
+  name: string;
+  style: TrailStyle;
+  status: TrailStatus;
+  estimatedDistanceM: number | null;
+  estimatedDurationMin: number | null;
+  terrain: string | null;
+  releaseMode: ReleaseMode;
+  releaseAt: string | null;
+  releasedAt: string | null;
+  lockedAt: string | null;
+  safetyReviewedAt: string | null;
+  createdAt: string;
+  hares: { userId: string; isLead: boolean; displayName: string }[];
+  isReleased: boolean;
+  viewer: { canPlan: boolean; canRelease: boolean; canArchive: boolean; canSeeSecret: boolean; isLead: boolean };
+  secret: TrailSecret | null;
+}
+
+export interface TrailRevision {
+  id: string;
+  changes: Record<string, unknown>;
+  reason: string | null;
+  createdAt: string;
+  editor: string;
+}
+
+// ─── Media on a run and who is in a photo (apps/web lib/types.ts) ───
+
+export type MediaKind = 'PHOTO' | 'VIDEO' | 'AUDIO' | 'DOCUMENT';
+export type UploadState = 'QUEUED' | 'UPLOADING' | 'PROCESSING' | 'AVAILABLE' | 'FAILED';
+export type ModerationState = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REPORTED';
+
+export interface MediaAsset {
+  id: string;
+  kind: MediaKind;
+  mimeType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  durationSec: number | null;
+  caption: string | null;
+  url: string | null;
+  thumbnailUrl: string | null;
+  uploadState: UploadState;
+  moderationState: ModerationState;
+  createdAt: string;
+  // Attribution is fixed at capture and never changes (BR-CAPSULE-007).
+  uploadedBy: string | null;
+  uploaderId: string | null;
+}
+
+export interface PhotoTag {
+  id: string;
+  status: 'PENDING' | 'APPROVED';
+  user: { id: string; name: string; avatarUrl: string | null };
+  canRemove: boolean;
 }

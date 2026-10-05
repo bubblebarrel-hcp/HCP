@@ -68,6 +68,8 @@ export function MentionsList() {
     if (item.segment === 'posts') router.push(`/posts/${item.targetId}`);
     else if (item.segment === 'reels') router.push(`/reels/${item.targetId}`);
     else if (item.segment === 'runs') router.push(`/run/${item.targetId}`);
+    else if (item.segment === 'reports') router.push(`/trail-reports/${item.targetId}` as never);
+    else if (item.segment === 'capsules') router.push(`/capsules/${item.targetId}` as never);
     else void Linking.openURL(`${WEB_URL}/${item.segment}/${item.targetId}`);
   }
 

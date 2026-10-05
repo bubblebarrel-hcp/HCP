@@ -46,9 +46,17 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Shiggy Trails reads the photos and videos you choose to post in a reel.",
+          "photosPermission": "Shiggy Trails reads the photos and videos you choose to post, in a post, a reel, a flyer or your profile.",
           "cameraPermission": "Shiggy Trails uses the camera to record a reel.",
           "microphonePermission": "Shiggy Trails records sound with the video in a reel."
+        }
+      ],
+      "expo-font",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Shiggy Trails uses your location to drop a pin where your kennel hashes."
         }
       ]
     ],

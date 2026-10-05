@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Archive,
   ArrowRight,
@@ -14,15 +14,22 @@ import {
   MapPin,
   Music,
   Pause,
+  PenLine,
   Play,
   StickyNote,
+  UserPlus,
   Users,
   Beer,
 } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
+import { AwardDialog, CircleEditDialog } from '@/components/runs/circle-dialogs';
+import { GuestDialog } from '@/components/runs/guest-dialog';
+import { RunMedia } from '@/components/runs/run-media';
+import { RunPoster } from '@/components/runs/run-poster';
 import { RunPosts } from '@/components/runs/run-posts';
+import { TrailsPanel } from '@/components/trails/trails-panel';
 import { EngagementBar } from '@/components/social/engagement-bar';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -31,7 +38,7 @@ import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitl
 import { MaxContentWidth } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
-import { WEB_URL, api, errorMessage } from '@/lib/api';
+import { api, errorMessage } from '@/lib/api';
 import { brandColor, formatDate, formatRunDate, reportStatusLabel } from '@/lib/format';
 import { EMPTY_ENGAGEMENT } from '@/lib/reactions';
 import {
@@ -151,7 +158,7 @@ function Notice({ tone, icon: Icon, lead, text, testID }: { tone: 'danger' | 'ac
   );
 }
 
-function RsvpPanel({ run, send }: { run: RunDetail; send: Send }) {
+function RsvpPanel({ run, send, onRun }: { run: RunDetail; send: Send; onRun: (run: RunDetail) => void }) {
   const theme = useTheme();
   const router = useRouter();
   const v = run.viewer;
@@ -174,9 +181,15 @@ function RsvpPanel({ run, send }: { run: RunDetail; send: Send }) {
         {!v.signedIn ? (
           <View style={styles.panelGap}>
             {v.canRegisterAsGuest && (
-              <Button onPress={() => Linking.openURL(`${WEB_URL}/runs/${run.id}`)} testID="register-guest">
-                Register as a guest
-              </Button>
+              <GuestDialog
+                runId={run.id}
+                onDone={onRun}
+                trigger={(open) => (
+                  <Button onPress={open} testID="register-guest">
+                    Register as a guest
+                  </Button>
+                )}
+              />
             )}
             <Button variant={v.canRegisterAsGuest ? 'outline' : 'default'} onPress={() => router.push('/account')}>
               Log in to RSVP
@@ -237,8 +250,11 @@ function RsvpPanel({ run, send }: { run: RunDetail; send: Send }) {
   );
 }
 
-function OrganiserPanel({ run, send }: { run: RunDetail; send: Send }) {
+const CHECK_IN_ALLOWED: RunStatus[] = ['CHECK_IN_OPEN', 'LIVE', 'CIRCLE', 'REPORTING'];
+
+function OrganiserPanel({ run, send, onRun }: { run: RunDetail; send: Send; onRun: (run: RunDetail) => void }) {
   const theme = useTheme();
+  const router = useRouter();
   const v = run.viewer;
   if (!v.canOperate) return null;
   const next = v.nextStep;
@@ -296,9 +312,23 @@ function OrganiserPanel({ run, send }: { run: RunDetail; send: Send }) {
             </Button>
           )}
           {v.canEdit && (
-            <Button variant="outline" onPress={() => Linking.openURL(`${WEB_URL}/runs/${run.id}/edit`)}>
+            <Button variant="outline" onPress={() => router.push(`/run/${run.id}/edit` as never)}>
               Edit
             </Button>
+          )}
+          {v.canAddGuest && (
+            <GuestDialog
+              runId={run.id}
+              officer
+              allowCheckIn={CHECK_IN_ALLOWED.includes(run.status)}
+              onDone={onRun}
+              trigger={(open) => (
+                <Button variant="outline" testID="add-guest" onPress={open}>
+                  <UserPlus size={16} color={theme.text} />
+                  <ThemedText style={styles.buttonLabel}>Add guest</ThemedText>
+                </Button>
+              )}
+            />
           )}
           {v.canSkipCircle && (
             <ActionDialog
@@ -514,9 +544,10 @@ function HarePanel({ run, onChanged }: { run: RunDetail; onChanged: () => Promis
   );
 }
 
-function AttendanceCard({ run }: { run: RunDetail }) {
+function AttendanceCard({ run, send }: { run: RunDetail; send: Send }) {
   const theme = useTheme();
   if (!run.participants) return null;
+  const correct = run.viewer.canCorrectAttendance;
   const people = [...run.participants].sort(
     (a, b) => Number(Boolean(b.checkedInAt)) - Number(Boolean(a.checkedInAt)) || rsvpOrder[a.rsvpStatus] - rsvpOrder[b.rsvpStatus],
   );
@@ -572,6 +603,28 @@ function AttendanceCard({ run }: { run: RunDetail }) {
                 ) : (
                   <ThemedText themeColor="textSecondary" style={styles.sm}>{rsvpLabel[person.rsvpStatus]}</ThemedText>
                 )}
+                {correct &&
+                  (person.checkedInAt ? (
+                    <ActionDialog
+                      title={`Undo ${person.displayName}'s check-in?`}
+                      description="The correction is recorded in the audit log."
+                      confirmLabel="Undo check-in"
+                      destructive
+                      text={{ label: 'Reason', marked: true }}
+                      onConfirm={({ text }) => send('DELETE', `/runs/${run.id}/participants/${person.id}/check-in`, { reason: text })}
+                      trigger={(open) => (
+                        <Button variant="ghost" size="sm" testID="participant-undo-check-in" onPress={open}>Undo</Button>
+                      )}
+                    />
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      testID="participant-check-in"
+                      onPress={() => void send('POST', `/runs/${run.id}/participants/${person.id}/check-in`).catch(() => undefined)}>
+                      Check in
+                    </Button>
+                  ))}
               </View>
             ))
           )}
@@ -591,7 +644,7 @@ function Heading({ icon: Icon, label }: { icon: typeof Music; label: string }) {
   );
 }
 
-function CircleCard({ run }: { run: RunDetail }) {
+function CircleCard({ run, send }: { run: RunDetail; send: Send }) {
   const theme = useTheme();
   const v = run.viewer;
   const c = run.circle;
@@ -600,8 +653,14 @@ function CircleCard({ run }: { run: RunDetail }) {
   return (
     <Card>
       <View testID="circle-card">
-        <CardHeader style={styles.headerTight}>
+        <CardHeader style={[styles.headerTight, styles.headerRow]}>
           <CardTitle>Circle</CardTitle>
+          {v.canRecordCircle ? (
+            <View style={styles.wrapRow}>
+              <CircleEditDialog run={run} send={send} />
+              <AwardDialog run={run} send={send} />
+            </View>
+          ) : null}
         </CardHeader>
         <CardContent style={styles.circleBody}>
           {run.circleSkipReason ? (
@@ -647,6 +706,18 @@ function CircleCard({ run }: { run: RunDetail }) {
                       </ThemedText>
                       {award.reason ? <ThemedText themeColor="textSecondary" style={styles.sm}>{award.reason}</ThemedText> : null}
                     </View>
+                    {v.canRecordCircle ? (
+                      <ActionDialog
+                        title={`Remove "${award.title}"?`}
+                        description="Corrections before archive are recorded in the audit log."
+                        confirmLabel="Remove"
+                        destructive
+                        onConfirm={() => send('DELETE', `/runs/${run.id}/circle/awards/${award.id}`)}
+                        trigger={(open) => (
+                          <Button variant="ghost" size="sm" testID="award-remove" onPress={open}>Remove</Button>
+                        )}
+                      />
+                    ) : null}
                   </View>
                 ))}
               </View>
@@ -663,6 +734,7 @@ function CircleCard({ run }: { run: RunDetail }) {
 function ReportPanel({ runId }: { runId: string }) {
   const router = useRouter();
   const theme = useTheme();
+  const [starting, setStarting] = useState(false);
   const [report, setReport] = useState<TrailReport | null>(null);
   const [canStart, setCanStart] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -681,6 +753,18 @@ function ReportPanel({ runId }: { runId: string }) {
       alive = false;
     };
   }, [runId]);
+
+  async function start() {
+    setStarting(true);
+    try {
+      const data = await api<{ report: TrailReport }>(`/runs/${runId}/report`, { method: 'POST', body: {} });
+      router.push(`/trail-reports/${data.report.id}` as never);
+    } catch (err) {
+      Alert.alert('That did not work', errorMessage(err, 'That did not work'));
+    } finally {
+      setStarting(false);
+    }
+  }
 
   if (!loaded) return null;
   if (!report && !canStart) return null;
@@ -708,8 +792,9 @@ function ReportPanel({ runId }: { runId: string }) {
                 <ThemedText style={styles.medium}>{report.title}</ThemedText>
               </View>
               {report.viewer.canEdit ? (
-                <Button testID="report-open" onPress={() => Linking.openURL(`${WEB_URL}/reports/${report.id}`)}>
-                  Open in Scribe Studio
+                <Button testID="report-open" onPress={() => router.push(`/trail-reports/${report.id}` as never)}>
+                  <PenLine size={16} color={theme.onPrimary} />
+                  <ThemedText style={[styles.buttonLabel, { color: theme.onPrimary }]}>Open in Scribe Studio</ThemedText>
                 </Button>
               ) : (
                 <Button variant="outline" testID="report-open" onPress={() => router.push(`/trail-reports/${report.id}` as never)}>
@@ -719,8 +804,9 @@ function ReportPanel({ runId }: { runId: string }) {
               )}
             </>
           ) : (
-            <Button testID="report-start" onPress={() => Linking.openURL(`${WEB_URL}/runs/${runId}`)}>
-              Write the Trail Report
+            <Button testID="report-start" disabled={starting} onPress={() => void start()}>
+              <PenLine size={16} color={theme.onPrimary} />
+              <ThemedText style={[styles.buttonLabel, { color: theme.onPrimary }]}>{starting ? 'Starting…' : 'Write the Trail Report'}</ThemedText>
             </Button>
           )}
         </CardContent>
@@ -731,6 +817,7 @@ function ReportPanel({ runId }: { runId: string }) {
 
 function CapsulePanel({ runId }: { runId: string }) {
   const theme = useTheme();
+  const router = useRouter();
   const [capsule, setCapsule] = useState<RunCapsule | null>(null);
 
   useEffect(() => {
@@ -766,7 +853,7 @@ function CapsulePanel({ runId }: { runId: string }) {
             )}
           </View>
           {worthOpening && (
-            <Button variant="outline" testID="capsule-open" onPress={() => Linking.openURL(`${WEB_URL}/capsules/${capsule.id}`)}>
+            <Button variant="outline" testID="capsule-open" onPress={() => router.push(`/capsules/${capsule.id}` as never)}>
               <ThemedText style={styles.buttonLabel}>Open the Run Capsule</ThemedText>
               <ArrowRight size={16} color={theme.text} />
             </Button>
@@ -919,30 +1006,23 @@ export default function RunDetailScreen() {
           {run.description ? <ThemedText style={styles.description}>{run.description}</ThemedText> : null}
         </View>
         {/* Like, comment, reshare, share the link out, save (D50). */}
-        <EngagementBar segment="runs" id={run.id} initial={EMPTY_ENGAGEMENT} showViews={false} />
+        <EngagementBar segment="runs" id={run.id} initial={EMPTY_ENGAGEMENT} countViewOnMount showViews={false} />
         {run.status !== 'CANCELLED' && <Stepper status={run.status} />}
       </Card>
 
-      <RsvpPanel run={run} send={send} />
-      <OrganiserPanel run={run} send={send} />
+      <RsvpPanel run={run} send={send} onRun={setRun} />
+      <OrganiserPanel run={run} send={send} onRun={setRun} />
 
       {/* The flyer, when the kennel has made one (D43). */}
-      {run.posterUrl ? (
-        <Card style={styles.overflow}>
-          <Image
-            source={{ uri: run.posterUrl }}
-            testID="run-poster"
-            accessibilityLabel="Flyer for this run"
-            style={[styles.poster, { backgroundColor: theme.backgroundElement }]}
-            resizeMode="contain"
-          />
-        </Card>
-      ) : null}
+      <RunPoster runId={run.id} posterUrl={run.posterUrl} canManage={run.viewer.canOperate} onChanged={load} />
 
       <HarePanel run={run} onChanged={load} />
-      <AttendanceCard run={run} />
+      <TrailsPanel runId={run.id} canPlan={run.viewer.canOperate} />
+      <AttendanceCard run={run} send={send} />
+      {/* Adding photos needs the hosting kennel or a place on the run; the API is the judge. */}
+      <RunMedia target={{ type: 'RUN', id: run.id }} canContribute={Boolean(user) && (run.viewer.canSeeNames || run.viewer.canOperate)} />
       <RunPosts runId={run.id} />
-      <CircleCard run={run} />
+      <CircleCard run={run} send={send} />
       <ReportPanel runId={run.id} />
       <CapsulePanel runId={run.id} />
 
@@ -1031,6 +1111,7 @@ const styles = StyleSheet.create({
   offerName: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   quote: { marginTop: 4, borderRadius: 8, padding: 12 },
   answer: { marginTop: 8, flexDirection: 'row', gap: 8 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   person: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12 },
   personMain: { flex: 1, minWidth: 0 },
   badges: { marginTop: 2, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },

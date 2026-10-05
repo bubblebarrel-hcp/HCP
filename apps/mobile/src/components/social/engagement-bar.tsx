@@ -1,28 +1,30 @@
 import { useEffect, useState } from 'react';
 import { Pressable, Share, StyleSheet, TextInput, View } from 'react-native';
+import { Bookmark, Eye, Flag, Heart, MessageCircle, Repeat2, Share2, SmilePlus } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
-import { Icon } from '@/components/icon';
+import { CommentThread } from '@/components/social/comment-thread';
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Button } from '@/components/ui/web-ui';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { WEB_URL } from '@/lib/api';
-import { getEngagement, reshare, setBookmarked, setLiked, unreshare } from '@/lib/social';
 import { REPORTABLE } from '@/lib/moderation';
 import { REACTIONS, reactionLabel } from '@/lib/reactions';
+import { countView, getEngagement, reshare, setBookmarked, setLiked, unreshare } from '@/lib/social';
 import type { Engagement, ReactionKind, SubjectSegment } from '@/lib/types';
 
-// The bar under a piece of content: like, comment, reshare, share, save, seen
-// (D50). Mirrors apps/web/components/social/EngagementBar.tsx's interaction
-// model — optimistic press, reconciled with the server's own number — but
-// opens comments as a pushed screen instead of an inline expand, since a
-// FlatList item that grows underneath a scroll position is a worse fit on a
-// phone than a full screen is.
+// The bar under a piece of content: like with a tray of hash reactions, comment,
+// reshare, share, report, save and seen (D50), laid out as the web draws it
+// (components/social/EngagementBar.tsx): a hairline above, 16pt icons with their
+// counts, save on the far right, the reaction counts under the row, and the
+// "Pass it on" box for a quote reshare. Optimistic press, reconciled with the
+// server's own number. Comments open as the inline thread under the bar, as on
+// the web.
 
 function Count({ value }: { value: number }) {
   if (value <= 0) return null;
-  return <ThemedText type="small" style={styles.count}>{value > 999 ? `${(value / 1000).toFixed(1)}k` : value}</ThemedText>;
+  return <ThemedText style={styles.count}>{value > 999 ? `${(value / 1000).toFixed(1)}k` : value}</ThemedText>;
 }
 
 const WEB_HREF: Record<SubjectSegment, (id: string) => string> = {
@@ -41,23 +43,31 @@ export function EngagementBar({
   initial,
   authorId,
   showViews = true,
+  countViewOnMount = false,
 }: {
   segment: SubjectSegment;
   id: string;
   initial: Engagement;
   authorId?: string | null;
   showViews?: boolean;
+  // Count this as a view when it appears (a detail screen, not a feed row).
+  countViewOnMount?: boolean;
 }) {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useAuth();
   const [engagement, setEngagement] = useState(initial);
   const [composing, setComposing] = useState(false);
+  const [showComments, setShowComments] = useState(false);
   const [commentary, setCommentary] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // The hash reaction tray (D60): opened by a long press on the like button.
+  // The hash reaction tray (D60).
   const [tray, setTray] = useState(false);
+
+  useEffect(() => {
+    if (countViewOnMount) void countView(segment, id);
+  }, [countViewOnMount, segment, id]);
 
   async function act(optimistic: Engagement, run: () => Promise<Engagement>) {
     const previous = engagement;
@@ -107,10 +117,8 @@ export function EngagementBar({
     );
   }
 
-  const mineReaction = REACTIONS.find((r) => r.kind === engagement.myReaction);
-  // The reactions people actually used, most used first. A phone has no hover
-  // tooltip, so the counts are shown in a line under the bar (as on web, only
-  // once more than one kind is in play).
+  const mine = REACTIONS.find((r) => r.kind === engagement.myReaction);
+  // The reactions people actually used, most used first.
   const used = REACTIONS.filter((r) => engagement.reactions[r.kind] > 0).sort(
     (a, b) => engagement.reactions[b.kind] - engagement.reactions[a.kind],
   );
@@ -144,44 +152,57 @@ export function EngagementBar({
     void Share.share({ url: `${WEB_URL}${href}`, message: `${WEB_URL}${href}` });
   }
 
+  const muted = theme.textSecondary;
+  const likedColor = theme.primaryStrong;
+
   return (
-    <View style={[styles.wrap, { borderTopColor: theme.border }]}>
+    <View style={[styles.wrap, { borderTopColor: theme.border }]} testID="engagement-bar">
       <View style={styles.row}>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ selected: engagement.liked, disabled: busy || signedOut }}
-          accessibilityLabel={engagement.liked ? `Remove ${reactionLabel(engagement.myReaction)}` : 'On On! (like). Hold for more reactions.'}
-          accessibilityHint="Hold to choose a reaction"
+          accessibilityLabel={engagement.liked ? `Remove ${reactionLabel(engagement.myReaction)}` : 'On On! (like)'}
           disabled={busy || signedOut}
           onPress={onLike}
-          onLongPress={() => setTray((open) => !open)}
+          onLongPress={() => !signedOut && setTray((open) => !open)}
           delayLongPress={350}
-          style={styles.button}>
-          {mineReaction?.emoji ? (
-            <ThemedText style={styles.emoji}>{mineReaction.emoji}</ThemedText>
+          testID="engagement-like"
+          style={[styles.button, (busy || signedOut) && styles.disabled]}>
+          {mine?.emoji ? (
+            <ThemedText style={styles.emoji}>{mine.emoji}</ThemedText>
           ) : (
-            <Icon
-              name={{ ios: engagement.liked ? 'heart.fill' : 'heart', android: 'favorite', web: 'favorite' }}
-              size={19}
-              color={engagement.liked ? theme.primaryStrong : theme.textSecondary}
-            />
+            <Heart size={16} color={engagement.liked ? likedColor : theme.text} fill={engagement.liked ? likedColor : 'none'} />
           )}
           <Count value={engagement.likes} />
         </Pressable>
+        {!signedOut && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Choose a reaction"
+            accessibilityState={{ expanded: tray }}
+            testID="reaction-toggle"
+            onPress={() => setTray((open) => !open)}
+            style={styles.toggle}>
+            <SmilePlus size={16} color={muted} />
+          </Pressable>
+        )}
 
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Comments"
-          onPress={() => router.push(`/comments/${segment}/${id}`)}
+          accessibilityState={{ expanded: showComments }}
+          testID="engagement-comment"
+          onPress={() => setShowComments((open) => !open)}
           style={styles.button}>
-          <Icon name={{ ios: 'bubble.right', android: 'chat_bubble_outline', web: 'chat_bubble' }} size={19} color={theme.textSecondary} />
+          <MessageCircle size={16} color={theme.text} />
           <Count value={engagement.comments} />
         </Pressable>
 
+        {/* Resharing your own post is refused by the API, so it is not offered. */}
         {isMine ? (
           engagement.reshares > 0 && (
             <View style={styles.button}>
-              <Icon name={{ ios: 'arrow.2.squarepath', android: 'repeat', web: 'repeat' }} size={19} color={theme.textSecondary} />
+              <Repeat2 size={16} color={muted} />
               <Count value={engagement.reshares} />
             </View>
           )
@@ -191,19 +212,16 @@ export function EngagementBar({
             accessibilityState={{ selected: engagement.reshared, disabled: busy || signedOut }}
             accessibilityLabel={engagement.reshared ? 'Undo reshare' : 'Reshare'}
             disabled={busy || signedOut}
+            testID="engagement-reshare"
             onPress={onReshare}
-            style={styles.button}>
-            <Icon
-              name={{ ios: 'arrow.2.squarepath', android: 'repeat', web: 'repeat' }}
-              size={19}
-              color={engagement.reshared ? theme.primaryStrong : theme.textSecondary}
-            />
+            style={[styles.button, (busy || signedOut) && styles.disabled]}>
+            <Repeat2 size={16} color={engagement.reshared ? theme.trail : theme.text} />
             <Count value={engagement.reshares} />
           </Pressable>
         )}
 
-        <Pressable accessibilityRole="button" accessibilityLabel="Share" onPress={onShare} style={styles.button}>
-          <Icon name={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }} size={19} color={theme.textSecondary} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Share" testID="engagement-share" onPress={onShare} style={styles.button}>
+          <Share2 size={16} color={theme.text} />
         </Pressable>
 
         {/* Telling the people who look after Shiggy Trails (D61). Not on a trail
@@ -212,75 +230,88 @@ export function EngagementBar({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Report"
-            onPress={() => router.push({ pathname: '/report/[type]/[id]', params: { type: REPORTABLE[segment]!, id, ...(authorId ? { by: authorId } : {}) } })}
+            testID="engagement-report"
+            onPress={() =>
+              router.push({ pathname: '/report/[type]/[id]', params: { type: REPORTABLE[segment]!, id, ...(authorId ? { by: authorId } : {}) } })
+            }
             style={styles.button}>
-            <Icon name={{ ios: 'flag', android: 'flag', web: 'flag' }} size={18} color={theme.textSecondary} />
+            <Flag size={16} color={theme.text} />
           </Pressable>
         )}
+
+        <View style={styles.spacer} />
 
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ selected: engagement.bookmarked, disabled: busy || signedOut }}
           accessibilityLabel={engagement.bookmarked ? 'Remove from saved' : 'Save'}
           disabled={busy || signedOut}
+          testID="engagement-bookmark"
           onPress={onBookmark}
-          style={[styles.button, styles.bookmark]}>
-          <Icon
-            name={{ ios: engagement.bookmarked ? 'bookmark.fill' : 'bookmark', android: 'bookmark', web: 'bookmark' }}
-            size={19}
-            color={engagement.bookmarked ? theme.accentStrong : theme.textSecondary}
+          style={[styles.button, (busy || signedOut) && styles.disabled]}>
+          <Bookmark
+            size={16}
+            color={engagement.bookmarked ? theme.accentStrong : theme.text}
+            fill={engagement.bookmarked ? theme.accentStrong : 'none'}
           />
         </Pressable>
 
         {showViews && engagement.views > 0 && (
-          <View style={styles.views}>
-            <Icon name={{ ios: 'eye', android: 'visibility', web: 'visibility' }} size={17} color={theme.textSecondary} />
+          <View style={styles.button}>
+            <Eye size={16} color={muted} />
             <Count value={engagement.views} />
           </View>
         )}
       </View>
-
-      {used.length > 1 && (
-        <View
-          style={styles.reactionCounts}
-          accessible
-          accessibilityLabel={used.map((r) => `${r.label} ${engagement.reactions[r.kind]}`).join(', ')}>
-          {used.map((r) => (
-            <View key={r.kind} style={styles.reactionCount}>
-              {r.emoji ? (
-                <ThemedText style={styles.emojiSmall}>{r.emoji}</ThemedText>
-              ) : (
-                <Icon name={{ ios: 'heart.fill', android: 'favorite', web: 'favorite' }} size={13} color={theme.primaryStrong} />
-              )}
-              <Count value={engagement.reactions[r.kind]} />
-            </View>
-          ))}
-        </View>
-      )}
 
       {tray && !signedOut && (
         <View style={[styles.tray, { backgroundColor: theme.card, borderColor: theme.border }]} accessibilityLabel="Reactions">
           {REACTIONS.map((r) => (
             <Pressable
               key={r.kind}
-              accessibilityRole="button"
+              accessibilityRole="menuitem"
               accessibilityLabel={r.label}
+              testID={`reaction-${r.kind}`}
               onPress={() => onReact(r.kind)}
-              style={[styles.trayButton, engagement.myReaction === r.kind && { backgroundColor: theme.backgroundSelected }]}>
+              style={[
+                styles.trayButton,
+                engagement.myReaction === r.kind && { backgroundColor: theme.backgroundElement, borderWidth: 2, borderColor: theme.primary },
+              ]}>
               {r.emoji ? (
-                <ThemedText style={styles.emoji}>{r.emoji}</ThemedText>
+                <ThemedText style={styles.trayEmoji}>{r.emoji}</ThemedText>
               ) : (
-                <Icon name={{ ios: 'heart.fill', android: 'favorite', web: 'favorite' }} size={22} color={theme.primaryStrong} />
+                <Heart size={20} color={likedColor} fill={likedColor} />
               )}
             </Pressable>
           ))}
         </View>
       )}
 
-      {error && <ThemedText type="small" style={{ color: theme.danger, paddingHorizontal: Spacing.three, paddingBottom: Spacing.two }}>{error}</ThemedText>}
+      {/* What people reacted with, once more than one kind is in play. */}
+      {used.length > 1 && (
+        <View
+          style={styles.reactionCounts}
+          accessible
+          testID="reaction-counts"
+          accessibilityLabel={used.map((r) => `${r.label} ${engagement.reactions[r.kind]}`).join(', ')}>
+          {used.map((r) => (
+            <View key={r.kind} style={styles.reactionCount}>
+              {r.emoji ? (
+                <ThemedText style={styles.emojiSmall}>{r.emoji}</ThemedText>
+              ) : (
+                <Heart size={14} color={likedColor} fill={likedColor} />
+              )}
+              <ThemedText themeColor="textSecondary" style={styles.xs}>{engagement.reactions[r.kind]}</ThemedText>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {error ? <ThemedText style={[styles.errorText, { color: theme.danger }]}>{error}</ThemedText> : null}
 
       {composing && (
-        <View style={[styles.composeBox, { borderTopColor: theme.border }]}>
+        <View style={[styles.compose, { borderTopColor: theme.border }]}>
+          <ThemedText style={styles.composeLabel}>Pass it on</ThemedText>
           <TextInput
             value={commentary}
             onChangeText={setCommentary}
@@ -288,24 +319,29 @@ export function EngagementBar({
             placeholderTextColor={theme.textSecondary}
             multiline
             maxLength={1000}
-            style={[styles.textarea, { color: theme.text, borderColor: theme.border, backgroundColor: theme.backgroundElement }]}
+            testID="reshare-commentary"
+            style={[styles.textarea, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }]}
           />
           <View style={styles.composeRow}>
-            <Pressable accessibilityRole="button" onPress={submitReshare} style={[styles.composeButton, { backgroundColor: theme.primary }]}>
-              <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>Reshare</ThemedText>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setComposing(false)} style={styles.composeButton}>
-              <ThemedText type="smallBold">Cancel</ThemedText>
-            </Pressable>
+            <Button size="sm" disabled={busy} testID="reshare-submit" onPress={submitReshare}>Reshare</Button>
+            <Button size="sm" variant="ghost" onPress={() => setComposing(false)}>Cancel</Button>
           </View>
         </View>
+      )}
+
+      {showComments && (
+        <CommentThread
+          segment={segment}
+          id={id}
+          onCountChange={(comments) => setEngagement((current) => ({ ...current, comments }))}
+        />
       )}
     </View>
   );
 }
 
-// Fetches its own engagement rather than trusting a stale `initial` — for
-// screens (post/reel detail) that were not handed one by a feed read.
+// Fetches its own engagement rather than trusting a stale `initial`, for screens
+// (post/reel detail) that were not handed one by a feed read.
 export function useOwnEngagement(segment: SubjectSegment, id: string, fallback: Engagement) {
   const [engagement, setEngagement] = useState(fallback);
   useEffect(() => {
@@ -315,20 +351,28 @@ export function useOwnEngagement(segment: SubjectSegment, id: string, fallback: 
 }
 
 const styles = StyleSheet.create({
+  // border-t border-border
   wrap: { borderTopWidth: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, gap: 2 },
-  button: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 40, paddingHorizontal: Spacing.two, justifyContent: 'center' },
-  bookmark: { marginLeft: 'auto' },
-  views: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.two },
-  count: { fontVariant: ['tabular-nums'] },
-  emoji: { fontSize: 18, lineHeight: 22 },
-  emojiSmall: { fontSize: 13, lineHeight: 18 },
-  reactionCounts: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingBottom: Spacing.one },
+  // flex items-center gap-1 px-2 py-1
+  row: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4 },
+  // inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm
+  button: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 6, minHeight: 40, borderRadius: 6 },
+  toggle: { paddingHorizontal: 4, paddingVertical: 6, minHeight: 40, minWidth: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
+  disabled: { opacity: 0.5 },
+  spacer: { flex: 1 },
+  count: { fontSize: 14, lineHeight: 20, fontWeight: '400', fontVariant: ['tabular-nums'] },
+  emoji: { fontSize: 16, lineHeight: 20 },
+  emojiSmall: { fontSize: 12, lineHeight: 16 },
+  xs: { fontSize: 12, lineHeight: 16, fontWeight: '400', fontVariant: ['tabular-nums'] },
+  tray: { flexDirection: 'row', gap: 4, alignSelf: 'flex-start', marginLeft: 8, marginBottom: 4, borderWidth: 1, borderRadius: 999, padding: 4 },
+  trayButton: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  trayEmoji: { fontSize: 20, lineHeight: 24 },
+  // flex flex-wrap items-center gap-x-4 gap-y-1 px-4 pb-1.5 text-xs
+  reactionCounts: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 16, rowGap: 4, paddingHorizontal: 16, paddingBottom: 6 },
   reactionCount: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  tray: { flexDirection: 'row', gap: Spacing.one, alignSelf: 'flex-start', marginLeft: Spacing.two, marginBottom: Spacing.one, borderWidth: 1, borderRadius: 999, padding: Spacing.one },
-  trayButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  composeBox: { borderTopWidth: 1, padding: Spacing.three, gap: Spacing.two },
-  textarea: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.three, minHeight: 60, fontSize: 15 },
-  composeRow: { flexDirection: 'row', gap: Spacing.two },
-  composeButton: { paddingHorizontal: Spacing.three, minHeight: 40, justifyContent: 'center', borderRadius: Spacing.two },
+  errorText: { paddingHorizontal: 16, paddingBottom: 8, fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  compose: { borderTopWidth: 1, paddingHorizontal: 16, paddingVertical: 12, gap: 4 },
+  composeLabel: { fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  textarea: { minHeight: 56, borderWidth: 1, borderRadius: 6, padding: 8, fontSize: 15, textAlignVertical: 'top' },
+  composeRow: { marginTop: 4, flexDirection: 'row', gap: 8 },
 });
