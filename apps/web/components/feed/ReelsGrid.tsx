@@ -4,10 +4,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Video } from 'lucide-react';
 import { Avatar } from '@/components/Avatar';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import type { Page, Reel } from '@/lib/types';
 import { brandColor } from '@/lib/utils';
 import api from '@/services/api';
+
+// The API's cap on one page of reels (listReelsQuery).
+const PAGE_SIZE = 30;
 
 // The list on /reels (D57). Signed out it is the public reels, which is what the
 // server rendered. Signed in it is the hashers you follow and your own: the page
@@ -25,6 +29,11 @@ export function ReelsGrid({
 }) {
   const { user } = useAuth();
   const [reels, setReels] = useState(initial);
+  // A full first page means there may be more; the API's own total settles it
+  // once a page has been asked for.
+  const [page, setPage] = useState(1);
+  const [more, setMore] = useState(initial.length >= PAGE_SIZE);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -32,13 +41,33 @@ export function ReelsGrid({
     api
       .get<{ data: Page<Reel> }>(query)
       .then((res) => {
-        if (!cancelled) setReels(res.data.data.items);
+        if (cancelled) return;
+        setReels(res.data.data.items);
+        setPage(1);
+        setMore(res.data.data.items.length < res.data.data.total);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, [user, query]);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const next = page + 1;
+      const res = await api.get<{ data: Page<Reel> }>(`${query}${query.includes('?') ? '&' : '?'}page=${next}`);
+      const seen = new Set(reels.map((r) => r.id));
+      const fresh = res.data.data.items.filter((r) => !seen.has(r.id));
+      setReels((current) => [...current, ...fresh]);
+      setPage(next);
+      setMore(reels.length + fresh.length < res.data.data.total && res.data.data.items.length > 0);
+    } catch {
+      // Pressing it again retries.
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <>
@@ -108,6 +137,14 @@ export function ReelsGrid({
             </li>
           ))}
         </ul>
+      )}
+
+      {more && reels.length > 0 && (
+        <div className="mt-4 px-4 text-center sm:px-0">
+          <Button variant="outline" onClick={() => void loadMore()} disabled={loadingMore} data-testid="reels-more">
+            {loadingMore ? 'Loading…' : 'More reels'}
+          </Button>
+        </div>
       )}
     </>
   );

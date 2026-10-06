@@ -56,6 +56,7 @@ export default function SavedPage() {
   }, [segment]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount: the loader sets state as it starts
     if (user) void load();
   }, [user, load]);
 

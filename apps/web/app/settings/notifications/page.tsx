@@ -9,10 +9,10 @@ import { FeedLayout } from '@/components/layout/FeedLayout';
 import { LeftNav } from '@/components/layout/LeftNav';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Input, Select } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
 import { notificationCategoryHint, notificationCategoryLabel } from '@/lib/notifications';
-import type { DeliveryChannel, NotificationCategory, NotificationPreferences } from '@/lib/types';
+import type { DeliveryChannel, DigestFrequency, NotificationCategory, NotificationPreferences } from '@/lib/types';
 import { bleedCard, cn, formatDate } from '@/lib/utils';
 import api, { errorMessage } from '@/services/api';
 
@@ -23,6 +23,15 @@ const COLUMNS: { channel: DeliveryChannel; label: string; short: string }[] = [
   { channel: 'IN_APP', label: 'In the app', short: 'App' },
   { channel: 'PUSH', label: 'Push', short: 'Push' },
   { channel: 'EMAIL', label: 'Email', short: 'Email' },
+];
+
+// FR-NOT-007. What a hasher can ask for their email and push in a category.
+const DIGEST_OPTIONS: { value: DigestFrequency; label: string }[] = [
+  { value: 'IMMEDIATE', label: 'Straight away' },
+  { value: 'HOURLY', label: 'A digest every hour' },
+  { value: 'MORNING', label: 'A digest every morning (8am)' },
+  { value: 'EVENING', label: 'A digest every evening (6pm)' },
+  { value: 'WEEKLY', label: 'A digest every Monday morning' },
 ];
 
 const platformLabel: Record<string, string> = { IOS: 'iPhone or iPad', ANDROID: 'Android phone', WEB: 'Browser' };
@@ -69,6 +78,21 @@ export default function NotificationSettingsPage() {
     try {
       const res = await api.put<{ data: NotificationPreferences }>('/me/notification-preferences', {
         preferences: [{ category, channel, enabled }],
+      });
+      setPrefs(res.data.data);
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not save that'));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function changeDigest(category: NotificationCategory, frequency: DigestFrequency) {
+    setSaving(`${category}:digest`);
+    try {
+      const res = await api.put<{ data: NotificationPreferences }>('/me/notification-preferences/digest', {
+        category,
+        frequency,
       });
       setPrefs(res.data.data);
     } catch (err) {
@@ -291,6 +315,25 @@ export default function NotificationSettingsPage() {
                 <div className="min-w-0">
                   <p className="font-medium">{notificationCategoryLabel[row.category]}</p>
                   <p className="text-sm text-muted-foreground">{notificationCategoryHint[row.category]}</p>
+                  {row.digestable && (
+                    <label className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                      <span className="text-muted-foreground">Email and push:</span>
+                      <Select
+                        value={row.digest}
+                        disabled={saving === `${row.category}:digest`}
+                        onChange={(e) => void changeDigest(row.category, e.target.value as DigestFrequency)}
+                        className="h-9 w-auto min-w-52"
+                        data-testid={`digest-${row.category}`}
+                        aria-label={`${notificationCategoryLabel[row.category]}: how often to email and push`}
+                      >
+                        {DIGEST_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
+                  )}
                 </div>
                 <div className="grid w-48 grid-cols-3">
                   {COLUMNS.map((c) => {
@@ -320,7 +363,9 @@ export default function NotificationSettingsPage() {
           </ul>
           <p className="mt-4 text-sm text-muted-foreground">
             Safety notifications in the app cannot be switched off. A greyed switch means that channel cannot reach
-            you yet.
+            you yet. A digest gathers the email and push for a category into one message; the app still shows each
+            notice as it happens. Anything urgent, and anything about a run or a trail at a time, is always sent
+            straight away.
           </p>
         </CardContent>
       </Card>

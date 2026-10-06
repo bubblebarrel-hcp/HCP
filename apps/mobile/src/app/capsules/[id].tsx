@@ -4,6 +4,7 @@ import { Archive, BookOpen, Camera, Footprints, GalleryHorizontal, ListTree, Mus
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
+import { RunReels } from '@/components/runs/run-reels';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Select } from '@/components/ui/select';
@@ -458,6 +459,8 @@ export default function CapsuleScreen() {
       </Card>
 
       <Explorer capsule={capsule} />
+
+      <RunReels runId={capsule.runId} />
 
       {capsule.circle && (
         <Card>

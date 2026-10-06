@@ -39,6 +39,10 @@ export async function setQuietHours(req: Request, res: Response) {
   return ok(res, await notifications.setQuietHours(actor(req), req.body.quietHours));
 }
 
+export async function setDigest(req: Request, res: Response) {
+  return ok(res, await notifications.setDigest(actor(req), req.body.category, req.body.frequency));
+}
+
 export async function setTimeZone(req: Request, res: Response) {
   return ok(res, await notifications.setTimeZone(actor(req), req.body.timeZone));
 }

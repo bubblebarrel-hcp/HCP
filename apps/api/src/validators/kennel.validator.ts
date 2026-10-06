@@ -52,6 +52,8 @@ const kennelFields = {
   defaultRunVisibility: Joi.string().valid('PUBLIC', 'MEMBERS_ONLY', 'INVITE_ONLY'),
   // FR-CIRCLE-006: "Kennels may disable this feature" (down-downs).
   downDownsEnabled: Joi.boolean(),
+  // FR-CIRCLE-014: who may read the Circle record of this kennel's runs.
+  circleVisibility: Joi.string().valid('PUBLIC', 'MEMBERS', 'ATTENDEES', 'OFFICERS'),
   // D45 follow-up: null (or an empty field on the form) means "use the
   // platform default" (settings.service.ts#SETTING_DEFAULTS).
   hareNudgeSoonDays: Joi.number().integer().min(1).max(180).allow(null),
@@ -126,6 +128,7 @@ export const kennelSettingsSchema = Joi.object({
   visibility: kennelFields.visibility,
   defaultRunVisibility: kennelFields.defaultRunVisibility,
   downDownsEnabled: kennelFields.downDownsEnabled,
+  circleVisibility: kennelFields.circleVisibility,
   hareNudgeSoonDays: kennelFields.hareNudgeSoonDays,
   hareNudgeUrgentDays: kennelFields.hareNudgeUrgentDays,
 }).min(1);

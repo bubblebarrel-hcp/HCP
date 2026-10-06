@@ -43,6 +43,8 @@ export async function sendEmail(input: {
   to: string;
   subject: string;
   body: string;
+  // A longer message as separate paragraphs (a digest); `body` still gives the preheader.
+  paragraphs?: string[];
   action?: { label: string; path: string };
   template?: 'signup-confirmation' | 'welcome';
   // Public name to greet: the hash handle or "Just <firstName>" (D11), never biodata.
@@ -59,6 +61,8 @@ export async function sendEmail(input: {
       : input.template === 'welcome' && action
         ? welcomeContent(name, action)
         : genericContent(input.subject, input.body, action);
+
+  if (input.paragraphs?.length && !input.template) content.paragraphs = input.paragraphs;
 
   // A different trail mark each time, so the mail is never quite the same twice.
   const sticker = STICKERS[Math.floor(Math.random() * STICKERS.length)];

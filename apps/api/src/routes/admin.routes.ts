@@ -27,6 +27,8 @@ router.delete('/kennels/:id', asyncHandler(kennelController.remove));
 
 // Runs the hare reminder sweep now rather than on its twelve-hour timer (D45).
 router.post('/reminders/hares', asyncHandler(adminController.sweepHareReminders));
+router.post('/notifications/digests', asyncHandler(adminController.sweepDigests));
+router.post('/notifications/escalations', asyncHandler(adminController.sweepEscalations));
 
 router.get('/users', validate(listUsersQuery, 'query'), asyncHandler(adminController.listUsers));
 router.patch('/users/:id/role', validate(updateUserRoleSchema), asyncHandler(adminController.updateUserRole));

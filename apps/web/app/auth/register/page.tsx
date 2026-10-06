@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -71,8 +72,13 @@ function Section({ title, description, children }: { title: string; description?
 }
 
 export default function RegisterPage() {
-  const { register: signUp } = useAuth();
+  const { register: signUp, user, loading } = useAuth();
   const router = useRouter();
+
+  // Already signed in: there is nothing to do on this page, so go to the account.
+  useEffect(() => {
+    if (!loading && user) router.replace('/account');
+  }, [loading, user, router]);
   const { register, handleSubmit, watch, formState } = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: defaults,

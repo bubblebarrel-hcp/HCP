@@ -15,14 +15,15 @@ const actor = (req: Request) => {
 const viewer = (req: Request) => (req.user ? { id: req.user.id, role: req.user.role } : undefined);
 
 export async function list(req: Request, res: Response) {
-  const { page, limit, kennelSlug, authorId, tag } = req.query as unknown as {
+  const { page, limit, kennelSlug, authorId, tag, runId } = req.query as unknown as {
     page: number;
     limit: number;
     kennelSlug?: string;
     authorId?: string;
     tag?: string;
+    runId?: string;
   };
-  return ok(res, await reels.listPublished(viewer(req), { page, limit, kennelSlug, authorId, tag }));
+  return ok(res, await reels.listPublished(viewer(req), { page, limit, kennelSlug, authorId, tag, runId }));
 }
 
 export async function detail(req: Request, res: Response) {

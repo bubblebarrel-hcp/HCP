@@ -9,6 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { FeedLayout } from '@/components/layout/FeedLayout';
 import { LeftNav } from '@/components/layout/LeftNav';
 import { ActionDialog } from '@/components/membership/ActionDialog';
+import { GpxButtons } from '@/components/trails/GpxButtons';
 import { TrailPlanner, trailPoints } from '@/components/trails/TrailPlanner';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,6 +44,9 @@ export default function TrailPage({ params }: { params: Promise<{ id: string }> 
   const [revisions, setRevisions] = useState<TrailRevision[] | null>(null);
   const [showRevisions, setShowRevisions] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The planner keeps its own copy of the route while it is being drawn, so an
+  // import (which replaces the route) remounts it to start from the new one.
+  const [importCount, setImportCount] = useState(0);
 
   useEffect(() => {
     if (loading) return;
@@ -156,6 +160,18 @@ export default function TrailPage({ params }: { params: Promise<{ id: string }> 
                 }`}
           </li>
         </ul>
+        {v.canSeeSecret && (
+          <div className="mt-4">
+            <GpxButtons
+              trail={trail}
+              canImport={editable}
+              onTrail={(next) => {
+                setTrail(next);
+                setImportCount((n) => n + 1);
+              }}
+            />
+          </div>
+        )}
       </Card>
 
       {(canStep || v.canArchive) && (
@@ -252,7 +268,7 @@ export default function TrailPage({ params }: { params: Promise<{ id: string }> 
           </p>
         </Card>
       ) : editable ? (
-        <TrailPlanner trail={trail} center={center} onTrail={setTrail} />
+        <TrailPlanner key={importCount} trail={trail} center={center} onTrail={setTrail} />
       ) : (
         <TrailMap route={secret?.routeGeoJson ?? null} points={trailPoints(trail)} center={center} />
       )}

@@ -35,6 +35,8 @@ import invitationRoutes from './routes/invitation.routes';
 import searchRoutes from './routes/search.routes';
 import { localRoot, storageDriver } from './services/storage.service';
 import { startOutbox, stopOutbox } from './services/outbox.service';
+import { startDigestSweeper, stopDigestSweeper } from './services/digest.service';
+import { startEscalationSweeper, stopEscalationSweeper } from './services/escalation.service';
 import { startReminders, startTrailReleaseSweeper, stopReminders, stopTrailReleaseSweeper } from './services/reminder.service';
 
 const app = express();
@@ -165,6 +167,10 @@ const server = app.listen(env.port, () => {
   startReminders();
   // A scheduled trail release lands even if nobody loads the page (D6/D12).
   startTrailReleaseSweeper();
+  // Email and push that hashers asked to receive as a digest (FR-NOT-007).
+  startDigestSweeper();
+  // Reminders and escalation of work waiting on a person (FR-NOT-011/013).
+  startEscalationSweeper();
 });
 
 async function shutdown(signal: string) {
@@ -172,6 +178,8 @@ async function shutdown(signal: string) {
   stopOutbox();
   stopReminders();
   stopTrailReleaseSweeper();
+  stopDigestSweeper();
+  stopEscalationSweeper();
   server.close(() => {
     prisma.$disconnect().finally(() => process.exit(0));
   });

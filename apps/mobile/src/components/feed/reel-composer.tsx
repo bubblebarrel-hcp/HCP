@@ -9,7 +9,7 @@ import { AudienceChips } from '@/components/profile/audience-chips';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
-import { MAX_UPLOAD_BYTES, assetKind, fileSize, uploadAsset } from '@/lib/media';
+import { MAX_UPLOAD_BYTES, VIDEO_PICK_OPTIONS, assetKind, tooBigMessage, uploadAsset } from '@/lib/media';
 import type { Audience, MyMembership, Page, Reel } from '@/lib/types';
 
 // Posting a reel (D41), in the order the API expects: a draft carries the
@@ -29,10 +29,17 @@ export function ReelComposer({
   visible,
   onClose,
   onPosted,
+  fixedRunId,
+  fixedKennelId,
 }: {
   visible: boolean;
   onClose: () => void;
   onPosted: () => void;
+  // Set when posting from a run's page: the reel is shot at that run (D41), so it
+  // answers to the run's visibility, and the kennel is the run's, offered only to
+  // somebody who belongs to it.
+  fixedRunId?: string;
+  fixedKennelId?: string;
 }) {
   const theme = useTheme();
   const router = useRouter();
@@ -42,7 +49,7 @@ export function ReelComposer({
   const [profileOnly, setProfileOnly] = useState(false);
   // Which kennel it was shot with, if any. Null is first-class: a reel shot at
   // home belongs to no kennel, and only a member can post to one.
-  const [kennelId, setKennelId] = useState<string | null>(null);
+  const [kennelId, setKennelId] = useState<string | null>(fixedKennelId ?? null);
   const [kennels, setKennels] = useState<MyMembership[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +75,7 @@ export function ReelComposer({
     setCaption('');
     setAudience('PUBLIC');
     setProfileOnly(false);
-    setKennelId(null);
+    setKennelId(fixedKennelId ?? null);
     setBusy(null);
     setError(null);
   }
@@ -83,7 +90,7 @@ export function ReelComposer({
   function add(picked: ImagePicker.ImagePickerAsset[]) {
     const tooBig = picked.find((a) => a.fileSize !== undefined && a.fileSize > MAX_UPLOAD_BYTES);
     if (tooBig) {
-      setError(`${tooBig.fileName ?? 'That file'} is ${fileSize(tooBig.fileSize ?? 0)}. Each one must be 25MB or smaller.`);
+      setError(tooBigMessage(assetKind(tooBig), tooBig.fileSize ?? 0, tooBig.fileName));
       return;
     }
     setError(null);
@@ -96,6 +103,7 @@ export function ReelComposer({
       allowsMultipleSelection: true,
       selectionLimit: Math.max(1, MAX_ITEMS - assets.length),
       quality: 0.85,
+      ...VIDEO_PICK_OPTIONS,
     });
     if (!result.canceled) add(result.assets);
   }
@@ -110,6 +118,7 @@ export function ReelComposer({
       mediaTypes: ['images', 'videos'],
       videoMaxDuration: CAMERA_SECONDS,
       quality: 0.85,
+      ...VIDEO_PICK_OPTIONS,
     });
     if (!result.canceled) add(result.assets);
   }
@@ -124,7 +133,7 @@ export function ReelComposer({
       setBusy('Creating the reel…');
       const draft = await api<{ reel: Reel }>('/reels', {
         method: 'POST',
-        body: { caption: caption.trim() || null, kennelId, visibility: audience, pinned: profileOnly },
+        body: { caption: caption.trim() || null, kennelId, runId: fixedRunId ?? null, visibility: audience, pinned: profileOnly },
       });
       const reel = draft.reel;
 
@@ -132,7 +141,9 @@ export function ReelComposer({
       // watched in, and MediaLink.createdAt is what carries that.
       for (const [index, asset] of assets.entries()) {
         setBusy(assets.length === 1 ? 'Uploading…' : `Uploading ${index + 1} of ${assets.length}…`);
-        await uploadAsset(asset, { type: 'REEL', id: reel.id }, index);
+        const label = (fraction: number) =>
+          `${assets.length === 1 ? 'Uploading' : `Uploading ${index + 1} of ${assets.length}`}… ${Math.round(fraction * 100)}%`;
+        await uploadAsset(asset, { type: 'REEL', id: reel.id }, index, (fraction) => setBusy(label(fraction)));
       }
 
       setBusy('Posting…');
@@ -266,7 +277,7 @@ export function ReelComposer({
             />
           </View>
 
-          {kennels.length > 0 && (
+          {!fixedKennelId && kennels.length > 0 && (
             <View style={styles.field} accessibilityRole="radiogroup">
               <ThemedText type="smallBold" themeColor="textSecondary">Kennel (optional)</ThemedText>
               <View style={styles.kennels}>

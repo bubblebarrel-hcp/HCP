@@ -239,6 +239,8 @@ export interface KennelRunsPage extends Page<RunSummary> {
 export interface RunParticipant {
   id: string;
   kind: 'hasher' | 'guest';
+  // The hasher's own id, so a list built from another source (the Circle's) can be matched to this one.
+  userId: string | null;
   displayName: string;
   rsvpStatus: RsvpStatus;
   isVisitor: boolean;
@@ -264,6 +266,8 @@ export interface RunViewer {
   isMember: boolean;
   isHare: boolean;
   canSeeNames: boolean;
+  // FR-CIRCLE-014: the Circle has its own audience, narrower than or equal to the run's.
+  canSeeCircle: boolean;
   participation: { id: string; rsvpStatus: RsvpStatus; checkedInAt: string | null; isVisitor: boolean } | null;
   canRespond: boolean;
   rsvpBlockedReason: string | null;
@@ -316,6 +320,8 @@ export interface RunDetail extends Omit<RunSummary, 'goingCount' | 'kennel'> {
     announcements: string | null;
     notes: string | null;
     awards: RunAward[];
+    // FR-CIRCLE-002: who was at the Circle, kept apart from who ran the trail.
+    attendees: { id: string; userId: string | null; name: string; isGuest: boolean }[];
   } | null;
   participants: RunParticipant[] | null;
   timeline: { id: string; type: string; occurredAt: string; actor: string | null; reason: string | null }[] | null;
@@ -490,6 +496,8 @@ export interface NotificationPage extends Page<NotificationItem> {
 // D12 closed the set: no SMS.
 export type DeliveryChannel = 'IN_APP' | 'PUSH' | 'EMAIL';
 
+export type DigestFrequency = 'IMMEDIATE' | 'HOURLY' | 'MORNING' | 'EVENING' | 'WEEKLY';
+
 export interface NotificationPreferences {
   categories: {
     category: NotificationCategory;
@@ -497,6 +505,10 @@ export interface NotificationPreferences {
     push: boolean;
     email: boolean;
     locked: boolean;
+    // FR-NOT-007: how email and push for this category are gathered. A category
+    // about something happening at a time is never held, and says so.
+    digest: DigestFrequency;
+    digestable: boolean;
   }[];
   // Whether a channel can carry anything for this hasher right now. Push needs
   // both the platform switched on and a device of their own (D12).
@@ -954,6 +966,7 @@ export interface KennelSettings {
   visibility: 'PUBLIC' | 'UNLISTED' | 'HIDDEN';
   defaultRunVisibility: 'PUBLIC' | 'MEMBERS_ONLY' | 'INVITE_ONLY';
   downDownsEnabled: boolean;
+  circleVisibility: 'PUBLIC' | 'MEMBERS' | 'ATTENDEES' | 'OFFICERS';
   // D45 follow-up: null means "use the platform default" (hareNudgeDefaults).
   hareNudgeSoonDays: number | null;
   hareNudgeUrgentDays: number | null;

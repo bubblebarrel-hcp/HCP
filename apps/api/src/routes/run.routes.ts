@@ -7,6 +7,7 @@ import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/async';
 import {
   awardSchema,
+  circleAttendanceSchema,
   circleSchema,
   createRunSchema,
   guestSchema,
@@ -56,6 +57,13 @@ router.delete(
 );
 
 router.patch('/runs/:id/circle', requireAuth, validate(circleSchema), asyncHandler(controller.updateCircle));
+router.post(
+  '/runs/:id/circle/attendance',
+  requireAuth,
+  validate(circleAttendanceSchema),
+  asyncHandler(controller.recordCircleAttendance),
+);
+router.delete('/runs/:id/circle/attendance/:attendeeId', requireAuth, asyncHandler(controller.removeCircleAttendee));
 router.post('/runs/:id/circle/awards', requireAuth, validate(awardSchema), asyncHandler(controller.addAward));
 router.delete('/runs/:id/circle/awards/:awardId', requireAuth, asyncHandler(controller.removeAward));
 

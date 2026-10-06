@@ -50,20 +50,53 @@ async function uploadKey(file: File, target: MediaTarget) {
   return `${target.type}:${target.id}:${digest}`;
 }
 
-export async function uploadPhoto(file: File, target: MediaTarget, caption?: string) {
-  return uploadFile(file, target, { kind: 'PHOTO', caption });
+export async function uploadPhoto(file: File, target: MediaTarget, caption?: string, onProgress?: (fraction: number) => void) {
+  return uploadFile(file, target, { kind: 'PHOTO', caption, onProgress });
 }
 
 // A reel's video travels the same road as a photo: an upload target from the
 // API, a PUT straight to storage, then a confirm (D28).
-export async function uploadVideo(file: File, target: MediaTarget, caption?: string) {
-  return uploadFile(file, target, { kind: 'VIDEO', caption });
+export async function uploadVideo(file: File, target: MediaTarget, caption?: string, onProgress?: (fraction: number) => void) {
+  return uploadFile(file, target, { kind: 'VIDEO', caption, onProgress });
+}
+
+
+// The bytes go straight to storage with XMLHttpRequest rather than fetch, because
+// fetch cannot say how much of a body has gone: a 20MB clip on a bad connection is
+// a long minute, and "Uploading 2 of 3…" with nothing moving looks like a hang.
+// `onProgress` gets 0 to 1 for this one file.
+function putWithProgress(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body: Blob,
+  onProgress?: (fraction: number) => void,
+) {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress?.(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(1);
+        resolve();
+      } else {
+        reject(new Error(`Storage rejected the upload (${xhr.status})`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('The upload could not reach storage. Check your connection and try again.'));
+    xhr.ontimeout = () => reject(new Error('The upload timed out. Try again on a better connection.'));
+    xhr.send(body);
+  });
 }
 
 async function uploadFile(
   file: File,
   target: MediaTarget,
-  opts: { kind: 'PHOTO' | 'VIDEO'; caption?: string },
+  opts: { kind: 'PHOTO' | 'VIDEO'; caption?: string; onProgress?: (fraction: number) => void },
 ): Promise<MediaAsset> {
   const asked = await api.post<{ data: { media: MediaAsset; upload: UploadTarget; reused: boolean } }>(
     '/media/uploads',
@@ -79,8 +112,7 @@ async function uploadFile(
   );
   const { media, upload } = asked.data.data;
 
-  const put = await fetch(upload.url, { method: upload.method, headers: upload.headers, body: file });
-  if (!put.ok) throw new Error(`Storage rejected the upload (${put.status})`);
+  await putWithProgress(upload.url, upload.method, upload.headers, file, opts.onProgress);
 
   const measured = opts.kind === 'VIDEO' ? await readVideo(file) : await readDimensions(file);
   const confirmed = await api.post<{ data: { media: MediaAsset } }>(`/media/${media.id}/confirm`, measured);

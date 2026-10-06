@@ -7,6 +7,7 @@ import {
   beerCheckSchema,
   chalkSchema,
   createTrailSchema,
+  importGpxSchema,
   trailActionSchema,
   updateBeerCheckSchema,
   updateTrailSchema,
@@ -24,6 +25,10 @@ router.post('/runs/:runId/trails', requireAuth, validate(createTrailSchema), asy
 router.get('/trails/:id', optionalAuth, asyncHandler(controller.detail));
 router.patch('/trails/:id', requireAuth, validate(updateTrailSchema), asyncHandler(controller.update));
 router.post('/trails/:id/actions/:action', requireAuth, validate(trailActionSchema), asyncHandler(controller.act));
+// FR-TRAIL-002. Import is planning work (hares, editable states); export is as
+// secret as the trail itself and answers 403 until it may be seen.
+router.post('/trails/:id/import/gpx', requireAuth, validate(importGpxSchema), asyncHandler(controller.importGpx));
+router.get('/trails/:id/gpx', optionalAuth, asyncHandler(controller.exportGpx));
 router.get('/trails/:id/revisions', requireAuth, asyncHandler(controller.revisions));
 
 router.post('/trails/:id/waypoints', requireAuth, validate(waypointSchema), asyncHandler(controller.addWaypoint));

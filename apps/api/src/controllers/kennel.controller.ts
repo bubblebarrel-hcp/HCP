@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as kennelService from '../services/kennel.service';
+import * as kennelPhotos from '../services/kennel-photos.service';
 import { ApiError, ok } from '../utils/http';
 
 export async function listPublic(req: Request, res: Response) {
@@ -70,4 +71,9 @@ export async function update(req: Request, res: Response) {
 export async function remove(req: Request, res: Response) {
   if (!req.user) throw ApiError.unauthorized();
   return ok(res, await kennelService.remove(req.user.id, req.params.id));
+}
+
+export async function photos(req: Request, res: Response) {
+  const actor = req.user ? { id: req.user.id, role: req.user.role } : undefined;
+  return ok(res, await kennelPhotos.listPhotos(actor, req.params.slug, req.query as unknown as { page: number; limit: number }));
 }

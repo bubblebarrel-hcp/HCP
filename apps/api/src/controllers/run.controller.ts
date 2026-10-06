@@ -90,6 +90,16 @@ export async function updateCircle(req: Request, res: Response) {
   return respondWithRun(req, res, req.params.id);
 }
 
+export async function recordCircleAttendance(req: Request, res: Response) {
+  await circle.recordAttendance(actor(req), req.params.id, req.body);
+  return respondWithRun(req, res, req.params.id, 201);
+}
+
+export async function removeCircleAttendee(req: Request, res: Response) {
+  await circle.removeAttendee(actor(req), req.params.id, req.params.attendeeId);
+  return respondWithRun(req, res, req.params.id);
+}
+
 export async function addAward(req: Request, res: Response) {
   await circle.addAward(actor(req), req.params.id, req.body);
   return respondWithRun(req, res, req.params.id, 201);

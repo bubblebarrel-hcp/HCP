@@ -1,4 +1,7 @@
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as ImagePicker from 'expo-image-picker';
 import type { ImagePickerAsset } from 'expo-image-picker';
+import { type VideoPlayer, createVideoPlayer } from 'expo-video';
 
 import { api } from '@/lib/api';
 import type { MediaAsset } from '@/lib/types';
@@ -45,6 +48,24 @@ export function assetMimeType(asset: ImagePickerAsset) {
   return (ext && byExt[ext]) || (kind === 'VIDEO' ? 'video/mp4' : 'image/jpeg');
 }
 
+// A phone films far more than a reel needs. On iOS the picker can re-encode the
+// clip as 720p H.264 on the way out of the library, which is what keeps a
+// thirty-second clip under the 25MB cap (D41); the camera is asked for medium
+// quality for the same reason. Android's picker has no such option, so a long
+// clip there can still be over the cap and the error says what to do about it.
+// (Both options are ignored where they do not apply.)
+export const VIDEO_PICK_OPTIONS = {
+  videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
+  videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
+} as const;
+
+export function tooBigMessage(kind: 'PHOTO' | 'VIDEO', bytes: number, name?: string | null) {
+  const what = name ?? `That ${kind === 'VIDEO' ? 'video' : 'photo'}`;
+  return `${what} is ${fileSize(bytes)}. Each one must be 25MB or smaller${
+    kind === 'VIDEO' ? ': try a shorter clip, or trim it in your Photos app first' : ''
+  }.`;
+}
+
 export function fileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
@@ -57,22 +78,72 @@ export type MediaTarget = { type: 'REEL' | 'POST' | 'PROFILE' | 'KENNEL' | 'RUN'
 
 // Same road as the web's uploadPhoto (apps/web/lib/media.ts): ask for a target, PUT the
 // bytes, confirm. Returns the media id and, once confirmed, its public address.
-export async function uploadAssetFull(asset: ImagePickerAsset, target: MediaTarget, slot: number, caption?: string) {
-  return uploadInternal(asset, target, slot, caption ?? null);
+
+// The bytes go straight to storage with XMLHttpRequest rather than fetch, because
+// fetch cannot say how much of a body has gone: a 20MB clip on a bad connection is
+// a long minute, and "Uploading 2 of 3…" with nothing moving looks like a hang.
+// `onProgress` gets 0 to 1 for this one file.
+function putWithProgress(
+  url: string,
+  method: string,
+  headers: Record<string, string>,
+  body: Blob,
+  onProgress?: (fraction: number) => void,
+) {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress?.(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(1);
+        resolve();
+      } else {
+        reject(new Error(`Storage rejected the upload (${xhr.status})`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('The upload could not reach storage. Check your connection and try again.'));
+    xhr.ontimeout = () => reject(new Error('The upload timed out. Try again on a better connection.'));
+    xhr.send(body);
+  });
 }
 
-export async function uploadAsset(asset: ImagePickerAsset, target: MediaTarget, slot: number) {
-  return (await uploadInternal(asset, target, slot, null)).id;
+export async function uploadAssetFull(
+  asset: ImagePickerAsset,
+  target: MediaTarget,
+  slot: number,
+  caption?: string,
+  onProgress?: (fraction: number) => void,
+) {
+  return uploadInternal(asset, target, slot, caption ?? null, onProgress);
 }
 
-async function uploadInternal(asset: ImagePickerAsset, target: MediaTarget, slot: number, caption: string | null) {
+export async function uploadAsset(
+  asset: ImagePickerAsset,
+  target: MediaTarget,
+  slot: number,
+  onProgress?: (fraction: number) => void,
+) {
+  return (await uploadInternal(asset, target, slot, null, onProgress)).id;
+}
+
+async function uploadInternal(
+  asset: ImagePickerAsset,
+  target: MediaTarget,
+  slot: number,
+  caption: string | null,
+  onProgress?: (fraction: number) => void,
+) {
   const kind = assetKind(asset);
   const mimeType = assetMimeType(asset);
 
   // The size the picker reports can be missing; the bytes are the truth.
   const bytes = await (await fetch(asset.uri)).blob();
   if (bytes.size > MAX_UPLOAD_BYTES) {
-    throw new Error(`That ${kind === 'VIDEO' ? 'video' : 'photo'} is ${fileSize(bytes.size)}. Each one must be 25MB or smaller.`);
+    throw new Error(tooBigMessage(kind, bytes.size));
   }
 
   const asked = await api<{ media: { id: string }; upload: UploadTarget }>('/media/uploads', {
@@ -87,12 +158,7 @@ async function uploadInternal(asset: ImagePickerAsset, target: MediaTarget, slot
     },
   });
 
-  const put = await fetch(asked.upload.url, {
-    method: asked.upload.method,
-    headers: asked.upload.headers,
-    body: bytes,
-  });
-  if (!put.ok) throw new Error(`Storage rejected the upload (${put.status})`);
+  await putWithProgress(asked.upload.url, asked.upload.method, asked.upload.headers, bytes, onProgress);
 
   const confirmed = await api<{ media: MediaAsset }>(`/media/${asked.media.id}/confirm`, {
     method: 'POST',
@@ -102,5 +168,65 @@ async function uploadInternal(asset: ImagePickerAsset, target: MediaTarget, slot
       durationSec: kind === 'VIDEO' && asset.duration ? Math.round(asset.duration / 100) / 10 : null,
     },
   });
-  return { id: asked.media.id, url: confirmed?.media?.url ?? null, media: confirmed.media };
+
+  // A clip has no picture of its own, so a frame is grabbed for its cover (D41),
+  // the same as the web does at upload. Worth having, never worth failing an
+  // upload over: a reel without one shows its kennel colour and a play icon.
+  let media = confirmed.media;
+  if (kind === 'VIDEO') {
+    try {
+      const image = await grabPoster(asset.uri, asset.duration ? asset.duration / 1000 : null);
+      if (image) {
+        const posted = await api<{ media: MediaAsset }>(`/media/${asked.media.id}/poster`, {
+          method: 'POST',
+          body: { image },
+        });
+        media = posted.media ?? media;
+      }
+    } catch {
+      // The reel still plays.
+    }
+  }
+  return { id: asked.media.id, url: media?.url ?? null, media };
+}
+
+// The first moment of the clip as a small JPEG data URL. A hair in, not frame
+// zero: a clip that fades up from black would otherwise get a black cover.
+// The player has to have the clip loaded before it can be asked for a frame, and
+// a clip that will not load in a few seconds is not worth holding the post for.
+const POSTER_WIDTH = 480;
+const POSTER_LOAD_MS = 8000;
+
+function loaded(player: VideoPlayer) {
+  if (player.status === 'readyToPlay') return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => {
+      subscription.remove();
+      resolve(false);
+    }, POSTER_LOAD_MS);
+    const subscription = player.addListener('statusChange', ({ status }) => {
+      if (status !== 'readyToPlay' && status !== 'error') return;
+      clearTimeout(timer);
+      subscription.remove();
+      resolve(status === 'readyToPlay');
+    });
+  });
+}
+
+export async function grabPoster(uri: string, durationSec?: number | null): Promise<string | null> {
+  let player: VideoPlayer | null = null;
+  try {
+    player = createVideoPlayer({ uri });
+    if (!(await loaded(player))) return null;
+    const at = durationSec && durationSec > 0 ? Math.min(0.2, durationSec / 2) : 0;
+    const [thumbnail] = await player.generateThumbnailsAsync(at, { maxWidth: POSTER_WIDTH });
+    if (!thumbnail) return null;
+    const image = await ImageManipulator.ImageManipulator.manipulate(thumbnail).renderAsync();
+    const saved = await image.saveAsync({ format: ImageManipulator.SaveFormat.JPEG, compress: 0.75, base64: true });
+    return saved.base64 ? `data:image/jpeg;base64,${saved.base64}` : null;
+  } catch {
+    return null;
+  } finally {
+    player?.release();
+  }
 }

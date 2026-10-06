@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -22,13 +22,18 @@ const schema = z.object({
 type Values = z.infer<typeof schema>;
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, user, loading } = useAuth();
   const router = useRouter();
   const { register, handleSubmit, formState } = useForm<Values>({ resolver: zodResolver(schema) });
   // D31: an unconfirmed address is a specific, fixable state, not a failure to
   // shrug at. Hold the address so we can offer to send the link again.
   const [unverified, setUnverified] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
+
+  // Already signed in: there is nothing to do on this page, so go to the account.
+  useEffect(() => {
+    if (!loading && user) router.replace('/account');
+  }, [loading, user, router]);
 
   const onSubmit = handleSubmit(async (values) => {
     try {

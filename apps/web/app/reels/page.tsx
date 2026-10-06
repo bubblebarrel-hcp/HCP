@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 // Server-rendered, so it reads without JavaScript — the videos play on tap.
 export default async function ReelsPage() {
   // 30 is the API's cap (listReelsQuery); asking for more is a 400, which this
-  // page would quietly read as "no reels". Paging is the follow-up.
+  // page would quietly read as "no reels". The grid pages on from here.
   const data = await publicGet<Page<Reel>>('/reels?limit=30').catch(() => null);
   const reels = data?.items ?? [];
 

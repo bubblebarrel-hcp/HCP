@@ -81,6 +81,7 @@ const schema = z.object({
   visibility: z.enum(['PUBLIC', 'UNLISTED', 'HIDDEN']),
   defaultRunVisibility: z.enum(['PUBLIC', 'MEMBERS_ONLY', 'INVITE_ONLY']),
   downDownsEnabled: z.boolean(),
+  circleVisibility: z.enum(['PUBLIC', 'MEMBERS', 'ATTENDEES', 'OFFICERS']),
   hareNudgeSoonDays: dayCount('Soon', 1),
   hareNudgeUrgentDays: dayCount('Urgent', 0),
 });
@@ -104,6 +105,15 @@ const RUN_VISIBILITY = [
   { value: 'INVITE_ONLY', label: 'Invite only', hint: 'Only hashers you invite see it.' },
 ];
 
+// FR-CIRCLE-014. The Circle can only be as open as the run it belongs to: a
+// public Circle on a members-only run is still members-only.
+const CIRCLE_VISIBILITY = [
+  { value: 'PUBLIC', label: 'Anyone who can see the run', hint: 'Songs, awards and who was there are open to every reader of the run.' },
+  { value: 'MEMBERS', label: 'Members', hint: 'Your members, hares and officers. This is the default.' },
+  { value: 'ATTENDEES', label: 'Attendees', hint: 'Only people recorded as at the Circle, plus hares and officers.' },
+  { value: 'OFFICERS', label: 'Officers', hint: "Only the run's hares and officers with run permissions." },
+];
+
 function toForm(s: KennelSettings): Values {
   return {
     name: s.name,
@@ -123,6 +133,7 @@ function toForm(s: KennelSettings): Values {
     visibility: s.visibility,
     defaultRunVisibility: s.defaultRunVisibility,
     downDownsEnabled: s.downDownsEnabled,
+    circleVisibility: s.circleVisibility,
     hareNudgeSoonDays: s.hareNudgeSoonDays === null ? '' : String(s.hareNudgeSoonDays),
     hareNudgeUrgentDays: s.hareNudgeUrgentDays === null ? '' : String(s.hareNudgeUrgentDays),
   };
@@ -384,7 +395,7 @@ export default function KennelSettingsPage({ params }: { params: Promise<{ slug:
         <Card className={bleedCard} data-testid="settings-circle">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Circle</CardTitle>
-            <CardDescription>FR-CIRCLE-006: down-downs are on by default; some kennels choose not to run them.</CardDescription>
+            <CardDescription>FR-CIRCLE-006: down-downs are on by default; some kennels choose not to run them. FR-CIRCLE-014: the Circle record can also be kept narrower than the run.</CardDescription>
           </CardHeader>
           <CardContent>
             <label className="flex min-h-11 items-center gap-3 text-sm">
@@ -396,6 +407,17 @@ export default function KennelSettingsPage({ params }: { params: Promise<{ slug:
               />
               Allow down-downs to be recorded at the Circle
             </label>
+            <div className="mt-3">
+              <Field label="Who can read the Circle record" htmlFor="circleVisibility">
+                <Select id="circleVisibility" data-testid="settings-circle-visibility" {...register('circleVisibility')}>
+                  {CIRCLE_VISIBILITY.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label} — {o.hint}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
           </CardContent>
         </Card>
 

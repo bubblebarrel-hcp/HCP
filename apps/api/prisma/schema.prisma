@@ -102,6 +102,16 @@ enum VerificationLevel {
   PLATFORM_VERIFIED
 }
 
+// FR-CIRCLE-014: who may read a run's Circle record. It can only narrow what the
+// run already allows, never widen it (D57's rule), and MEMBERS is how the Circle
+// has always behaved (D23), so it is the default.
+enum CircleVisibility {
+  PUBLIC
+  MEMBERS
+  ATTENDEES
+  OFFICERS
+}
+
 enum KennelVisibility {
   PUBLIC
   UNLISTED
@@ -586,6 +596,21 @@ enum DeliveryStatus {
   PENDING
   SENT
   FAILED
+  // FR-NOT-007: the notification waits for its owner's next digest. Distinct from
+  // PENDING, which is the instant between creating a delivery and sending it.
+  HELD
+  // Never sent, on purpose: it was read in the app before its digest went out.
+  SKIPPED
+}
+
+// FR-NOT-007. How often a hasher wants non-urgent email and push for a category
+// gathered into one message. IMMEDIATE is the absence of a choice.
+enum DigestFrequency {
+  IMMEDIATE
+  HOURLY
+  MORNING
+  EVENING
+  WEEKLY
 }
 
 enum DevicePlatform {
@@ -659,12 +684,12 @@ enum SyncStatus {
 
 // Identity (Ch.23). Authentication lives here too: one account per person.
 model User {
-  id                String            @id @default(uuid()) @db.Uuid
-  email             String            @unique
+  id                String        @id @default(uuid()) @db.Uuid
+  email             String        @unique
   passwordHash      String
-  platformRole      PlatformRole      @default(USER)
-  status            AccountStatus     @default(ACTIVE)
-  trustLevel        TrustLevel        @default(UNVERIFIED)
+  platformRole      PlatformRole  @default(USER)
+  status            AccountStatus @default(ACTIVE)
+  trustLevel        TrustLevel    @default(UNVERIFIED)
   emailVerifiedAt   DateTime?
   // Public identity (D5/D11): shown as hashHandle, or "Just <firstName>" when
   // the hasher has not been named yet.
@@ -673,7 +698,7 @@ model User {
   // unique, so it cannot be a mention; this is lowercase a-z 0-9 _ . and unique.
   // Null only once an account is deleted. The hash handle stays the name that is
   // displayed (D11); the username is how somebody is addressed.
-  username          String?           @unique
+  username          String?       @unique
   avatarUrl         String?
   // Which part of the picture the round crop shows, a CSS object-position pair
   // ("50% 30%"), like bannerPosition. Null is centred.
@@ -687,11 +712,11 @@ model User {
   bio               String?
   // Who sees what this hasher has made: posts, photos and reels (D57). A reel
   // can narrow this further for itself; it can never widen it.
-  profileVisibility Audience          @default(PUBLIC)
+  profileVisibility Audience      @default(PUBLIC)
   // Whether a milestone (100th run) may appear in the feed as a card (D60).
-  shareMilestones   Boolean           @default(true)
-  homeKennelId      String?           @db.Uuid
-  preferredLanguage String            @default("en")
+  shareMilestones   Boolean       @default(true)
+  homeKennelId      String?       @db.Uuid
+  preferredLanguage String        @default("en")
   timeZone          String?
   termsAcceptedAt   DateTime
   lastLoginAt       DateTime?
@@ -699,72 +724,75 @@ model User {
   // Set when the hasher deletes their account (D57): the person is gone, the
   // row stays so runs, reports and capsules keep their history.
   deletedAt         DateTime?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   homeKennel Kennel? @relation("HomeKennel", fields: [homeKennelId], references: [id])
 
-  refreshTokens           RefreshToken[]
-  passwordResetTokens     PasswordResetToken[]
-  emailVerificationTokens EmailVerificationToken[]
-  person                  PersonProfile?
-  hashNames               HashName[]
-  passport                HashPassport?
-  claimedGuests           GuestProfile[]
-  memberships             Membership[]
-  affiliations            OrganizationAffiliation[]
-  officerAppointments     OfficerAppointment[]
-  roleAssignments         RoleAssignment[]
-  delegationsGranted      Delegation[]              @relation("DelegationDelegator")
-  delegationsReceived     Delegation[]              @relation("DelegationDelegate")
-  committeeMemberships    CommitteeMember[]
-  motionsProposed         Motion[]
-  votes                   Vote[]
-  electionCandidacies     ElectionCandidate[]
-  electionVoterRecords    ElectionVoterRecord[]
-  policyRevisions         PolicyRevision[]
-  registrations           Registration[]
-  volunteerAssignments    VolunteerAssignment[]
-  runHares                RunHare[]
-  reels                   Reel[]                    @relation("ReelAuthor")
-  hareOffers              HareOffer[]
-  participations          Participation[]
-  awardsReceived          Award[]
-  trailHares              TrailHare[]
-  chalkPlaced             DigitalChalkSymbol[]
-  trailRevisions          TrailRevision[]
-  storyAssets             StoryAsset[]
-  reportsAsScribe         TrailReport[]
-  reportContributions     TrailReportContributor[]
-  reportRevisions         ReportRevision[]
-  reportComments          ReportReviewComment[]
-  aiSuggestions           AiSuggestion[]
-  supplementalArtifacts   SupplementalArtifact[]
-  mediaUploads            MediaAsset[]
-  announcements           Announcement[]
-  channelMemberships      ChannelMember[]
-  messages                Message[]
-  notifications           Notification[]
-  notificationPreferences NotificationPreference[]
-  pushDevices             PushDevice[]
-  timelineEntries         IdentityTimelineEntry[]
-  syncOperations          SyncOperation[]
-  follows                 Follow[]                  @relation("Follower")
-  likes                   ContentLike[]
-  comments                ContentComment[]          @relation("CommentAuthor")
-  commentsRemoved         ContentComment[]          @relation("CommentRemover")
-  reshares                ContentReshare[]          @relation("Resharer")
-  bookmarks               ContentBookmark[]
-  contentViews            ContentView[]
-  posts                   Post[]                    @relation("PostAuthor")
-  postsRemoved            Post[]                    @relation("PostRemover")
-  mentionedIn             ContentMention[]          @relation("Mentioned")
-  blocksMade              UserBlock[]               @relation("Blocker")
-  blocksReceived          UserBlock[]               @relation("Blocked")
-  pollVotes               PollVote[]
-  photoTagsOfMe           PhotoTag[]                @relation("PhotoTagged")
-  photoTagsMade           PhotoTag[]                @relation("PhotoTagger")
-  reportsFiled            ContentReport[]           @relation("ReportReporter")
+  refreshTokens                 RefreshToken[]
+  passwordResetTokens           PasswordResetToken[]
+  emailVerificationTokens       EmailVerificationToken[]
+  person                        PersonProfile?
+  hashNames                     HashName[]
+  passport                      HashPassport?
+  claimedGuests                 GuestProfile[]
+  memberships                   Membership[]
+  affiliations                  OrganizationAffiliation[]
+  officerAppointments           OfficerAppointment[]
+  roleAssignments               RoleAssignment[]
+  delegationsGranted            Delegation[]                   @relation("DelegationDelegator")
+  delegationsReceived           Delegation[]                   @relation("DelegationDelegate")
+  committeeMemberships          CommitteeMember[]
+  motionsProposed               Motion[]
+  votes                         Vote[]
+  electionCandidacies           ElectionCandidate[]
+  electionVoterRecords          ElectionVoterRecord[]
+  policyRevisions               PolicyRevision[]
+  registrations                 Registration[]
+  volunteerAssignments          VolunteerAssignment[]
+  runHares                      RunHare[]
+  reels                         Reel[]                         @relation("ReelAuthor")
+  hareOffers                    HareOffer[]
+  participations                Participation[]
+  awardsReceived                Award[]
+  circleAttendances             CircleAttendee[]               @relation("CircleAttendeeUser")
+  circleAttendanceRecorded      CircleAttendee[]               @relation("CircleAttendeeRecorder")
+  trailHares                    TrailHare[]
+  chalkPlaced                   DigitalChalkSymbol[]
+  trailRevisions                TrailRevision[]
+  storyAssets                   StoryAsset[]
+  reportsAsScribe               TrailReport[]
+  reportContributions           TrailReportContributor[]
+  reportRevisions               ReportRevision[]
+  reportComments                ReportReviewComment[]
+  aiSuggestions                 AiSuggestion[]
+  supplementalArtifacts         SupplementalArtifact[]
+  mediaUploads                  MediaAsset[]
+  announcements                 Announcement[]
+  channelMemberships            ChannelMember[]
+  messages                      Message[]
+  notifications                 Notification[]
+  notificationPreferences       NotificationPreference[]
+  notificationDigestPreferences NotificationDigestPreference[]
+  pushDevices                   PushDevice[]
+  timelineEntries               IdentityTimelineEntry[]
+  syncOperations                SyncOperation[]
+  follows                       Follow[]                       @relation("Follower")
+  likes                         ContentLike[]
+  comments                      ContentComment[]               @relation("CommentAuthor")
+  commentsRemoved               ContentComment[]               @relation("CommentRemover")
+  reshares                      ContentReshare[]               @relation("Resharer")
+  bookmarks                     ContentBookmark[]
+  contentViews                  ContentView[]
+  posts                         Post[]                         @relation("PostAuthor")
+  postsRemoved                  Post[]                         @relation("PostRemover")
+  mentionedIn                   ContentMention[]               @relation("Mentioned")
+  blocksMade                    UserBlock[]                    @relation("Blocker")
+  blocksReceived                UserBlock[]                    @relation("Blocked")
+  pollVotes                     PollVote[]
+  photoTagsOfMe                 PhotoTag[]                     @relation("PhotoTagged")
+  photoTagsMade                 PhotoTag[]                     @relation("PhotoTagger")
+  reportsFiled                  ContentReport[]                @relation("ReportReporter")
 
   @@index([hashHandle])
   @@index([homeKennelId])
@@ -819,8 +847,8 @@ model EmailVerificationToken {
 // why dateOfBirth is String, not DateTime: Postgres cannot sort or filter
 // ciphertext, which is the point — nothing but the application can read it.
 model PersonProfile {
-  id                           String    @id @default(uuid()) @db.Uuid
-  userId                       String    @unique @db.Uuid
+  id                           String   @id @default(uuid()) @db.Uuid
+  userId                       String   @unique @db.Uuid
   firstName                    String
   middleName                   String?
   lastName                     String
@@ -838,23 +866,23 @@ model PersonProfile {
   emergencyContactPhone        String
   emergencyContactRelationship String
   medicalNotes                 String?
-  createdAt                    DateTime  @default(now())
-  updatedAt                    DateTime  @updatedAt
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // FR-ID-003: one current primary Hash name plus history, nicknames, aliases.
 model HashName {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @db.Uuid
-  name        String
-  isPrimary   Boolean   @default(false)
-  isAlias     Boolean   @default(false)
-  kennelId    String?   @db.Uuid
-  bestowedAt  DateTime?
-  endedAt     DateTime?
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  name       String
+  isPrimary  Boolean   @default(false)
+  isAlias    Boolean   @default(false)
+  kennelId   String?   @db.Uuid
+  bestowedAt DateTime?
+  endedAt    DateTime?
+  createdAt  DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -875,33 +903,34 @@ model GuestProfile {
   claimedAt       DateTime?
   createdAt       DateTime  @default(now())
 
-  claimedBy      User?           @relation(fields: [claimedByUserId], references: [id])
-  participations Participation[]
-  registrations  Registration[]
-  awards         Award[]
-  notifications  Notification[]
+  claimedBy         User?            @relation(fields: [claimedByUserId], references: [id])
+  participations    Participation[]
+  registrations     Registration[]
+  awards            Award[]
+  circleAttendances CircleAttendee[]
+  notifications     Notification[]
 
   @@index([email])
 }
 
 model HashPassport {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @unique @db.Uuid
-  shareToken String   @unique @default(uuid())
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @unique @db.Uuid
+  shareToken      String    @unique @default(uuid())
   // LifetimeStatistics (FR-PASSPORT-005) — derived by the Passport consumer,
   // never authored directly.
-  runsAttended    Int      @default(0)
-  trailsLaid      Int      @default(0)
-  beerChecks      Int      @default(0)
-  reportsWritten  Int      @default(0)
-  photosUploaded  Int      @default(0)
-  videosUploaded  Int      @default(0)
-  countriesHashed Int      @default(0)
-  kennelsJoined   Int      @default(0)
-  distanceMeters  Int      @default(0)
+  runsAttended    Int       @default(0)
+  trailsLaid      Int       @default(0)
+  beerChecks      Int       @default(0)
+  reportsWritten  Int       @default(0)
+  photosUploaded  Int       @default(0)
+  videosUploaded  Int       @default(0)
+  countriesHashed Int       @default(0)
+  kennelsJoined   Int       @default(0)
+  distanceMeters  Int       @default(0)
   statsUpdatedAt  DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   stamps     PassportStamp[]
@@ -981,57 +1010,59 @@ model IdentityTimelineEntry {
 // ───────────────────── Part B — Kennel & Governance ─────────────────────
 
 model Kennel {
-  id                   String              @id @default(uuid()) @db.Uuid
-  name                 String
-  shortName            String
-  slug                 String              @unique
-  orgType              OrganizationType    @default(LOCAL_KENNEL)
-  parentId             String?             @db.Uuid
-  country              String
-  stateProvince        String
-  city                 String
-  timeZone             String
-  latitude             Float?
-  longitude            Float?
-  description          String
-  logoUrl              String?
-  bannerUrl            String?
+  id                             String              @id @default(uuid()) @db.Uuid
+  name                           String
+  shortName                      String
+  slug                           String              @unique
+  orgType                        OrganizationType    @default(LOCAL_KENNEL)
+  parentId                       String?             @db.Uuid
+  country                        String
+  stateProvince                  String
+  city                           String
+  timeZone                       String
+  latitude                       Float?
+  longitude                      Float?
+  description                    String
+  logoUrl                        String?
+  bannerUrl                      String?
   // Which part of the banner the crop shows, as a CSS background-position pair
   // ("50% 30%"). Null means centred, which is what every banner uploaded before
   // repositioning existed gets (D37).
-  bannerPosition       String?
-  primaryColor         String?
-  secondaryColor       String?
-  motto                String?
-  landingMessage       String?
-  meetingDay           String?
-  foundedOn            DateTime?           @db.Date
-  status               KennelStatus        @default(PENDING_VERIFICATION)
-  verificationLevel    VerificationLevel   @default(PENDING)
-  verifiedAt           DateTime?
-  visibility           KennelVisibility    @default(PUBLIC)
-  defaultRunVisibility RunVisibility       @default(MEMBERS_ONLY)
-  mediaModerationMode  MediaModerationMode @default(IMMEDIATE)
+  bannerPosition                 String?
+  primaryColor                   String?
+  secondaryColor                 String?
+  motto                          String?
+  landingMessage                 String?
+  meetingDay                     String?
+  foundedOn                      DateTime?           @db.Date
+  status                         KennelStatus        @default(PENDING_VERIFICATION)
+  verificationLevel              VerificationLevel   @default(PENDING)
+  verifiedAt                     DateTime?
+  visibility                     KennelVisibility    @default(PUBLIC)
+  defaultRunVisibility           RunVisibility       @default(MEMBERS_ONLY)
+  mediaModerationMode            MediaModerationMode @default(IMMEDIATE)
   // Ch.22 B.3: offline provisional trail release is opt-in per kennel.
-  allowOfflineProvisionalRelease Boolean   @default(false)
+  allowOfflineProvisionalRelease Boolean             @default(false)
   // FR-CIRCLE-006: "Kennels may disable this feature" (down-downs). Awards in
   // general stay on; this only blocks isDownDown: true on a new one.
-  downDownsEnabled     Boolean             @default(true)
+  downDownsEnabled               Boolean             @default(true)
+  // FR-CIRCLE-014: who may read the Circle record of this kennel's runs.
+  circleVisibility               CircleVisibility    @default(MEMBERS)
   // D45 follow-up: null means "use the platform default"
   // (settings.service.ts#SETTING_DEFAULTS). A kennel that hashes weekly wants
   // to hear about an un-hared date sooner than one that meets monthly.
-  hareNudgeSoonDays    Int?
-  hareNudgeUrgentDays  Int?
-  hashDna              Json?
-  createdById          String?             @db.Uuid
-  archivedAt           DateTime?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  hareNudgeSoonDays              Int?
+  hareNudgeUrgentDays            Int?
+  hashDna                        Json?
+  createdById                    String?             @db.Uuid
+  archivedAt                     DateTime?
+  createdAt                      DateTime            @default(now())
+  updatedAt                      DateTime            @updatedAt
 
   parent   Kennel?  @relation("KennelHierarchy", fields: [parentId], references: [id])
   children Kennel[] @relation("KennelHierarchy")
 
-  homeKennelOf        User[]                    @relation("HomeKennel")
+  homeKennelOf        User[]                     @relation("HomeKennel")
   memberships         Membership[]
   invitations         MembershipInvitation[]
   affiliations        OrganizationAffiliation[]
@@ -1182,7 +1213,7 @@ model OfficerPosition {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  kennel       Kennel               @relation(fields: [kennelId], references: [id])
+  kennel       Kennel                @relation(fields: [kennelId], references: [id])
   appointments OfficerAppointment[]
   candidates   ElectionCandidate[]
   voterRecords ElectionVoterRecord[]
@@ -1193,20 +1224,20 @@ model OfficerPosition {
 
 // Ch.22 A.10 — historical record of one person holding one position
 model OfficerAppointment {
-  id           String               @id @default(uuid()) @db.Uuid
-  kennelId     String               @db.Uuid
-  positionId   String               @db.Uuid
-  userId       String               @db.Uuid
-  membershipId String?              @db.Uuid
-  status       RoleAssignmentStatus @default(ACTIVE)
-  method       AppointmentMethod
-  electionId   String?              @db.Uuid
-  startDate    DateTime
-  endDate      DateTime?
-  endedReason  String?
-  appointedById String?             @db.Uuid
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  id            String               @id @default(uuid()) @db.Uuid
+  kennelId      String               @db.Uuid
+  positionId    String               @db.Uuid
+  userId        String               @db.Uuid
+  membershipId  String?              @db.Uuid
+  status        RoleAssignmentStatus @default(ACTIVE)
+  method        AppointmentMethod
+  electionId    String?              @db.Uuid
+  startDate     DateTime
+  endDate       DateTime?
+  endedReason   String?
+  appointedById String?              @db.Uuid
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
 
   kennel      Kennel          @relation(fields: [kennelId], references: [id])
   position    OfficerPosition @relation(fields: [positionId], references: [id])
@@ -1599,17 +1630,17 @@ model EventSponsor {
 }
 
 model VolunteerAssignment {
-  id           String          @id @default(uuid()) @db.Uuid
-  userId       String          @db.Uuid
-  eventId      String?         @db.Uuid
-  runId        String?         @db.Uuid
-  role         String // CHECK_IN, BEER_STOP, SAFETY, SWEEP, CLEANUP, MEDIA, ...
-  status       VolunteerStatus @default(INVITED)
+  id            String          @id @default(uuid()) @db.Uuid
+  userId        String          @db.Uuid
+  eventId       String?         @db.Uuid
+  runId         String?         @db.Uuid
+  role          String // CHECK_IN, BEER_STOP, SAFETY, SWEEP, CLEANUP, MEDIA, ...
+  status        VolunteerStatus @default(INVITED)
   shiftStartsAt DateTime?
-  shiftEndsAt  DateTime?
-  assignedById String?         @db.Uuid
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  shiftEndsAt   DateTime?
+  assignedById  String?         @db.Uuid
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   user  User   @relation(fields: [userId], references: [id])
   event Event? @relation(fields: [eventId], references: [id])
@@ -1622,51 +1653,51 @@ model VolunteerAssignment {
 
 // Run Session (Ch.23 Part C)
 model Run {
-  id               String        @id @default(uuid()) @db.Uuid
-  kennelId         String        @db.Uuid
-  eventId          String?       @db.Uuid
-  runNumber        Int
-  title            String
-  description      String?
-  theme            String?
+  id                String        @id @default(uuid()) @db.Uuid
+  kennelId          String        @db.Uuid
+  eventId           String?       @db.Uuid
+  runNumber         Int
+  title             String
+  description       String?
+  theme             String?
   // The flyer a kennel puts out for the run — the thing that lands in WhatsApp
   // today. Optional: the details below say the same thing in words (D43).
-  posterUrl        String?
-  runType          RunType       @default(REGULAR)
-  status           RunStatus     @default(DRAFT)
+  posterUrl         String?
+  runType           RunType       @default(REGULAR)
+  status            RunStatus     @default(DRAFT)
   // D3/D13: defaults from Kennel.defaultRunVisibility; changed only by the
   // kennel admin or a hare holding a delegation.
-  visibility       RunVisibility
-  startsAt         DateTime
-  timeZone         String
-  meetingPointName String?
-  meetingAddress   String?
-  meetingLatitude  Float?
-  meetingLongitude Float?
-  country          String
-  city             String
+  visibility        RunVisibility
+  startsAt          DateTime
+  timeZone          String
+  meetingPointName  String?
+  meetingAddress    String?
+  meetingLatitude   Float?
+  meetingLongitude  Float?
+  country           String
+  city              String
   // D1: no waitlist. When set and reached, joining is rejected.
-  capacity         Int?
-  allowGuests      Boolean       @default(true)
-  allowVisitors    Boolean       @default(true)
-  hashCash         String?
-  isPaused         Boolean       @default(false)
-  circleSkipReason String?
+  capacity          Int?
+  allowGuests       Boolean       @default(true)
+  allowVisitors     Boolean       @default(true)
+  hashCash          String?
+  isPaused          Boolean       @default(false)
+  circleSkipReason  String?
   // D22: cancellation is terminal and keeps RSVPs for the record
-  cancelReason     String?
-  cancelledById    String?       @db.Uuid
-  cancelledAt      DateTime?
-  trailReleasedAt  DateTime?
-  circleSkippedById String?      @db.Uuid
-  weather          Json?
-  createdById      String        @db.Uuid
-  scheduledAt      DateTime?
-  checkInOpenedAt  DateTime?
-  startedAt        DateTime?
-  endedAt          DateTime?
-  archivedAt       DateTime?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  cancelReason      String?
+  cancelledById     String?       @db.Uuid
+  cancelledAt       DateTime?
+  trailReleasedAt   DateTime?
+  circleSkippedById String?       @db.Uuid
+  weather           Json?
+  createdById       String        @db.Uuid
+  scheduledAt       DateTime?
+  checkInOpenedAt   DateTime?
+  startedAt         DateTime?
+  endedAt           DateTime?
+  archivedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   kennel          Kennel                @relation(fields: [kennelId], references: [id])
   event           Event?                @relation(fields: [eventId], references: [id])
@@ -1698,19 +1729,19 @@ model Run {
 // not haring: an officer still says yes, because a trail is the kennel's name
 // on the line.
 model HareOffer {
-  id         String          @id @default(uuid()) @db.Uuid
-  runId      String          @db.Uuid
-  userId     String          @db.Uuid
+  id          String          @id @default(uuid()) @db.Uuid
+  runId       String          @db.Uuid
+  userId      String          @db.Uuid
   // What they said when they offered, and whether they want to lead.
-  message    String?
-  wantsLead  Boolean         @default(false)
-  status     HareOfferStatus @default(OFFERED)
-  decidedById String?        @db.Uuid
-  decidedAt  DateTime?
+  message     String?
+  wantsLead   Boolean         @default(false)
+  status      HareOfferStatus @default(OFFERED)
+  decidedById String?         @db.Uuid
+  decidedAt   DateTime?
   // Why an offer was turned down, or why it was withdrawn.
-  reason     String?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  reason      String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   run  Run  @relation(fields: [runId], references: [id])
   user User @relation(fields: [userId], references: [id])
@@ -1783,8 +1814,30 @@ model Circle {
   notes         String?
   createdAt     DateTime  @default(now())
 
-  run    Run     @relation(fields: [runId], references: [id])
-  awards Award[]
+  run       Run              @relation(fields: [runId], references: [id])
+  awards    Award[]
+  attendees CircleAttendee[]
+}
+
+// FR-CIRCLE-002: who was present at the Circle. Kept apart from Participation on
+// purpose: someone can run the trail and leave before the Circle, or arrive for
+// the Circle alone, and both records are preserved as they happened.
+model CircleAttendee {
+  id           String   @id @default(uuid()) @db.Uuid
+  circleId     String   @db.Uuid
+  userId       String?  @db.Uuid
+  guestId      String?  @db.Uuid
+  recordedById String?  @db.Uuid
+  createdAt    DateTime @default(now())
+
+  circle     Circle        @relation(fields: [circleId], references: [id])
+  user       User?         @relation("CircleAttendeeUser", fields: [userId], references: [id])
+  guest      GuestProfile? @relation(fields: [guestId], references: [id])
+  recordedBy User?         @relation("CircleAttendeeRecorder", fields: [recordedById], references: [id])
+
+  @@unique([circleId, userId])
+  @@unique([circleId, guestId])
+  @@index([userId])
 }
 
 model Award {
@@ -1809,11 +1862,11 @@ model Award {
 // ───────────────────── Part D — Trails ─────────────────────
 
 model Trail {
-  id                   String       @id @default(uuid()) @db.Uuid
-  runId                String       @db.Uuid
+  id                   String      @id @default(uuid()) @db.Uuid
+  runId                String      @db.Uuid
   name                 String
-  style                TrailStyle   @default(DEAD_HARE)
-  status               TrailStatus  @default(IDEA)
+  style                TrailStyle  @default(DEAD_HARE)
+  status               TrailStatus @default(IDEA)
   estimatedDistanceM   Int?
   estimatedDurationMin Int?
   terrain              String?
@@ -1825,7 +1878,7 @@ model Trail {
   finishLatitude       Float?
   finishLongitude      Float?
   notes                String?
-  releaseMode          ReleaseMode  @default(AT_RUN_START)
+  releaseMode          ReleaseMode @default(AT_RUN_START)
   releaseAt            DateTime?
   geofenceLatitude     Float?
   geofenceLongitude    Float?
@@ -1834,21 +1887,21 @@ model Trail {
   // handed out once the release condition is met.
   payloadKeyEncrypted  String?
   releasedAt           DateTime?
-  releasedById         String?      @db.Uuid
+  releasedById         String?     @db.Uuid
   lockedAt             DateTime?
-  lockedById           String?      @db.Uuid
+  lockedById           String?     @db.Uuid
   safetyReviewedAt     DateTime?
-  safetyReviewedById   String?      @db.Uuid
+  safetyReviewedById   String?     @db.Uuid
   trailDna             Json?
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 
-  run         Run                  @relation(fields: [runId], references: [id])
-  hares       TrailHare[]
-  waypoints   Waypoint[]
-  beerChecks  BeerCheck[]
-  chalk       DigitalChalkSymbol[]
-  revisions   TrailRevision[]
+  run        Run                  @relation(fields: [runId], references: [id])
+  hares      TrailHare[]
+  waypoints  Waypoint[]
+  beerChecks BeerCheck[]
+  chalk      DigitalChalkSymbol[]
+  revisions  TrailRevision[]
 
   // BR-TRAIL-001
   @@unique([runId, name])
@@ -1963,18 +2016,18 @@ model StoryAsset {
 
 // Ch.22 A.5 — exactly one official report per run (BR-SCRIBE-002)
 model TrailReport {
-  id                String            @id @default(uuid()) @db.Uuid
-  runId             String            @unique @db.Uuid
-  status            TrailReportStatus @default(DRAFT)
-  officialScribeId  String            @db.Uuid
-  title             String
-  body              String            @default("")
+  id               String            @id @default(uuid()) @db.Uuid
+  runId            String            @unique @db.Uuid
+  status           TrailReportStatus @default(DRAFT)
+  officialScribeId String            @db.Uuid
+  title            String
+  body             String            @default("")
   // true until a human has accepted every AI suggestion (Ch.22 A.5)
-  aiAssisted        Boolean           @default(false)
-  publishedAt       DateTime?
-  publishedById     String?           @db.Uuid
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  aiAssisted       Boolean           @default(false)
+  publishedAt      DateTime?
+  publishedById    String?           @db.Uuid
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   run            Run                      @relation(fields: [runId], references: [id])
   officialScribe User                     @relation(fields: [officialScribeId], references: [id])
@@ -2170,38 +2223,38 @@ model Gallery {
 // A hasher's short video: at a run, at a meeting, or holding a beer at home
 // (D41). Attribution is permanent, like every other piece of media.
 model Reel {
-  id         String         @id @default(uuid()) @db.Uuid
-  authorId   String         @db.Uuid
+  id            String     @id @default(uuid()) @db.Uuid
+  authorId      String     @db.Uuid
   // Optional context. A reel needs none of these — "just at home" is a reel too.
-  kennelId   String?        @db.Uuid
-  runId      String?        @db.Uuid
-  eventId    String?        @db.Uuid
-  caption    String?
-  status     ReelStatus     @default(DRAFT)
-  visibility Audience       @default(PUBLIC)
+  kennelId      String?    @db.Uuid
+  runId         String?    @db.Uuid
+  eventId       String?    @db.Uuid
+  caption       String?
+  status        ReelStatus @default(DRAFT)
+  visibility    Audience   @default(PUBLIC)
   // The video itself, linked through MediaLink like all other media.
-  mediaId    String?        @db.Uuid
-  publishedAt DateTime?
-  archivedAt  DateTime?
+  mediaId       String?    @db.Uuid
+  publishedAt   DateTime?
+  archivedAt    DateTime?
   // A reel is live for 24 hours from publishedAt and then leaves every surface
   // (D58). Pinning is the exception: a pinned reel never expires, and it is shown
   // only on its author's profile, never in the rail, a feed or a kennel page.
   // Publishing a reel "profile only" is just publishing it already pinned.
-  pinnedAt    DateTime?
+  pinnedAt      DateTime?
   // Set when the author deletes it (D58); the row stays (append-only history).
-  deletedAt   DateTime?
+  deletedAt     DateTime?
   // Set when a moderator takes it down; the row stays (append-only history).
-  removedAt   DateTime?
-  removedById String?       @db.Uuid
+  removedAt     DateTime?
+  removedById   String?    @db.Uuid
   removedReason String?
-  viewCount  Int            @default(0)
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  viewCount     Int        @default(0)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
-  author User    @relation("ReelAuthor", fields: [authorId], references: [id])
-  kennel Kennel? @relation(fields: [kennelId], references: [id])
-  run    Run?    @relation(fields: [runId], references: [id])
-  event  Event?  @relation(fields: [eventId], references: [id])
+  author User        @relation("ReelAuthor", fields: [authorId], references: [id])
+  kennel Kennel?     @relation(fields: [kennelId], references: [id])
+  run    Run?        @relation(fields: [runId], references: [id])
+  event  Event?      @relation(fields: [eventId], references: [id])
   media  MediaAsset? @relation(fields: [mediaId], references: [id])
 
   @@index([status, publishedAt])
@@ -2303,14 +2356,50 @@ model Notification {
   deliveredAt      DateTime?
   readAt           DateTime?
   expiresAt        DateTime?
+  // FR-NOT-005: related notices fold into one. Notices sharing a key, for one
+  // recipient and still unread, are one row whose count grows.
+  groupKey         String?
+  groupCount       Int                  @default(1)
   createdAt        DateTime             @default(now())
 
-  recipientUser  User?                  @relation(fields: [recipientUserId], references: [id])
-  recipientGuest GuestProfile?          @relation(fields: [recipientGuestId], references: [id])
+  recipientUser  User?                     @relation(fields: [recipientUserId], references: [id])
+  recipientGuest GuestProfile?             @relation(fields: [recipientGuestId], references: [id])
   deliveries     NotificationDelivery[]
+  groupMembers   NotificationGroupMember[]
 
   @@index([recipientUserId, status, createdAt])
   @@index([domainEventId])
+  @@index([recipientUserId, groupKey])
+}
+
+// What a grouped notification stands for. The unique event id is what keeps a
+// replayed event (Ch.24 is at-least-once) from being counted twice.
+model NotificationGroupMember {
+  id             String   @id @default(uuid()) @db.Uuid
+  notificationId String   @db.Uuid
+  domainEventId  String   @unique @db.Uuid
+  actorId        String?  @db.Uuid
+  createdAt      DateTime @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@index([notificationId])
+}
+
+// FR-NOT-007: one choice per category, applying to email and push together.
+// The in-app inbox is always immediate: it is already a list, and a badge wakes
+// nobody. No row means IMMEDIATE.
+model NotificationDigestPreference {
+  id        String               @id @default(uuid()) @db.Uuid
+  userId    String               @db.Uuid
+  category  NotificationCategory
+  frequency DigestFrequency
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
 }
 
 model NotificationDelivery {
@@ -2555,11 +2644,11 @@ model ContentStats {
 // A like is a toggle like a follow: unliking sets `unlikedAt`, re-liking clears
 // it, and the pair stays unique.
 model ContentLike {
-  id          String      @id @default(uuid()) @db.Uuid
-  userId      String      @db.Uuid
+  id          String       @id @default(uuid()) @db.Uuid
+  userId      String       @db.Uuid
   subjectType SubjectType
-  subjectId   String      @db.Uuid
-  likedAt     DateTime    @default(now())
+  subjectId   String       @db.Uuid
+  likedAt     DateTime     @default(now())
   unlikedAt   DateTime?
   // Which reaction it is (D60). A plain like is ON_ON; changing the reaction
   // rewrites this and leaves the count alone.
@@ -2710,10 +2799,10 @@ model Post {
 
   linkPreview LinkPreview? @relation(fields: [linkPreviewId], references: [id])
   poll        Poll?
-  author    User    @relation("PostAuthor", fields: [authorId], references: [id])
-  removedBy User?   @relation("PostRemover", fields: [removedById], references: [id])
-  kennel    Kennel? @relation(fields: [kennelId], references: [id])
-  run       Run?    @relation(fields: [runId], references: [id])
+  author      User         @relation("PostAuthor", fields: [authorId], references: [id])
+  removedBy   User?        @relation("PostRemover", fields: [removedById], references: [id])
+  kennel      Kennel?      @relation(fields: [kennelId], references: [id])
+  run         Run?         @relation(fields: [runId], references: [id])
 
   @@index([status, publishedAt])
   @@index([authorId, status])
@@ -2726,9 +2815,9 @@ model Post {
 // label on things, and what a viewer finds under it is whatever they could
 // already see (see entity.service.ts).
 model Hashtag {
-  id        String       @id @default(uuid()) @db.Uuid
-  tag       String       @unique
-  createdAt DateTime     @default(now())
+  id        String   @id @default(uuid()) @db.Uuid
+  tag       String   @unique
+  createdAt DateTime @default(now())
 
   uses ContentTag[]
 }
@@ -2768,7 +2857,6 @@ model ContentMention {
   @@index([subjectType, subjectId])
   @@index([mentionedUserId, createdAt])
 }
-
 
 // ───────────────────── Part L — Safety, reactions, polls, previews (D60) ─────────────────────
 

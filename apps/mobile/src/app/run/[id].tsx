@@ -29,6 +29,7 @@ import { GuestDialog } from '@/components/runs/guest-dialog';
 import { RunMedia } from '@/components/runs/run-media';
 import { RunPoster } from '@/components/runs/run-poster';
 import { RunPosts } from '@/components/runs/run-posts';
+import { RunReels } from '@/components/runs/run-reels';
 import { TrailsPanel } from '@/components/trails/trails-panel';
 import { EngagementBar } from '@/components/social/engagement-bar';
 import { ThemedText } from '@/components/themed-text';
@@ -648,7 +649,7 @@ function CircleCard({ run, send }: { run: RunDetail; send: Send }) {
   const theme = useTheme();
   const v = run.viewer;
   const c = run.circle;
-  if (!v.canSeeNames || (!c && !v.canRecordCircle && !run.circleSkipReason)) return null;
+  if (!v.canSeeCircle || (!c && !v.canRecordCircle && !run.circleSkipReason)) return null;
 
   return (
     <Card>
@@ -1021,6 +1022,7 @@ export default function RunDetailScreen() {
       <AttendanceCard run={run} send={send} />
       {/* Adding photos needs the hosting kennel or a place on the run; the API is the judge. */}
       <RunMedia target={{ type: 'RUN', id: run.id }} canContribute={Boolean(user) && (run.viewer.canSeeNames || run.viewer.canOperate)} />
+      <RunReels runId={run.id} kennelId={run.viewer.isMember ? run.kennel.id : undefined} canPost />
       <RunPosts runId={run.id} />
       <CircleCard run={run} send={send} />
       <ReportPanel runId={run.id} />

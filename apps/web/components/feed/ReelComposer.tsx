@@ -127,7 +127,12 @@ export function ReelComposer({
       for (const [index, one] of files.entries()) {
         setBusy(files.length === 1 ? 'Uploading…' : `Uploading ${index + 1} of ${files.length}…`);
         const target = { type: 'REEL' as const, id: reel.id };
-        await (one.type.startsWith('video/') ? uploadVideo(one, target) : uploadPhoto(one, target));
+        const label = (fraction: number) =>
+          `${files.length === 1 ? 'Uploading' : `Uploading ${index + 1} of ${files.length}`}… ${Math.round(fraction * 100)}%`;
+        const onProgress = (fraction: number) => setBusy(label(fraction));
+        await (one.type.startsWith('video/')
+          ? uploadVideo(one, target, undefined, onProgress)
+          : uploadPhoto(one, target, undefined, onProgress));
       }
 
       setBusy('Posting…');

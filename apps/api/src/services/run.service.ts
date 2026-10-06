@@ -1,5 +1,6 @@
 import {
   CapsuleStatus,
+  CircleVisibility,
   KennelStatus,
   KennelVisibility,
   MembershipStatus,
@@ -82,7 +83,16 @@ const runAccessSelect = {
   // A called-off run is not a run anyone acts on; every access check wants it.
   cancelledAt: true,
   kennel: {
-    select: { id: true, name: true, shortName: true, slug: true, status: true, visibility: true, timeZone: true },
+    select: {
+      id: true,
+      name: true,
+      shortName: true,
+      slug: true,
+      status: true,
+      visibility: true,
+      timeZone: true,
+      circleVisibility: true,
+    },
   },
   hares: { select: { userId: true, isLead: true } },
 } satisfies Prisma.RunSelect;
@@ -178,6 +188,34 @@ export function canView(a: RunAccess) {
 // hosting kennel's members, the run's hares and its officers.
 export function canSeeNames(a: RunAccess) {
   return a.isMember || a.isHare || Boolean(a.canManage);
+}
+
+// FR-CIRCLE-014: who may read the Circle record (songs, announcements, awards and
+// who was there). Callers have already passed canView, so this can only narrow
+// the run, never widen it: a public Circle on a members-only run is still
+// members-only. Whoever operates the run always reads what they record.
+//
+// MEMBERS is how the Circle behaved before the setting existed (D23). ATTENDEES
+// means the people recorded at the Circle itself, not everyone who ran the trail:
+// the two lists are kept apart (FR-CIRCLE-002).
+export async function canSeeCircle(a: RunAccess): Promise<boolean> {
+  if (canOperate(a)) return true;
+  switch (a.run.kennel.circleVisibility) {
+    case CircleVisibility.PUBLIC:
+      return true;
+    case CircleVisibility.MEMBERS:
+      return canSeeNames(a);
+    case CircleVisibility.ATTENDEES: {
+      if (!a.actor) return false;
+      const here = await prisma.circleAttendee.findFirst({
+        where: { userId: a.actor.id, circle: { runId: a.run.id } },
+        select: { id: true },
+      });
+      return Boolean(here);
+    }
+    default:
+      return false;
+  }
 }
 
 export async function viewableAccess(actor: Actor | undefined, runId: string) {
@@ -476,6 +514,7 @@ function holdsAuthority(a: RunAccess, spec: StepSpec) {
 export async function getRunDetail(actor: Actor | undefined, runId: string) {
   const a = await viewableAccess(actor, runId);
   const names = canSeeNames(a);
+  const circleVisible = await canSeeCircle(a);
 
   const run = await prisma.run.findUniqueOrThrow({
     where: { id: runId },
@@ -509,6 +548,10 @@ export async function getRunDetail(actor: Actor | undefined, runId: string) {
           songs: true,
           announcements: true,
           notes: true,
+          attendees: {
+            orderBy: { createdAt: 'asc' },
+            select: { id: true, userId: true, user: { select: userPublicSelect }, guest: { select: { firstName: true } } },
+          },
           awards: {
             orderBy: { createdAt: 'asc' },
             select: {
@@ -567,6 +610,7 @@ export async function getRunDetail(actor: Actor | undefined, runId: string) {
       .map((p) => ({
         id: p.id,
         kind: p.guest ? 'guest' : 'hasher',
+        userId: p.user?.id ?? null,
         displayName: p.user ? publicName(p.user) : `${p.guest?.firstName ?? 'A'} (guest)`,
         rsvpStatus: p.rsvpStatus,
         isVisitor: p.isVisitor,
@@ -618,9 +662,16 @@ export async function getRunDetail(actor: Actor | undefined, runId: string) {
     hares: serializeHares(hares),
     counts,
     pauses,
-    circle: names && circle
+    circle: circleVisible && circle
       ? {
           ...circle,
+          // FR-CIRCLE-002: who was at the Circle, apart from who ran the trail.
+          attendees: circle.attendees.map((x) => ({
+            id: x.id,
+            userId: x.userId,
+            name: x.user ? publicName(x.user) : `${x.guest?.firstName ?? 'A'} (guest)`,
+            isGuest: !x.user,
+          })),
           awards: circle.awards.map(({ recipientUser, recipientGuest, ...award }) => ({
             ...award,
             recipient: recipientUser
@@ -638,6 +689,7 @@ export async function getRunDetail(actor: Actor | undefined, runId: string) {
       isMember: a.isMember,
       isHare: a.isHare,
       canSeeNames: names,
+      canSeeCircle: circleVisible,
       participation: a.participation,
       canRespond: rsvp.ok,
       rsvpBlockedReason: rsvp.ok ? null : rsvp.message,

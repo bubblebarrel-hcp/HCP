@@ -46,7 +46,8 @@ export function ReelViewer({
   // Deleting is final and unpinning an old reel ends it on the spot, so both ask
   // first, in the viewer rather than in a browser prompt.
   const [confirming, setConfirming] = useState<'delete' | 'unpin' | null>(null);
-  const spent = !reel.pinned || !reel.publishedAt ? false : Date.now() - new Date(reel.publishedAt).getTime() > 24 * 60 * 60 * 1000;
+  // Read once on mount: whether a pinned reel is past its 24 hours does not change while it is open.
+  const [spent] = useState(() => !reel.pinned || !reel.publishedAt ? false : Date.now() - new Date(reel.publishedAt).getTime() > 24 * 60 * 60 * 1000);
   const working = deleting || pinning;
   // Whoever posted it can change who sees it, any time after (D57).
   const [audience, setAudience] = useState<Audience>(reel.visibility);

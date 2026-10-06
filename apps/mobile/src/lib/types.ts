@@ -585,6 +585,8 @@ export interface RunViewer {
   isMember: boolean;
   isHare: boolean;
   canSeeNames: boolean;
+  // FR-CIRCLE-014: the Circle has its own audience, narrower than or equal to the run's.
+  canSeeCircle: boolean;
   participation: { id: string; rsvpStatus: RsvpStatus; checkedInAt: string | null; isVisitor: boolean } | null;
   canRespond: boolean;
   rsvpBlockedReason: string | null;
@@ -611,7 +613,7 @@ export interface RunDetail extends Omit<RunSummary, 'goingCount' | 'hares'> {
   // The run's own wall clock, "YYYY-MM-DDTHH:mm", for the edit form.
   startsAtLocal?: string;
   hares?: { userId: string; displayName: string; isLead: boolean }[];
-  kennel: RunSummary['kennel'] & { timeZone?: string; downDownsEnabled?: boolean };
+  kennel: RunSummary['kennel'] & { id?: string; timeZone?: string; downDownsEnabled?: boolean };
   description: string | null;
   theme: string | null;
   meetingAddress: string | null;

@@ -23,7 +23,7 @@ interface Item {
 }
 
 // The account sub-pages (privacy, blocked...) belong to Menu, as /account/* does on web.
-const ACCOUNT_PAGES = ['/account', '/privacy', '/blocked', '/follow-requests', '/photo-tags', '/reports', '/auth'];
+const ACCOUNT_PAGES = ['/account', '/privacy', '/blocked', '/follow-requests', '/photo-tags', '/reports', '/saved', '/auth'];
 
 export function BottomNav() {
   const theme = useTheme();

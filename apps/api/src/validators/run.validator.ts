@@ -80,6 +80,14 @@ export const circleSchema = Joi.object({
   notes: optionalText(8000),
 }).min(1);
 
+export const circleAttendanceSchema = Joi.object({
+  participationIds: Joi.array().items(uuid).max(500),
+  userIds: Joi.array().items(uuid).max(500),
+  fromTrail: Joi.boolean(),
+})
+  .or('participationIds', 'userIds', 'fromTrail')
+  .messages({ 'object.missing': 'Choose who was at the Circle.' });
+
 export const awardSchema = Joi.object({
   title: Joi.string().trim().min(2).max(120).required(),
   reason: optionalText(500),

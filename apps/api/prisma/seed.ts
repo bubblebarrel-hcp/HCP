@@ -570,12 +570,12 @@ async function main() {
       where: { runId },
       data: {
         timeline: [
-          { type: 'RunScheduled', at: minutes(lastSaturday, -6 * 24 * 60).toISOString() },
-          { type: 'TrailReleased', at: minutes(lastSaturday, -30).toISOString() },
-          { type: 'RunStarted', at: lastSaturday.toISOString() },
-          { type: 'RunEnded', at: minutes(lastSaturday, 95).toISOString() },
-          { type: 'CircleClosed', at: minutes(lastSaturday, 140).toISOString() },
-          { type: 'RunArchived', at: lockedAt.toISOString() },
+          { at: minutes(lastSaturday, -6 * 24 * 60).toISOString(), kind: 'RUN', label: 'The run was announced' },
+          { at: minutes(lastSaturday, -30).toISOString(), kind: 'RUN', label: 'The trail went live' },
+          { at: lastSaturday.toISOString(), kind: 'RUN', label: 'The pack set off' },
+          { at: minutes(lastSaturday, 95).toISOString(), kind: 'RUN', label: 'The pack came in' },
+          { at: minutes(lastSaturday, 140).toISOString(), kind: 'RUN', label: 'The Circle closed' },
+          { at: lockedAt.toISOString(), kind: 'RUN', label: 'The run was archived' },
         ],
       },
     });

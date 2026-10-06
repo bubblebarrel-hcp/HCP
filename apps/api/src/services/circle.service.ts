@@ -1,3 +1,4 @@
+import { MembershipStatus } from '@prisma/client';
 import prisma from '../config/prisma';
 import { ApiError, isUuid } from '../utils/http';
 import type { Actor } from './permission.service';
@@ -127,6 +128,120 @@ export async function removeAward(actor: Actor, runId: string, awardId: string) 
       resourceId: award.id,
       kennelId: a.run.kennelId,
       previousState: { title: award.title, reason: award.reason, isDownDown: award.isDownDown, recipient },
+      policyRef: operateSource(a),
+      domainEventId: event.id,
+    });
+  });
+}
+
+// FR-CIRCLE-002: who was at the Circle, kept apart from who ran the trail. A
+// hare can start from the trail's check-ins (the usual case: most of the pack
+// stays) and then correct it, because some leave early and some arrive for the
+// Circle alone. Adding someone twice is not an error.
+export async function recordAttendance(
+  actor: Actor,
+  runId: string,
+  input: { participationIds?: string[]; userIds?: string[]; fromTrail?: boolean },
+) {
+  const a = await circleAccess(actor, runId);
+
+  const targets = new Map<string, { userId: string | null; guestId: string | null }>();
+  const add = (userId: string | null, guestId: string | null) => {
+    if (userId || guestId) targets.set(`${userId ?? ''}|${guestId ?? ''}`, { userId, guestId });
+  };
+
+  if (input.fromTrail) {
+    const present = await prisma.participation.findMany({
+      where: { runId, checkedInAt: { not: null } },
+      select: { userId: true, guestId: true },
+    });
+    present.forEach((p) => add(p.userId, p.guestId));
+  }
+
+  if (input.participationIds?.length) {
+    const rows = await prisma.participation.findMany({
+      where: { runId, id: { in: input.participationIds } },
+      select: { userId: true, guestId: true },
+    });
+    if (rows.length !== new Set(input.participationIds).size) {
+      throw ApiError.badRequest('Some of those people are not on this run.', 'NOT_ON_RUN');
+    }
+    rows.forEach((p) => add(p.userId, p.guestId));
+  }
+
+  if (input.userIds?.length) {
+    // Someone who came for the Circle alone has no Participation, so a member of
+    // the hosting kennel is enough.
+    const wanted = [...new Set(input.userIds)];
+    const known = await prisma.user.findMany({
+      where: {
+        id: { in: wanted },
+        OR: [
+          { participations: { some: { runId } } },
+          { memberships: { some: { kennelId: a.run.kennelId, status: MembershipStatus.ACTIVE } } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (known.length !== wanted.length) {
+      throw ApiError.badRequest('Some of those people are neither on this run nor members of this kennel.', 'NOT_ON_RUN');
+    }
+    known.forEach((u) => add(u.id, null));
+  }
+
+  if (targets.size === 0) throw ApiError.badRequest('Choose who was at the Circle.', 'NOBODY_CHOSEN');
+
+  await prisma.$transaction(async (tx) => {
+    const circle = await tx.circle.upsert({ where: { runId }, create: { runId }, update: {} });
+    let added = 0;
+    for (const t of targets.values()) {
+      const exists = await tx.circleAttendee.findFirst({
+        where: { circleId: circle.id, ...(t.userId ? { userId: t.userId } : { guestId: t.guestId }) },
+        select: { id: true },
+      });
+      if (exists) continue;
+      await tx.circleAttendee.create({
+        data: { circleId: circle.id, userId: t.userId, guestId: t.guestId, recordedById: actor.id },
+      });
+      added += 1;
+    }
+    if (added === 0) return;
+    await recordEvent(tx, {
+      eventType: 'CircleAttendanceRecorded',
+      aggregateType: 'Run',
+      aggregateId: runId,
+      actorId: actor.id,
+      payload: { added, total: await tx.circleAttendee.count({ where: { circleId: circle.id } }) },
+    });
+  });
+}
+
+// A correction: they left before the Circle, or were put down by mistake.
+export async function removeAttendee(actor: Actor, runId: string, attendeeId: string) {
+  const a = await circleAccess(actor, runId);
+  if (!isUuid(attendeeId)) throw ApiError.notFound('Attendee not found');
+  const row = await prisma.circleAttendee.findFirst({
+    where: { id: attendeeId, circle: { runId } },
+    select: { id: true, userId: true, guestId: true },
+  });
+  if (!row) throw ApiError.notFound('Attendee not found');
+
+  await prisma.$transaction(async (tx) => {
+    await tx.circleAttendee.delete({ where: { id: row.id } });
+    const event = await recordEvent(tx, {
+      eventType: 'CircleAttendanceRemoved',
+      aggregateType: 'Run',
+      aggregateId: runId,
+      actorId: actor.id,
+      payload: { attendeeId: row.id, userId: row.userId, guestId: row.guestId },
+    });
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: 'circle.attendance_remove',
+      resourceType: 'CircleAttendee',
+      resourceId: row.id,
+      kennelId: a.run.kennelId,
+      previousState: { userId: row.userId, guestId: row.guestId },
       policyRef: operateSource(a),
       domainEventId: event.id,
     });

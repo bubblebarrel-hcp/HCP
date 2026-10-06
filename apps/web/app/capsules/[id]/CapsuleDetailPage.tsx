@@ -9,6 +9,7 @@ import { Avatar } from '@/components/Avatar';
 import { CapsuleExplorer } from '@/components/capsules/CapsuleExplorer';
 import { ParticipantExplorer } from '@/components/capsules/ParticipantExplorer';
 import { RelatedCapsules } from '@/components/capsules/RelatedCapsules';
+import { RunReels } from '@/components/runs/RunReels';
 import { FeedLayout } from '@/components/layout/FeedLayout';
 import { LeftNav } from '@/components/layout/LeftNav';
 import { Button } from '@/components/ui/button';
@@ -168,6 +169,7 @@ export function CapsuleDetailPage({ id }: { id: string }) {
         </Card>
 
         <CapsuleExplorer capsule={capsule} />
+        <RunReels runId={capsule.runId} />
 
         {capsule.circle && (
           <Card className={bleedCard} data-testid="capsule-circle">

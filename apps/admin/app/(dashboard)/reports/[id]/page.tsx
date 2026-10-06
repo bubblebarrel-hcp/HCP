@@ -94,6 +94,7 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
   }, [id]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount: the loader sets state as it starts
     void load();
   }, [load]);
 

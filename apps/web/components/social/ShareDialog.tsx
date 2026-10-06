@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Check, Copy, EyeOff, Link2, Loader2, Mail, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
@@ -63,6 +63,9 @@ const channels: {
   },
 ];
 
+// navigator.share never changes, so there is nothing to subscribe to.
+const subscribeNever = () => () => {};
+
 export function ShareDialog({ segment, id, fallbackLabel, trigger }: Props) {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
@@ -71,19 +74,21 @@ export function ShareDialog({ segment, id, fallbackLabel, trigger }: Props) {
   const [copied, setCopied] = useState(false);
   const [copyHint, setCopyHint] = useState(false);
   const fieldRef = useRef<HTMLInputElement>(null);
-  const [canNativeShare, setCanNativeShare] = useState(false);
 
   // `navigator.share` exists on phones and not on most desktops, and asking on
   // the server would be guessing.
-  useEffect(() => {
-    setCanNativeShare(typeof navigator !== 'undefined' && typeof navigator.share === 'function');
-  }, []);
+  const canNativeShare = useSyncExternalStore(
+    subscribeNever,
+    () => typeof navigator.share === 'function',
+    () => false,
+  );
 
   // The canonical path comes from the API, not from wherever the reader happens
   // to be standing — a photo's card sits in the feed but its link is the run.
   useEffect(() => {
     if (!open) return;
     let alive = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount: the loader sets state as it starts
     setCopied(false);
     setCopyHint(false);
     getEngagement(segment, id)

@@ -67,3 +67,9 @@ export const registerDeviceSchema = Joi.object({
 export const revokeDeviceSchema = Joi.object({
   pushToken: Joi.string().trim().min(10).max(255).required(),
 });
+
+// FR-NOT-007.
+export const setDigestSchema = Joi.object({
+  category: Joi.string().valid(...CATEGORIES).required(),
+  frequency: Joi.string().valid('IMMEDIATE', 'HOURLY', 'MORNING', 'EVENING', 'WEEKLY').required(),
+});

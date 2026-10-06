@@ -65,6 +65,7 @@ export default function KennelsPage() {
   }, [page, search, status]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount: the loader sets state as it starts
     load();
   }, [load]);
 

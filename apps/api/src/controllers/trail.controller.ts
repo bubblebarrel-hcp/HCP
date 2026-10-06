@@ -84,3 +84,16 @@ export async function removeChalk(req: Request, res: Response) {
   await trails.removeChalk(actor(req), req.params.id, req.params.chalkId);
   return respondWithTrail(req, res, req.params.id);
 }
+
+export async function importGpx(req: Request, res: Response) {
+  const summary = await trails.importGpx(actor(req), req.params.id, req.body);
+  return ok(res, { import: summary, trail: await trails.getTrail(viewer(req), req.params.id) });
+}
+
+export async function exportGpx(req: Request, res: Response) {
+  const { xml, filename } = await trails.exportGpx(viewer(req), req.params.id);
+  res.setHeader('Content-Type', 'application/gpx+xml; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  return res.send(xml);
+}

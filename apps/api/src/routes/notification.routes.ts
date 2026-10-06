@@ -8,6 +8,7 @@ import {
   quietHoursSchema,
   registerDeviceSchema,
   revokeDeviceSchema,
+  setDigestSchema,
   setTimeZoneSchema,
   updatePreferencesSchema,
 } from '../validators/notification.validator';
@@ -29,6 +30,9 @@ router.put(
   validate(updatePreferencesSchema),
   asyncHandler(controller.updatePreferences),
 );
+
+// FR-NOT-007. How a category's email and push are gathered into a digest.
+router.put('/me/notification-preferences/digest', requireAuth, validate(setDigestSchema), asyncHandler(controller.setDigest));
 
 // FR-NOT-006. Quiet hours only quieten push; the in-app copy still lands.
 router.put('/me/notification-preferences/quiet-hours', requireAuth, validate(quietHoursSchema), asyncHandler(controller.setQuietHours));

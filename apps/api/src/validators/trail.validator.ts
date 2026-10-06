@@ -105,3 +105,11 @@ export const chalkSchema = Joi.object({
   bearingDeg: Joi.number().min(0).max(360).allow(null),
   sequence: Joi.number().integer().min(0).max(1000).allow(null),
 });
+
+// A GPX file as text inside the JSON body: the web proxy only forwards JSON, and the
+// body limit (2 MB) is more than a hash trail needs once a watch's every-second
+// points are thinned.
+export const importGpxSchema = Joi.object({
+  gpx: Joi.string().min(20).max(1_900_000).required(),
+  replace: Joi.boolean().default(false),
+});

@@ -13,6 +13,7 @@ import { CapsulePanel } from '@/components/capsules/CapsulePanel';
 import { ReportPanel } from '@/components/reports/ReportPanel';
 import { RunMedia } from '@/components/runs/RunMedia';
 import { RunPosts } from '@/components/runs/RunPosts';
+import { RunReels } from '@/components/runs/RunReels';
 import { RunPoster } from '@/components/runs/RunPoster';
 import { HarePanel } from '@/components/runs/HarePanel';
 import { AttendanceCard, CircleCard, OrganiserPanel, RsvpPanel, type Send } from '@/components/runs/RunPanels';
@@ -264,6 +265,7 @@ export function RunDetailPage({ id }: { id: string }) {
             target={{ type: 'RUN', id: run.id }}
             canContribute={Boolean(user) && (run.viewer.canSeeNames || run.viewer.canOperate)}
           />
+          <RunReels runId={run.id} kennelId={run.viewer.isMember ? run.kennel.id : undefined} canPost />
           <RunPosts runId={run.id} />
           <CircleCard run={run} send={send} />
           <ReportPanel runId={run.id} />

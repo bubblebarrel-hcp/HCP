@@ -16,6 +16,12 @@ export const SETTING_DEFAULTS = {
   'hare.nudge.urgentDays': 7,
   // FR-MEMBER-005: how long an invitation link/QR/email stays redeemable.
   'membership.invitationExpiryDays': 14,
+  // FR-NOT-013/016: when work waiting on a person is first mentioned, and when
+  // it is raised with whoever runs the kennel. Each step happens once.
+  'escalation.membership.waitingDays': 3,
+  'escalation.membership.escalatedDays': 7,
+  'escalation.report.overdueDays': 5,
+  'escalation.report.escalatedDays': 12,
 } as const;
 
 type SettingKey = keyof typeof SETTING_DEFAULTS;

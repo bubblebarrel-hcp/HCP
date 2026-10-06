@@ -141,6 +141,7 @@ export function FollowLists({
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount: the loader sets state as it starts
     if (tab === 'followers' && followerRows === null) void load('followers');
     if (tab === 'following' && followingRows === null) void load('following');
   }, [tab, followerRows, followingRows, load]);

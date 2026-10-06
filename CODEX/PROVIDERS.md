@@ -51,6 +51,9 @@ MEDIA_MAX_BYTES=26214400
 
 # Anthropic (D14). Without it, AI drafting answers AI_NOT_CONFIGURED.
 ANTHROPIC_API_KEY=
+# Only for a user-scoped key (sk-ant-usr-...): the workspace it should bill to.
+# A workspace-scoped key (made in Console > API keys) needs neither this nor a header.
+ANTHROPIC_WORKSPACE_ID=
 ```
 
 ## Cloudflare R2 setup

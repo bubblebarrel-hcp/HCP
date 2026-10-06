@@ -14,7 +14,7 @@ import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
 import type { Actor } from './permission.service';
 import { recordAudit, recordEvent } from './record.service';
-import { type RunAccess, canSeeNames, canView, getAccess, publicName, userPublicSelect, viewableAccess } from './run.service';
+import { type RunAccess, canSeeCircle, canSeeNames, canView, getAccess, publicName, userPublicSelect, viewableAccess } from './run.service';
 
 // Run Capsules (Annex 08H, Ch.22 A.6). The archive builds itself: the capsule
 // exists from the moment the run does and grows as the run happens. A human
@@ -347,6 +347,10 @@ async function relatedCapsules(kennelId: string, excludeRunId: string, startsAt:
 async function serialize(actor: Actor | undefined, capsule: CapsuleRow, access: RunAccess) {
   const { isScribe, canGovern, canPublishReport } = authority(access, capsule.trailReport);
   const names = canSeeNames(access);
+  // FR-CIRCLE-014: the Circle has its own audience, narrower than or equal to the
+  // run's. It governs the songs and awards here, and the award entries the
+  // timeline was built with.
+  const circleVisible = await canSeeCircle(access);
   const published = FROZEN.includes(capsule.status);
 
   const [attendance, media, circle] = await Promise.all([
@@ -419,15 +423,17 @@ async function serialize(actor: Actor | undefined, capsule: CapsuleRow, access: 
       hares: capsule.run.hares.map((h) => ({ userId: h.user.id, name: publicName(h.user), isLead: h.isLead })),
       photo: media[0]?.thumbnailUrl ?? media[0]?.url ?? null,
     },
-    timeline: (capsule.timeline ?? []) as unknown as TimelineEntry[],
+    timeline: ((capsule.timeline ?? []) as unknown as TimelineEntry[]).filter(
+      (entry) => circleVisible || entry.kind !== 'AWARD',
+    ),
     stats: {
       attended: checkedIn.length,
       visitors: checkedIn.filter((p) => p.isVisitor).length,
       guests: checkedIn.filter((p) => p.guest).length,
       hares: capsule.run.hares.length,
       photos: media.length,
-      awards: circle?.awards.length ?? 0,
-      songs: circle?.songs.length ?? 0,
+      awards: circleVisible ? (circle?.awards.length ?? 0) : 0,
+      songs: circleVisible ? (circle?.songs.length ?? 0) : 0,
     },
     // D23: who was there is for the hosting kennel.
     participants: names
@@ -438,7 +444,7 @@ async function serialize(actor: Actor | undefined, capsule: CapsuleRow, access: 
           isVisitor: p.isVisitor,
         }))
       : null,
-    circle: names ? circle : null,
+    circle: circleVisible ? circle : null,
     media,
     report: capsule.trailReport?.publishedAt
       ? {

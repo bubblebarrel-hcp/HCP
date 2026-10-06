@@ -127,11 +127,15 @@ Organized by Chapter 23 domain. "Consumers" lists which cross-cutting systems ca
 | `HareOfferDeclined` | D44: officer declines, reason optional | Run Service | Notification (offerer), Audit |
 | `HareOfferWithdrawn` | D44: the offerer withdraws before a decision | Run Service | Audit |
 | `RunHareReminderIssued` | D45 scheduled sweep; payload `stage` is `no-hare-soon`, `no-hare-urgent` or `no-trail-planned`, and the event log itself is the idempotency check | Run Service (scheduled, actor SYSTEM) | Notification |
+| `RunReminderIssued` | D64/FR-NOT-011 the day-before reminder for a run, once per run (`stage` `day-before`); the event log is the idempotency check | Run Service (scheduled, actor SYSTEM) | Notification |
+| `MembershipRequestReminderIssued` | D64/FR-NOT-013 a membership request unanswered for 3 days (`waiting`) or 7 (`escalated`), once per step | Membership Service (scheduled, actor SYSTEM) | Notification |
+| `TrailReportReminderIssued` | D64/FR-NOT-013 a run with no published Trail Report 5 days on (`overdue`) or 12 (`escalated`), once per step | Report Service (scheduled, actor SYSTEM) | Notification |
 | `GuestRegistered` | D2 guest profile created with consent | Run Service | Notification, Audit |
 | `GuestProfileClaimed` | D2 follow-up: a guest's run history links to the account that just proved it owns that email | Identity Service | Audit |
 | `ParticipantCheckInReverted` | Attendance correction before archive (BR-RUN-008) | Run Service | Passport, RunCapsule, Audit |
 | `CircleRecordUpdated` | FR-CIRCLE-003/007/010 songs, announcements or notes recorded | Run Service | RunCapsule |
 | `AwardRecorded` / `AwardRemoved` | FR-CIRCLE-006/008 award or down-down recorded, or corrected before archive | Run Service | Passport, RunCapsule, Audit (removal) |
+| `CircleAttendanceRecorded` / `CircleAttendanceRemoved` | FR-CIRCLE-002 (D62) who was at the Circle recorded or corrected, kept apart from trail attendance | Run Service | RunCapsule, Audit (removal) |
 | `CircleClosed` | A.3 Circle → Reporting (FR-CIRCLE-012) | Run Service | Notification (scribe), RunCapsule |
 | `EventCreated` / `EventPublished` | A.7 Draft → Planning/Registration Open | Event Service | Notification, Search Index |
 | `RegistrationOpened` / `RegistrationClosed` | A.7 | Event Service | Notification |

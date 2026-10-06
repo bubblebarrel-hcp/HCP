@@ -3,6 +3,7 @@ import {
   DeliveryChannel,
   DeliveryStatus,
   DevicePlatform,
+  DigestFrequency,
   type DomainEvent,
   KennelStatus,
   MembershipStatus,
@@ -23,6 +24,7 @@ import { resolveSubject } from './subject.service';
 import { reachable } from './block.service';
 import { isEmailConfigured, sendEmail } from './email.service';
 import { isExpoPushToken, isPushConfigured, registerDevice, revokeDevice, sendPush } from './push.service';
+import { DIGEST_LABELS } from '../utils/digest-schedule';
 import { evaluateQuietHours, quietHoursFor } from './quiet-hours';
 import type { Actor } from './permission.service';
 
@@ -56,6 +58,15 @@ interface NotificationSpec {
   // Guests hold no account and no in-app inbox, so they are reached by email
   // alone (D12). Only the events they could act on carry them.
   guests?: GuestRecipient[];
+  // FR-NOT-005. Notices that share a key, for one recipient and still unread,
+  // fold into one: the first is delivered as usual and the rest quietly update
+  // it (a silent update, FR-NOT-008) instead of adding a row each. Meant for the
+  // high-volume, low-stakes kind: applause and follows.
+  group?: {
+    key: string;
+    // The title once more than one person is behind it.
+    title: (who: string[], others: number) => string;
+  };
 }
 
 interface GuestRecipient {
@@ -124,6 +135,12 @@ const REACTION_VERB: Record<string, string> = {
 };
 
 // One line of somebody's comment, for the body of a notification.
+// "Bayo", "Bayo and Chioma", "Bayo, Chioma and 3 others".
+function nameList(who: string[], others: number) {
+  if (others > 0) return `${who.join(', ')} and ${others} other${others === 1 ? '' : 's'}`;
+  return who.length > 1 ? `${who.slice(0, -1).join(', ')} and ${who[who.length - 1]}` : (who[0] ?? 'Someone');
+}
+
 function excerpt(body: string, max = 140) {
   const flat = body.replace(/\s+/g, ' ').trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
@@ -536,6 +553,78 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
       };
     }
 
+    // ── Work waiting on a person (FR-NOT-011/013/016) ──
+    // Events from escalation.service.ts. Each ladder is short, each step is sent
+    // once, and none is CRITICAL, so quiet hours and a hasher's own switches hold.
+    case 'MembershipRequestReminderIssued': {
+      const kennelId = str(payload, 'kennelId');
+      const stage = str(payload, 'stage');
+      if (!kennelId || !stage) return null;
+      const kennel = await prisma.kennel.findUnique({ where: { id: kennelId }, select: { shortName: true, slug: true } });
+      const days = typeof payload.ageDays === 'number' ? payload.ageDays : null;
+      const escalated = stage === 'escalated';
+      return {
+        category: C.MEMBERSHIP,
+        priority: escalated ? P.HIGH : P.NORMAL,
+        title: escalated ? 'A membership request has waited a week' : 'A membership request is still waiting',
+        body: `Someone asked to join ${kennel?.shortName ?? 'your kennel'}${days ? ` ${days} days ago` : ''} and has not had an answer. Approving or declining lets them get on with it.`,
+        contextType: 'Membership',
+        contextId: event.aggregateId,
+        kennelId,
+        // First the people whose job it is; a week in, whoever runs the kennel too.
+        recipients: escalated
+          ? [...new Set([...(await officerIds(kennelId, 'membership.review')), ...(await kennelAdminIds(kennelId))])]
+          : await officerIds(kennelId, 'membership.review'),
+        ...(kennel ? { link: { label: 'Review the request', path: `/kennels/${kennel.slug}/members` } } : {}),
+      };
+    }
+    case 'TrailReportReminderIssued': {
+      const kennelId = str(payload, 'kennelId');
+      const stage = str(payload, 'stage');
+      const run = await runContext(event.aggregateId);
+      if (!kennelId || !stage || !run) return null;
+      const scribeId = str(payload, 'scribeId');
+      const days = typeof payload.lateDays === 'number' ? payload.lateDays : null;
+      const escalated = stage === 'escalated';
+      const officers = await officerIds(kennelId, 'report.publish');
+      return {
+        category: C.REPORT,
+        priority: escalated ? P.HIGH : P.NORMAL,
+        title: escalated ? `Run #${run.runNumber} still has no trail report` : `No trail report yet for run #${run.runNumber}`,
+        body: `The run ended${days ? ` ${days} days ago` : ''} and its story has not been published. The pack is waiting to read it.`,
+        contextType: 'Run',
+        contextId: run.id,
+        kennelId,
+        // The Scribe first (or the officers, if nobody has started one); later,
+        // the people who can publish it as well.
+        recipients: escalated
+          ? [...new Set([...(scribeId ? [scribeId] : []), ...officers, ...(await kennelAdminIds(kennelId))])]
+          : scribeId
+            ? [scribeId]
+            : officers,
+      };
+    }
+    // FR-NOT-011: a reminder about a run someone said they were coming to. REMINDER
+    // is never held in a digest, since the point is the day.
+    case 'RunReminderIssued': {
+      const kennelId = str(payload, 'kennelId');
+      const run = await runContext(event.aggregateId);
+      if (!kennelId || !run) return null;
+      const startsAt = str(payload, 'startsAt');
+      const hours = startsAt ? Math.max(1, Math.round((new Date(startsAt).getTime() - event.occurredAt.getTime()) / 3_600_000)) : null;
+      return {
+        category: C.REMINDER,
+        priority: P.NORMAL,
+        title: `Run #${run.runNumber} is ${hours && hours <= 30 ? `in about ${hours} hours` : 'tomorrow'}`,
+        body: `${run.title} with ${run.kennel.shortName}. You said you were coming. If your plans changed, update your RSVP so the hare knows.`,
+        contextType: 'Run',
+        contextId: run.id,
+        kennelId,
+        recipients: await participantIds(run.id),
+        guests: await guestRecipients(run.id),
+      };
+    }
+
     // ── Kennels awaiting the platform (D33/D10) ──
     case 'KennelCreated': {
       const kennel = await prisma.kennel.findUnique({
@@ -603,6 +692,11 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         contextId: event.actorId,
         kennelId: null,
         recipients: [event.aggregateId],
+        // FR-NOT-005: a popular hasher's day of follows is one notice.
+        group: {
+          key: `follow:${event.aggregateId}`,
+          title: (who, others) => `${nameList(who, others)} started following you`,
+        },
       };
     }
     // Somebody asked to follow a locked profile (D57). Only the person being
@@ -658,6 +752,11 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         contextId: event.aggregateId,
         kennelId: str(payload, 'kennelId'),
         recipients: [authorId],
+        // FR-NOT-005: twelve reactions to one reel are one notice, not twelve.
+        group: {
+          key: `like:${event.aggregateType}:${event.aggregateId}`,
+          title: (who, others) => `${nameList(who, others)} reacted to your ${subjectWord(str(payload, 'subjectType'))}`,
+        },
       };
     }
     case 'ContentCommented': {
@@ -911,6 +1010,21 @@ const EMAIL_BY_DEFAULT = new Set<NotificationCategory>([C.MEMBERSHIP, C.TRAIL_RE
 // reports and media wait to be looked at (FR-NOT-009 lets anyone change this).
 const PUSH_BY_DEFAULT = new Set<NotificationCategory>([C.MEMBERSHIP, C.RUN, C.TRAIL_RELEASE, C.SAFETY]);
 
+// FR-NOT-007/008. A digest is for what can wait. These categories are about
+// something happening at a time (a trail going live, a run tomorrow, a safety
+// call), so they are never held, whatever a hasher chose for the others. A
+// HIGH or CRITICAL priority is never held either, in any category: a suspension
+// or a cancelled run is not news to read on Monday.
+export const NEVER_DIGEST = new Set<NotificationCategory>([C.SAFETY, C.TRAIL_RELEASE, C.REMINDER]);
+
+export function mayHold(category: NotificationCategory, priority: NotificationPriority) {
+  return !NEVER_DIGEST.has(category) && (priority === P.LOW || priority === P.NORMAL);
+}
+
+// FR-NOT-005: how long a group stays open. A day of applause on one reel is one
+// notice; the next morning's is a new one.
+const GROUP_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 // FR-NOT (deep links). Only the contexts with an unambiguous public-web route
 // and an id that is directly usable in it. Left out on purpose:
 // 'Kennel' (contextId is the kennel's id, not its slug — /kennels/:slug needs
@@ -983,10 +1097,66 @@ async function deliverPush(notificationId: string, userId: string, spec: Notific
   return result.sent > 0;
 }
 
+// FR-NOT-005. If this recipient has an unread notice sharing the group key from
+// the last day, count this event into it and rewrite its title; otherwise report
+// that nothing was folded and let the caller deliver normally. Who is named is
+// the two most recent, then "and N others", as a hasher would say it.
+async function foldIntoGroup(
+  recipientUserId: string,
+  group: NonNullable<NotificationSpec['group']>,
+  event: DomainEvent,
+  now: Date,
+) {
+  const open = await prisma.notification.findFirst({
+    where: {
+      recipientUserId,
+      groupKey: group.key,
+      readAt: null,
+      createdAt: { gte: new Date(now.getTime() - GROUP_WINDOW_MS) },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true },
+  });
+  if (!open) return false;
+
+  await prisma.notificationGroupMember.create({
+    data: { notificationId: open.id, domainEventId: event.id, actorId: event.actorId },
+  });
+
+  const members = await prisma.notificationGroupMember.findMany({
+    where: { notificationId: open.id },
+    orderBy: { createdAt: 'desc' },
+    select: { actorId: true },
+  });
+  const people: string[] = [];
+  for (const m of members) if (m.actorId && !people.includes(m.actorId)) people.push(m.actorId);
+  const names = await Promise.all(people.slice(0, 2).map((id) => publicNameOf(id)));
+  const others = Math.max(0, people.length - names.length);
+
+  await prisma.notification.update({
+    where: { id: open.id },
+    data: {
+      title: group.title(names, others),
+      groupCount: members.length,
+      // It rises to the top again: something new happened on it.
+      createdAt: now,
+      evaluationReason: `Grouped with ${members.length - 1} earlier notice${members.length === 2 ? '' : 's'} on the same thing; this one updated it quietly and sent nothing new (FR-NOT-005).`,
+    },
+  });
+  return true;
+}
+
 export async function fanOut(event: DomainEvent) {
   // At-least-once delivery (Ch.24): re-running an event must not notify twice.
   const already = await prisma.notification.findFirst({ where: { domainEventId: event.id }, select: { id: true } });
   if (already) return 0;
+  // An event folded into a group has no notification of its own, so the group's
+  // member row is what says it was handled.
+  const folded = await prisma.notificationGroupMember.findUnique({
+    where: { domainEventId: event.id },
+    select: { id: true },
+  });
+  if (folded) return 0;
 
   const spec = await specFor(event);
   if (!spec) return 0;
@@ -1028,8 +1198,27 @@ export async function fanOut(event: DomainEvent) {
       )
     : new Set<string>();
 
+  // FR-NOT-007: who has asked for this category in a digest. One read for the
+  // whole recipient list, and only for a notice that could be held at all.
+  const digestOf = new Map<string, DigestFrequency>();
+  if (mayHold(spec.category, spec.priority)) {
+    const rows = await prisma.notificationDigestPreference.findMany({
+      where: { userId: { in: recipients }, category: spec.category },
+      select: { userId: true, frequency: true },
+    });
+    for (const row of rows) digestOf.set(row.userId, row.frequency);
+  }
+
   for (const recipientUserId of recipients) {
     const inApp = await channelEnabled(recipientUserId, spec.category, DeliveryChannel.IN_APP, spec.kennelId, true);
+
+    // FR-NOT-005: if this folds into a notice they have not read yet, it only
+    // updates that one. Nothing new is sent: they were told already, and a
+    // second buzz for the twelfth like is the thing grouping is for.
+    if (inApp && spec.group && (await foldIntoGroup(recipientUserId, spec.group, event, now))) {
+      created++;
+      continue;
+    }
     const wantsEmail =
       emailable &&
       Boolean(addresses.get(recipientUserId)) &&
@@ -1053,16 +1242,29 @@ export async function fanOut(event: DomainEvent) {
         spec.pushByDefault ?? PUSH_BY_DEFAULT.has(spec.category),
       ));
 
+    // FR-NOT-007. If this hasher asked for the category in a digest, and the
+    // notice can wait, email and push are held for it instead of sent now. The
+    // in-app copy still lands at once.
+    const frequency = digestOf.get(recipientUserId) ?? DigestFrequency.IMMEDIATE;
+    const hold = mayHold(spec.category, spec.priority) && frequency !== DigestFrequency.IMMEDIATE;
+    const holdEmail = hold && wantsEmail;
+    const holdPush = hold && wantsPush;
+
     // FR-NOT-006. Only push is quietened: the in-app copy still lands and email
-    // still sends, so nothing is lost, it just stops buzzing.
+    // still sends, so nothing is lost, it just stops buzzing. A held push is
+    // judged when its digest goes out, not now.
     let quietNote: string | null = null;
-    if (wantsPush) {
+    if (wantsPush && !holdPush) {
       const quiet = await evaluateQuietHours(recipientUserId, spec.priority, zones.get(recipientUserId), now);
       quietNote = quiet.reason;
       if (quiet.suppressed) wantsPush = false;
     }
 
     if (!inApp && !wantsEmail && !wantsPush) continue;
+
+    const sendEmailNow = wantsEmail && !holdEmail;
+    const sendPushNow = wantsPush && !holdPush;
+    const held = [holdEmail ? 'email' : null, holdPush ? 'push' : null].filter(Boolean) as string[];
 
     const notification = await prisma.$transaction(async (tx) => {
       const row = await tx.notification.create({
@@ -1076,16 +1278,17 @@ export async function fanOut(event: DomainEvent) {
           contextType: spec.contextType,
           contextId: spec.contextId,
           domainEventId: event.id,
-          deliveryPolicy: 'immediate',
-          // FR-NOT-010: why this arrived, in plain words.
+          deliveryPolicy: held.length > 0 ? 'digest' : 'immediate',
+          ...(spec.group ? { groupKey: spec.group.key } : {}),
           // FR-NOT-010: why this arrived, on which channels, and what was
           // held back — in plain words a hasher can read.
           evaluationReason: [
             `${event.eventType}: `,
-            [inApp ? 'in-app' : null, wantsEmail ? 'email' : null, wantsPush ? 'push' : null]
+            [inApp ? 'in-app' : null, sendEmailNow ? 'email' : null, sendPushNow ? 'push' : null]
               .filter(Boolean)
               .join(' and ') || 'no',
             ' delivery.',
+            held.length > 0 ? ` The ${held.join(' and ')} copy is held for your ${DIGEST_LABELS[frequency]} digest.` : '',
             emailable ? '' : ' Email is not configured.',
             !pushOn
               ? ' Push is switched off platform-wide.'
@@ -1107,14 +1310,29 @@ export async function fanOut(event: DomainEvent) {
           },
         });
       }
+      if (holdEmail) {
+        await tx.notificationDelivery.create({
+          data: { notificationId: row.id, channel: DeliveryChannel.EMAIL, status: DeliveryStatus.HELD },
+        });
+      }
+      if (holdPush) {
+        await tx.notificationDelivery.create({
+          data: { notificationId: row.id, channel: DeliveryChannel.PUSH, status: DeliveryStatus.HELD },
+        });
+      }
+      if (spec.group) {
+        await tx.notificationGroupMember.create({
+          data: { notificationId: row.id, domainEventId: event.id, actorId: event.actorId },
+        });
+      }
       return row;
     });
 
     // Sending is a network call, so it happens after the transaction commits: a
     // slow provider must not hold a database transaction open, and a failed
     // send is recorded on the delivery row rather than losing the notification.
-    if (wantsEmail) await deliverEmail(notification.id, addresses.get(recipientUserId)!, spec);
-    if (wantsPush) await deliverPush(notification.id, recipientUserId, spec);
+    if (sendEmailNow) await deliverEmail(notification.id, addresses.get(recipientUserId)!, spec);
+    if (sendPushNow) await deliverPush(notification.id, recipientUserId, spec);
     created++;
   }
 
@@ -1229,7 +1447,7 @@ export async function getPreferences(actor: Actor) {
   const setting = (category: NotificationCategory, channel: DeliveryChannel, fallback = true) =>
     rows.find((r) => r.category === category && r.channel === channel)?.enabled ?? fallback;
 
-  const [devices, quiet, user] = await Promise.all([
+  const [devices, quiet, user, digests] = await Promise.all([
     prisma.pushDevice.findMany({
       where: { userId: actor.id, revokedAt: null },
       select: { id: true, platform: true, lastSeenAt: true },
@@ -1237,6 +1455,10 @@ export async function getPreferences(actor: Actor) {
     }),
     quietHoursFor(actor.id),
     prisma.user.findUnique({ where: { id: actor.id }, select: { timeZone: true } }),
+    prisma.notificationDigestPreference.findMany({
+      where: { userId: actor.id },
+      select: { category: true, frequency: true },
+    }),
   ]);
 
   return {
@@ -1250,6 +1472,10 @@ export async function getPreferences(actor: Actor) {
       email: setting(category, DeliveryChannel.EMAIL, EMAIL_BY_DEFAULT.has(category)),
       // Safety notifications are never fully silenced (BR-NOT-007).
       locked: category === C.SAFETY,
+      // FR-NOT-007: how email and push for this category are gathered. A category
+      // about something happening at a time is never held, so it offers no choice.
+      digest: digests.find((d) => d.category === category)?.frequency ?? DigestFrequency.IMMEDIATE,
+      digestable: !NEVER_DIGEST.has(category),
     })),
     // Whether a channel can actually carry anything for this hasher right now.
     // Push needs both a platform that can send and a device of their own, and
@@ -1320,6 +1546,28 @@ export async function updatePreferences(
         data: { userId: actor.id, category: update.category, channel: update.channel, enabled: update.enabled },
       });
     }
+  }
+  return getPreferences(actor);
+}
+
+// ─── Digests (FR-NOT-007) ───
+
+// One choice per category, for email and push together. IMMEDIATE is not stored:
+// choosing it removes the row, and anything already held is then due at the next
+// sweep. A category about something happening at a time cannot be digested; the
+// screen does not offer it and the API refuses it.
+export async function setDigest(actor: Actor, category: NotificationCategory, frequency: DigestFrequency) {
+  if (NEVER_DIGEST.has(category)) {
+    throw ApiError.badRequest('That kind of notice is always sent straight away.', 'NOT_DIGESTABLE');
+  }
+  if (frequency === DigestFrequency.IMMEDIATE) {
+    await prisma.notificationDigestPreference.deleteMany({ where: { userId: actor.id, category } });
+  } else {
+    await prisma.notificationDigestPreference.upsert({
+      where: { userId_category: { userId: actor.id, category } },
+      create: { userId: actor.id, category, frequency },
+      update: { frequency },
+    });
   }
   return getPreferences(actor);
 }

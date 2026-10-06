@@ -16,7 +16,15 @@ export function aiConfigured(): boolean {
 }
 
 function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  // A user-scoped key (sk-ant-usr-...) is not tied to a workspace, so Anthropic
+  // wants the workspace named on every request. A workspace key needs no header.
+  const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+  if (!client) {
+    client = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      ...(workspaceId ? { defaultHeaders: { 'anthropic-workspace-id': workspaceId } } : {}),
+    });
+  }
   return client;
 }
 

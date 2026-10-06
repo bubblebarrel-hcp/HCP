@@ -598,11 +598,18 @@ export async function remove(actor: Actor, reelId: string, reason: string) {
 // reels are few enough that this stays cheap.
 export async function listPublished(
   actor: Actor | undefined,
-  opts: { page: number; limit: number; kennelSlug?: string; authorId?: string; tag?: string },
+  opts: { page: number; limit: number; kennelSlug?: string; authorId?: string; tag?: string; runId?: string },
 ) {
+  // The reels shot at a run are for whoever may see the run (D41). Said up front,
+  // so a run nobody here may open does not even report a count.
+  if (opts.runId) {
+    const access = await getAccess(actor, opts.runId);
+    if (!canView(access)) return page<SerializedReel>([], 0, opts.page, opts.limit);
+  }
+
   // A hashtag page is not the rail: it is everybody's reels with that tag, not
   // the people the viewer follows (D59).
-  const isRail = !opts.authorId && !opts.kennelSlug && !opts.tag;
+  const isRail = !opts.authorId && !opts.kennelSlug && !opts.tag && !opts.runId;
   const railAuthors =
     actor && isRail ? [actor.id, ...(await follows.followedBy(actor.id)).userIds] : null;
 
@@ -611,6 +618,7 @@ export async function listPublished(
     ...(opts.authorId && !opts.kennelSlug ? liveReelWhere(now) : feedReelWhere(now)),
     media: { uploadState: UploadState.AVAILABLE, moderationState: { not: ModerationState.REJECTED } },
     ...(opts.kennelSlug ? { kennel: { slug: opts.kennelSlug } } : {}),
+    ...(opts.runId ? { runId: opts.runId } : {}),
     ...(opts.authorId ? { authorId: opts.authorId } : {}),
     ...(railAuthors ? { authorId: { in: railAuthors } } : {}),
     ...(opts.tag ? { id: { in: await taggedIds(SubjectType.REEL, opts.tag) } } : {}),

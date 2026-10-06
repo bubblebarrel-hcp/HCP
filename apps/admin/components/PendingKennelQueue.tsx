@@ -113,6 +113,7 @@ export function PendingKennelQueue({ onChanged }: { onChanged?: () => void } = {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount: the loader sets state as it starts
     load();
   }, [load]);
 

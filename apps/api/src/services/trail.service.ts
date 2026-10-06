@@ -1,6 +1,7 @@
 import { ChalkSymbol, Prisma, ReleaseMode, RunStatus, TrailStatus, TrailStyle, WaypointKind } from '@prisma/client';
 import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
+import { type GpxExportWaypoint, buildGpx, exportKind, parseGpx, routeLengthM, routeSegments } from '../utils/gpx';
 import { logger } from '../utils/logger';
 import { type Actor, resolveKennelContext } from './permission.service';
 import { recordAudit, recordEvent } from './record.service';
@@ -874,4 +875,166 @@ export async function transition(actor: Actor, trailId: string, action: string, 
 export function nextStepFor(status: TrailStatus): { action: TrailAction; label: string } | null {
   const action = NEXT_STEP[status];
   return action ? { action, label: STEPS[action].label } : null;
+}
+
+// ─── GPX (FR-TRAIL-002) ───
+
+// Bring a route and its places in from a GPX file. Hares only, and only while the
+// trail is still being planned, exactly like drawing it by hand, so nothing here
+// can reach a participant before release: the route and the places go into the
+// same secret fields the planner writes.
+//
+// The route replaces the drawn one. Places are added after what is already there,
+// unless `replace` is set, in which case the existing ones are put away first
+// (soft delete, they stay in the history like any other removal, BR-TRAIL-007).
+export async function importGpx(actor: Actor, trailId: string, input: { gpx: string; replace?: boolean }) {
+  await componentAccess(actor, trailId);
+  const parsed = parseGpx(input.gpx);
+
+  const hasRoute = parsed.route.length >= 2;
+  if (!hasRoute && parsed.waypoints.length === 0) {
+    throw ApiError.badRequest('That file has no track, route or waypoints to bring in.', 'NOTHING_TO_IMPORT');
+  }
+
+  const beerChecks = parsed.waypoints.filter((w) => w.kind === 'BEER_CHECK');
+  const places = parsed.waypoints.filter((w) => w.kind !== 'BEER_CHECK');
+  const length = hasRoute ? routeLengthM(parsed.route) : null;
+  const replace = Boolean(input.replace);
+
+  await prisma.$transaction(async (tx) => {
+    if (hasRoute) {
+      const first = parsed.route[0];
+      const last = parsed.route[parsed.route.length - 1];
+      await tx.trail.update({
+        where: { id: trailId },
+        data: {
+          routeGeoJson: { type: 'LineString', coordinates: parsed.route.map((p) => [p.lng, p.lat]) },
+          // The trail validator bounds this to a hash-sized trail; a longer file
+          // still imports, it just leaves the estimate for the hare to set.
+          ...(length !== null && length >= 100 && length <= 100_000 ? { estimatedDistanceM: length } : {}),
+          startLatitude: first.lat,
+          startLongitude: first.lng,
+          finishLatitude: last.lat,
+          finishLongitude: last.lng,
+        },
+      });
+    }
+
+    if (replace) {
+      const now = new Date();
+      await tx.waypoint.updateMany({ where: { trailId, deletedAt: null }, data: { deletedAt: now } });
+      await tx.beerCheck.updateMany({ where: { trailId, deletedAt: null }, data: { deletedAt: now } });
+    }
+
+    const lastPlace = await tx.waypoint.findFirst({
+      where: { trailId, deletedAt: null },
+      orderBy: { sequence: 'desc' },
+      select: { sequence: true },
+    });
+    const lastBeer = await tx.beerCheck.findFirst({
+      where: { trailId, deletedAt: null },
+      orderBy: { sequence: 'desc' },
+      select: { sequence: true },
+    });
+    let placeSeq = (lastPlace?.sequence ?? -1) + 1;
+    let beerSeq = (lastBeer?.sequence ?? -1) + 1;
+
+    for (const w of places) {
+      await tx.waypoint.create({
+        data: {
+          trailId,
+          kind: w.kind as WaypointKind,
+          label: w.name?.slice(0, 80) ?? null,
+          latitude: w.lat,
+          longitude: w.lng,
+          sequence: placeSeq++,
+          notes: w.notes?.slice(0, 1000) ?? null,
+        },
+      });
+    }
+    for (const w of beerChecks) {
+      await tx.beerCheck.create({
+        data: {
+          trailId,
+          name: w.name?.slice(0, 80) || 'Beer check',
+          latitude: w.lat,
+          longitude: w.lng,
+          sequence: beerSeq++,
+          notes: w.notes?.slice(0, 1000) ?? null,
+        },
+      });
+    }
+
+    await recordRevision(tx, trailId, actor.id, {
+      gpxImport: {
+        route: hasRoute ? { points: parsed.route.length, source: parsed.routeSource, distanceM: length } : null,
+        waypoints: places.length,
+        beerChecks: beerChecks.length,
+        replacedPlaces: replace,
+        skipped: parsed.skipped,
+      },
+    });
+  });
+
+  return {
+    route: hasRoute ? { points: parsed.route.length, distanceM: length, source: parsed.routeSource } : null,
+    waypoints: places.length,
+    beerChecks: beerChecks.length,
+    skipped: parsed.skipped,
+  };
+}
+
+// The trail as a GPX file. It is exactly as secret as the trail: whoever may see
+// the route on screen may take it away, nobody else, so a hidden trail cannot be
+// exported by a participant before it is released.
+export async function exportGpx(actor: Actor | undefined, trailId: string) {
+  const access = await autoReleaseIfDue(await loadAccess(actor, trailId));
+  if (!access.canSeeSecret) {
+    throw ApiError.forbidden('This trail has not been released yet.', 'TRAIL_NOT_RELEASED');
+  }
+  const { trail } = access;
+  const secret = await secretShape(access);
+
+  const run = await prisma.run.findUnique({
+    where: { id: trail.runId },
+    select: { runNumber: true, title: true, kennel: { select: { name: true } } },
+  });
+
+  const waypoints: GpxExportWaypoint[] = [];
+  for (const w of secret.waypoints) {
+    const { type, sym } = exportKind(w.kind);
+    waypoints.push({ lat: w.latitude, lng: w.longitude, name: w.label, notes: w.notes, type, sym });
+  }
+  for (const b of secret.beerChecks) {
+    const { type, sym } = exportKind('BEER_CHECK');
+    waypoints.push({ lat: b.latitude, lng: b.longitude, name: b.name, notes: b.notes, type, sym });
+  }
+  // The ends are only added when no place already marks them, so a file read back
+  // in does not grow a second start.
+  const has = (kind: string) => secret.waypoints.some((w) => w.kind === kind);
+  if (secret.startLatitude !== null && secret.startLongitude !== null && !has('START')) {
+    waypoints.push({ lat: secret.startLatitude, lng: secret.startLongitude, name: 'Start', notes: null, ...exportKind('START') });
+  }
+  if (secret.finishLatitude !== null && secret.finishLongitude !== null && !has('FINISH') && !has('ON_IN')) {
+    waypoints.push({ lat: secret.finishLatitude, lng: secret.finishLongitude, name: 'Finish', notes: null, ...exportKind('FINISH') });
+  }
+  for (const c of secret.chalk) {
+    waypoints.push({
+      lat: c.latitude,
+      lng: c.longitude,
+      name: c.customLabel || c.symbol.replace(/_/g, ' ').toLowerCase(),
+      notes: null,
+      ...exportKind('CHALK'),
+    });
+  }
+
+  const title = run ? `${run.kennel.name} #${run.runNumber}: ${trail.name}` : trail.name;
+  const xml = buildGpx({
+    name: title,
+    description: secret.notes,
+    route: routeSegments(secret.routeGeoJson),
+    waypoints,
+  });
+  const slug = trail.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'trail';
+  return { xml, filename: `${slug}.gpx` };
 }

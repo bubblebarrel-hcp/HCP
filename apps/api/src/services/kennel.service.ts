@@ -546,6 +546,7 @@ export type KennelSettingsInput = Partial<
     | 'visibility'
     | 'defaultRunVisibility'
     | 'downDownsEnabled'
+    | 'circleVisibility'
     | 'hareNudgeSoonDays'
     | 'hareNudgeUrgentDays'
   >
@@ -707,6 +708,7 @@ export async function getSettings(actor: Actor, slug: string) {
       visibility: true,
       defaultRunVisibility: true,
       downDownsEnabled: true,
+      circleVisibility: true,
       hareNudgeSoonDays: true,
       hareNudgeUrgentDays: true,
       status: true,

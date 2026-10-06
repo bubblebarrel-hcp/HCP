@@ -28,12 +28,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-// Tabs with a destination are links; the rest are shown as coming soon.
+// The first tab is this page; the rest are links to their own pages.
 const tabs: { label: string; active?: boolean; href?: string }[] = [
   { label: 'About', active: true },
   { label: 'Runs', href: 'runs' },
-  { label: 'Trail reports' },
-  { label: 'Photos' },
+  { label: 'Trail reports', href: 'reports' },
+  { label: 'Photos', href: 'photos' },
 ];
 
 export default async function KennelPage({ params }: { params: Promise<{ slug: string }> }) {

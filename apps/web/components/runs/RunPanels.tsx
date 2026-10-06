@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react';
 import Link from 'next/link';
-import { Award, Beer, Check, Megaphone, Music, Pause, Pencil, Play, StickyNote, UserPlus } from 'lucide-react';
+import { Award, Beer, Check, Megaphone, Music, Pause, Pencil, Play, StickyNote, UserPlus, Users, X } from 'lucide-react';
 import { Avatar } from '@/components/Avatar';
 import { ActionDialog } from '@/components/membership/ActionDialog';
 import { GuestDialog } from '@/components/runs/GuestDialog';
@@ -581,10 +581,108 @@ function AwardDialog({ run, send }: { run: RunDetail; send: Send }) {
   );
 }
 
+// FR-CIRCLE-002: who was at the Circle, apart from who ran the trail. Someone
+// can leave before the Circle or arrive for it alone, so the two lists are kept
+// as they happened. A hare usually starts from the trail's check-ins and then
+// corrects it.
+function CircleAttendance({ run, send }: { run: RunDetail; send: Send }) {
+  const c = run.circle;
+  const canRecord = run.viewer.canRecordCircle;
+  const [pick, setPick] = useState('');
+  const here = new Set(c?.attendees.map((a) => a.userId).filter(Boolean));
+  const candidates = (run.participants ?? []).filter(
+    (p) => p.kind === 'hasher' && p.rsvpStatus !== 'CANCELLED' && !(p.userId && here.has(p.userId)) && (p.checkedInAt || p.rsvpStatus === 'GOING'),
+  );
+  const attendees = c?.attendees ?? [];
+  if (!canRecord && attendees.length === 0) return null;
+
+  return (
+    <section data-testid="circle-attendance">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+        <Users className="h-4 w-4" aria-hidden />
+        At the Circle{attendees.length > 0 && ` (${attendees.length})`}
+      </h3>
+      {attendees.length ? (
+        <ul className="mt-2 flex flex-wrap gap-2" data-testid="circle-attendee-list">
+          {attendees.map((a) => (
+            <li key={a.id} className="flex items-center gap-1 rounded-full border border-border py-1 pl-3 pr-1 text-sm">
+              {a.userId ? (
+                <Link href={`/hashers/${a.userId}`} className="hover:underline">
+                  {a.name}
+                </Link>
+              ) : (
+                <span>{a.name}</span>
+              )}
+              {canRecord && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${a.name} from the Circle`}
+                  className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  data-testid="circle-attendee-remove"
+                  onClick={() => void send('delete', `/runs/${run.id}/circle/attendance/${a.id}`, undefined, 'Removed.')}
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-sm text-muted-foreground">Nobody recorded at the Circle yet.</p>
+      )}
+      {canRecord && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="circle-attendance-from-trail"
+            onClick={() =>
+              void send('post', `/runs/${run.id}/circle/attendance`, { fromTrail: true }, 'Added everyone who checked in on trail.')
+            }
+          >
+            Add everyone who checked in
+          </Button>
+          {candidates.length > 0 && (
+            <>
+              <Select
+                aria-label="Add someone to the Circle"
+                value={pick}
+                onChange={(e) => setPick(e.target.value)}
+                className="h-9 w-auto min-w-40"
+                data-testid="circle-attendance-pick"
+              >
+                <option value="">Add one hasher…</option>
+                {candidates.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.displayName}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!pick}
+                onClick={() => {
+                  void send('post', `/runs/${run.id}/circle/attendance`, { participationIds: [pick] }, 'Added.');
+                  setPick('');
+                }}
+              >
+                Add
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function CircleCard({ run, send }: { run: RunDetail; send: Send }) {
   const v = run.viewer;
   const c = run.circle;
-  if (!v.canSeeNames || (!c && !v.canRecordCircle && !run.circleSkipReason)) return null;
+  // The Circle has its own audience (FR-CIRCLE-014), which is not the same as
+  // being allowed to see who is coming.
+  if (!v.canSeeCircle || (!c && !v.canRecordCircle && !run.circleSkipReason)) return null;
 
   return (
     <Card className={bleedCard} data-testid="circle-card">
@@ -636,6 +734,7 @@ export function CircleCard({ run, send }: { run: RunDetail; send: Send }) {
             <p className="mt-1 whitespace-pre-line">{c.notes}</p>
           </section>
         )}
+        <CircleAttendance run={run} send={send} />
         <section>
           <h3 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
             <Award className="h-4 w-4" aria-hidden />
