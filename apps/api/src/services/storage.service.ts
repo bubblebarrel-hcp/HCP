@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { copyFile, mkdir, stat, writeFile, rm } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import path from 'node:path';
-import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
@@ -127,4 +130,45 @@ export async function deleteObject(storageKey: string) {
     return;
   }
   await rm(path.join(LOCAL_ROOT, storageKey), { force: true });
+}
+
+// ─── Whole files, for the video transcoder (D67) ───
+//
+// A clip can be tens of megabytes, so these stream rather than hold it in memory:
+// a worker on a small container must not need the whole file in RAM, twice.
+
+function localPath(storageKey: string) {
+  const safeKey = path.normalize(storageKey).replace(/^(\.\.[/\\])+/, '');
+  const full = path.join(LOCAL_ROOT, safeKey);
+  if (!full.startsWith(LOCAL_ROOT)) throw new Error('Invalid storage key');
+  return full;
+}
+
+export async function downloadToFile(storageKey: string, destination: string) {
+  if (client) {
+    const object = await client.send(new GetObjectCommand({ Bucket: env.r2.bucket, Key: storageKey }));
+    if (!object.Body) throw new Error('Storage returned no body');
+    await pipeline(object.Body as Readable, createWriteStream(destination));
+    return;
+  }
+  await copyFile(localPath(storageKey), destination);
+}
+
+export async function uploadFile(storageKey: string, filePath: string, mimeType: string) {
+  if (client) {
+    const { size } = await stat(filePath);
+    await client.send(
+      new PutObjectCommand({
+        Bucket: env.r2.bucket,
+        Key: storageKey,
+        Body: createReadStream(filePath),
+        ContentLength: size,
+        ContentType: mimeType,
+      }),
+    );
+    return;
+  }
+  const destination = localPath(storageKey);
+  await mkdir(path.dirname(destination), { recursive: true });
+  await copyFile(filePath, destination);
 }

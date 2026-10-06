@@ -48,6 +48,13 @@ EXPO_ACCESS_TOKEN=
 
 # Optional: maximum accepted upload, bytes (default 25MB)
 MEDIA_MAX_BYTES=26214400
+# Video is re-encoded to H.264 MP4 after upload (D67). On by default, using the ffmpeg that
+# ffmpeg-static installs; FFMPEG_PATH points at a system ffmpeg instead, and
+# TRANSCODE_ENABLED=false turns it off (clips are then served as uploaded).
+# TRANSCODE_TIMEOUT_MS is how long one clip may take (default 300000).
+TRANSCODE_ENABLED=true
+FFMPEG_PATH=
+TRANSCODE_TIMEOUT_MS=300000
 
 # Anthropic (D14). Without it, AI drafting answers AI_NOT_CONFIGURED.
 ANTHROPIC_API_KEY=

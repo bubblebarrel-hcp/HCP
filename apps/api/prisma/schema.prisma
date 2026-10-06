@@ -2152,31 +2152,52 @@ model AiSuggestion {
 
 // ───────────────────── Part F — Media ─────────────────────
 
+// What became of a video after it was uploaded (D67). A clip is re-encoded to
+// H.264 MP4 at 720p so it plays on every phone and stays small; the original
+// plays in the meantime.
+enum TranscodeState {
+  NONE
+  PENDING
+  PROCESSING
+  DONE
+  // Already in the shape the app wants, so it was left alone.
+  SKIPPED
+  // Gave up after retrying. The original is still what plays.
+  FAILED
+}
+
 model MediaAsset {
-  id              String          @id @default(uuid()) @db.Uuid
-  uploaderId      String?         @db.Uuid
+  id                 String          @id @default(uuid()) @db.Uuid
+  uploaderId         String?         @db.Uuid
   // Idempotency key from the offline upload queue (Ch.22 B.2)
-  clientId        String?         @unique
-  kind            MediaKind
-  storageKey      String
-  url             String?
-  thumbnailUrl    String?
-  mimeType        String
-  sizeBytes       BigInt
-  width           Int?
-  height          Int?
-  durationSec     Float?
-  caption         String?
-  license         String?
-  latitude        Float?
-  longitude       Float?
-  capturedAt      DateTime?
-  uploadState     UploadState     @default(QUEUED)
-  moderationState ModerationState @default(PENDING)
-  moderatedById   String?         @db.Uuid
-  moderatedAt     DateTime?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  clientId           String?         @unique
+  kind               MediaKind
+  storageKey         String
+  url                String?
+  thumbnailUrl       String?
+  mimeType           String
+  sizeBytes          BigInt
+  width              Int?
+  height             Int?
+  durationSec        Float?
+  caption            String?
+  license            String?
+  latitude           Float?
+  longitude          Float?
+  capturedAt         DateTime?
+  // D67: videos only. The key the clip was uploaded under, kept for a while after
+  // it is replaced so a page that cached the old address still plays, then deleted.
+  originalStorageKey String?
+  transcodeState     TranscodeState  @default(NONE)
+  transcodeAttempts  Int             @default(0)
+  transcodeError     String?
+  transcodedAt       DateTime?
+  uploadState        UploadState     @default(QUEUED)
+  moderationState    ModerationState @default(PENDING)
+  moderatedById      String?         @db.Uuid
+  moderatedAt        DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   // Attribution is permanent (BR-CAPSULE-007)
   uploader      User?                  @relation(fields: [uploaderId], references: [id])
@@ -2188,6 +2209,7 @@ model MediaAsset {
 
   @@index([uploaderId])
   @@index([uploadState, moderationState])
+  @@index([transcodeState, createdAt])
 }
 
 // Polymorphic link. At least one link per asset is enforced in the service

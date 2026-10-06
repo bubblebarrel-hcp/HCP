@@ -4,6 +4,7 @@ import {
   MediaTargetType,
   ModerationState,
   Prisma,
+  TranscodeState,
   UploadState,
 } from '@prisma/client';
 import prisma from '../config/prisma';
@@ -13,6 +14,7 @@ import { type Actor, assertKennelPermission, resolveKennelContext } from './perm
 import { recordAudit, recordEvent } from './record.service';
 import { canView, getAccess, publicName, userPublicSelect } from './run.service';
 import { buildStorageKey, createUploadTarget, publicUrlFor, putObject, storageDriver } from './storage.service';
+import { transcodeAvailable } from './transcode.service';
 
 // Media (Ch.23 Part F, Ch.22 B.2). The client asks for an upload target, PUTs
 // the file straight to storage, then confirms; the API never carries the bytes.
@@ -298,7 +300,7 @@ export async function confirmUpload(
   if (!isUuid(mediaId)) throw ApiError.notFound('Media not found');
   const media = await prisma.mediaAsset.findUnique({
     where: { id: mediaId },
-    select: { id: true, uploaderId: true, storageKey: true, uploadState: true, links: { select: { targetType: true, targetId: true } } },
+    select: { id: true, kind: true, uploaderId: true, storageKey: true, uploadState: true, links: { select: { targetType: true, targetId: true } } },
   });
   if (!media) throw ApiError.notFound('Media not found');
   if (media.uploaderId !== actor.id) throw ApiError.forbidden('Only the uploader confirms an upload.', 'NOT_UPLOADER');
@@ -336,6 +338,8 @@ export async function confirmUpload(
         uploadState: immediate ? UploadState.AVAILABLE : UploadState.PROCESSING,
         moderationState: immediate ? ModerationState.APPROVED : ModerationState.PENDING,
         moderatedAt: immediate ? now : null,
+        // D67: a clip is queued to be re-encoded. What plays meanwhile is the original.
+        ...(media.kind === 'VIDEO' && transcodeAvailable() ? { transcodeState: TranscodeState.PENDING } : {}),
       },
       select: mediaSelect,
     });

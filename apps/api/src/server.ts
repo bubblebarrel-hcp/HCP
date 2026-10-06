@@ -36,6 +36,7 @@ import searchRoutes from './routes/search.routes';
 import { localRoot, storageDriver } from './services/storage.service';
 import { startOutbox, stopOutbox } from './services/outbox.service';
 import { startDigestSweeper, stopDigestSweeper } from './services/digest.service';
+import { startTranscodeWorker, stopTranscodeWorker } from './services/transcode.service';
 import { startEscalationSweeper, stopEscalationSweeper } from './services/escalation.service';
 import { startReminders, startTrailReleaseSweeper, stopReminders, stopTrailReleaseSweeper } from './services/reminder.service';
 
@@ -171,6 +172,8 @@ const server = app.listen(env.port, () => {
   startDigestSweeper();
   // Reminders and escalation of work waiting on a person (FR-NOT-011/013).
   startEscalationSweeper();
+  // Re-encodes uploaded video to H.264 MP4 (D67).
+  startTranscodeWorker();
 });
 
 async function shutdown(signal: string) {
@@ -180,6 +183,7 @@ async function shutdown(signal: string) {
   stopTrailReleaseSweeper();
   stopDigestSweeper();
   stopEscalationSweeper();
+  stopTranscodeWorker();
   server.close(() => {
     prisma.$disconnect().finally(() => process.exit(0));
   });

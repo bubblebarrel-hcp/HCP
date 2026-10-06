@@ -183,6 +183,7 @@ Organized by Chapter 23 domain. "Consumers" lists which cross-cutting systems ca
 |---|---|---|---|
 | `MediaCaptured` | Captured (local only — not synced yet, see Offline Rules) | Client (local) | none until synced |
 | `MediaUploaded` | Queued → Uploading → Processing complete | Media Service | RunCapsule, Scribe, Search Index |
+| `MediaTranscoded` | D67 a video was re-encoded to H.264 MP4 and its record now points at the new file; payload carries the sizes before and after (actor SYSTEM) | Media Service (worker) | Audit |
 | `MediaModerationRequired` | BR-RUN-012 gate | Media Service | Notification (moderators) |
 | `MediaApproved` / `MediaRejected` | Moderation decision | Media Service | Notification (uploader), Audit |
 | `MediaModerated` | What the code emits for a moderation decision; payload carries the outcome, so `MediaApproved`/`MediaRejected` above are the same fact split by outcome | Media Service | Notification (uploader), Audit |

@@ -110,6 +110,12 @@ export const env = {
 
   media: {
     maxUploadBytes: Number(optional('MEDIA_MAX_BYTES', String(25 * 1024 * 1024))),
+    // D67: videos are re-encoded after upload. On by default; FFMPEG_PATH points at
+    // a system ffmpeg instead of the one bundled by ffmpeg-static.
+    transcodeEnabled: optional('TRANSCODE_ENABLED', 'true') !== 'false',
+    ffmpegPath: process.env.FFMPEG_PATH ?? '',
+    // How long one clip may take before it is given up on.
+    transcodeTimeoutMs: Number(optional('TRANSCODE_TIMEOUT_MS', String(5 * 60 * 1000))),
   },
 
   // Expo push (D12). There is no key to obtain: Expo accepts a send from
