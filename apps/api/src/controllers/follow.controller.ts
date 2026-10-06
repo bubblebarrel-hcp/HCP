@@ -55,6 +55,10 @@ export async function kennelFollowers(req: Request, res: Response) {
   return ok(res, await follows.listKennelFollowers(viewer(req), req.params.slug, paging(req)));
 }
 
+export async function kennelRoster(req: Request, res: Response) {
+  return ok(res, await follows.listKennelMembers(actor(req), req.params.slug, paging(req)));
+}
+
 // "Who do I follow" without having to know your own id first.
 export async function myFollowing(req: Request, res: Response) {
   return ok(res, await follows.listFollowing(viewer(req), actor(req).id, paging(req)));

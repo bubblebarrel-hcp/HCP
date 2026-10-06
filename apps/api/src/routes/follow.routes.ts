@@ -28,6 +28,8 @@ router.get('/kennels/:slug/follow', optionalAuth, asyncHandler(controller.kennel
 router.post('/kennels/:slug/follow', requireAuth, asyncHandler(controller.followKennel));
 router.delete('/kennels/:slug/follow', requireAuth, asyncHandler(controller.unfollowKennel));
 router.get('/kennels/:slug/followers', optionalAuth, paging, asyncHandler(controller.kennelFollowers));
+// The roll, for the kennel's own members. `/members` is the officers' review queue.
+router.get('/kennels/:slug/roster', requireAuth, paging, asyncHandler(controller.kennelRoster));
 
 // A locked profile's follow requests (D57): approve, decline, or remove a follower.
 router.get('/me/follow-requests', requireAuth, paging, asyncHandler(controller.requests));

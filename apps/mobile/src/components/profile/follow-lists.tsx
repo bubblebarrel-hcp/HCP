@@ -19,7 +19,7 @@ import type { FollowedKennelRow, FollowerRow, FollowingEntry } from '@/lib/types
 // with the picture, the name and what they run with, and a follow button or, on
 // your own followers, Remove (D57). Handles and pictures only (D11).
 
-function HasherRow({ hasher, onRemove }: { hasher: FollowerRow; onRemove?: (hasher: FollowerRow) => Promise<void> }) {
+export function HasherRow({ hasher, onRemove }: { hasher: FollowerRow; onRemove?: (hasher: FollowerRow) => Promise<void> }) {
   const theme = useTheme();
   const router = useRouter();
   return (

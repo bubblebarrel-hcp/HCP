@@ -128,6 +128,16 @@ export async function listHasherFollowers(id: string, page = 1) {
   return api<FollowerPage>(`/hashers/${id}/followers?page=${page}&limit=30`);
 }
 
+// A kennel's followers: open to anyone, since following is interest, not membership (D50).
+export async function listKennelFollowers(slug: string, page = 1) {
+  return api<FollowerPage>(`/kennels/${encodeURIComponent(slug)}/followers?page=${page}&limit=30`);
+}
+
+// A kennel's active members. The API answers 403 FORBIDDEN to anyone who is not one.
+export async function listKennelRoster(slug: string, page = 1) {
+  return api<FollowerPage>(`/kennels/${encodeURIComponent(slug)}/roster?page=${page}&limit=30`);
+}
+
 export async function listHasherFollowing(id: string, page = 1) {
   return api<FollowingPage>(`/hashers/${id}/following?page=${page}&limit=30`);
 }

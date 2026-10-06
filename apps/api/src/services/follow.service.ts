@@ -573,6 +573,30 @@ export async function listKennelFollowers(
   return page(await serializeUsers(actor?.id, rows.map((r) => r.followerId)), total, opts.page, opts.limit);
 }
 
+// Who belongs to this kennel: its ACTIVE members, for its ACTIVE members. Public
+// identity only (D11) — the same row a follower list gives, with no biodata.
+// Someone outside the kennel is told it is forbidden rather than 404, because the
+// kennel itself is public; it is the roll that is members-only. A hidden kennel
+// still 404s to outsiders through followableKennel.
+export async function listKennelMembers(actor: Actor, slugOrId: string, opts: { page: number; limit: number }) {
+  const kennel = await followableKennel(actor, slugOrId);
+  const context = await resolveKennelContext(actor, kennel.id);
+  if (!context.isMember) throw ApiError.forbidden('Only members of this kennel can see who belongs to it.');
+
+  const where: Prisma.MembershipWhereInput = { kennelId: kennel.id, status: MembershipStatus.ACTIVE };
+  const [rows, total] = await prisma.$transaction([
+    prisma.membership.findMany({
+      where,
+      orderBy: [{ approvedAt: 'asc' }, { createdAt: 'asc' }],
+      skip: (opts.page - 1) * opts.limit,
+      take: opts.limit,
+      select: { userId: true },
+    }),
+    prisma.membership.count({ where }),
+  ]);
+  return page(await serializeUsers(actor.id, rows.map((r) => r.userId)), total, opts.page, opts.limit);
+}
+
 // ─── The public face of a hasher ───
 
 // Following somebody needs somewhere to press follow, and there was no public

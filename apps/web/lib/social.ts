@@ -183,6 +183,24 @@ export async function listFollowers(hasherId: string, page = 1) {
   );
 }
 
+// A kennel's followers: open to anyone, since following is interest, not membership (D50).
+export async function listKennelFollowers(slug: string, page = 1) {
+  return unwrap(
+    await api.get<Envelope<Page<FollowerSummary>>>(`/kennels/${encodeURIComponent(slug)}/followers`, {
+      params: { page, limit: 30 },
+    }),
+  );
+}
+
+// A kennel's active members. The API answers 403 to anyone who is not one.
+export async function listKennelRoster(slug: string, page = 1) {
+  return unwrap(
+    await api.get<Envelope<Page<FollowerSummary>>>(`/kennels/${encodeURIComponent(slug)}/roster`, {
+      params: { page, limit: 30 },
+    }),
+  );
+}
+
 export async function listFollowing(hasherId: string, page = 1) {
   return unwrap(
     await api.get<Envelope<Page<FollowingEntry>>>(`/hashers/${hasherId}/following`, {

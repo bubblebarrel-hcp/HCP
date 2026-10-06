@@ -34,6 +34,7 @@ const tabs: { label: string; active?: boolean; href?: string }[] = [
   { label: 'Runs', href: 'runs' },
   { label: 'Trail reports', href: 'reports' },
   { label: 'Photos', href: 'photos' },
+  { label: 'People', href: 'people' },
 ];
 
 export default async function KennelPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -67,10 +68,12 @@ export default async function KennelPage({ params }: { params: Promise<{ slug: s
                 {kennel.name}
               </h1>
               <p className="mt-1 text-muted-foreground">
-                {kennel.activeMemberCount} {kennel.activeMemberCount === 1 ? 'member' : 'members'}
-                {kennel.followerCount > 0 && (
-                  <> · {kennel.followerCount} {kennel.followerCount === 1 ? 'follower' : 'followers'}</>
-                )}{' '}
+                <Link href={`/kennels/${kennel.slug}/people`} className="hover:underline" data-testid="kennel-people-link">
+                  {kennel.activeMemberCount} {kennel.activeMemberCount === 1 ? 'member' : 'members'}
+                  {kennel.followerCount > 0 && (
+                    <> · {kennel.followerCount} {kennel.followerCount === 1 ? 'follower' : 'followers'}</>
+                  )}
+                </Link>{' '}
                 · {kennel.city}, {kennel.country}
               </p>
               {verified && (

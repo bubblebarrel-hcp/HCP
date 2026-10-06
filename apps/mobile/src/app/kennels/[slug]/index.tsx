@@ -108,8 +108,15 @@ export default function KennelDetailScreen() {
               <View style={styles.nameBlock}>
                 <ThemedText accessibilityRole="header" testID="kennel-name" style={styles.h1}>{kennel.name}</ThemedText>
                 <ThemedText themeColor="textSecondary" style={styles.sub}>
-                  {kennel.activeMemberCount} {kennel.activeMemberCount === 1 ? 'member' : 'members'}
-                  {kennel.followerCount > 0 && ` · ${kennel.followerCount} ${kennel.followerCount === 1 ? 'follower' : 'followers'}`}
+                  <ThemedText
+                    accessibilityRole="link"
+                    testID="kennel-people-link"
+                    themeColor="textSecondary"
+                    style={styles.sub}
+                    onPress={() => router.push(`/kennels/${kennel.slug}/people` as never)}>
+                    {kennel.activeMemberCount} {kennel.activeMemberCount === 1 ? 'member' : 'members'}
+                    {kennel.followerCount > 0 && ` · ${kennel.followerCount} ${kennel.followerCount === 1 ? 'follower' : 'followers'}`}
+                  </ThemedText>
                   {' '}· {kennel.city}, {kennel.country}
                 </ThemedText>
                 {verified && (
@@ -147,6 +154,13 @@ export default function KennelDetailScreen() {
               <View accessibilityState={{ disabled: true }} style={styles.tab}>
                 <ThemedText style={[styles.tabText, { color: theme.textSecondary, opacity: 0.6 }]}>Photos</ThemedText>
               </View>
+              <Pressable
+                accessibilityRole="tab"
+                testID="kennel-tab-people"
+                onPress={() => router.push(`/kennels/${kennel.slug}/people` as never)}
+                style={styles.tab}>
+                <ThemedText style={[styles.tabText, { color: theme.textSecondary }]}>People</ThemedText>
+              </Pressable>
             </View>
           </View>
 

@@ -21,7 +21,7 @@ import { errorMessage } from '@/services/api';
 
 type Tab = 'followers' | 'following';
 
-function HasherRow({
+export function HasherRow({
   hasher,
   onRemove,
 }: {
