@@ -5,6 +5,7 @@ import {
   PlatformRole,
   Prisma,
   RoleAssignmentStatus,
+  RunStatus,
   VerificationLevel,
 } from '@prisma/client';
 import prisma from '../config/prisma';
@@ -12,6 +13,7 @@ import { ApiError, isUuid, page } from '../utils/http';
 import { displayName } from '../serializers/user';
 import { recordAudit } from './record.service';
 import { getNumberSetting } from './settings.service';
+import { verificationReadiness } from './admin-oversight.service';
 
 // One aggregate call for the dashboard, not four list calls counted client-side.
 export async function stats() {
@@ -24,7 +26,28 @@ export async function stats() {
     prisma.user.count(),
     prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
   ]);
-  return { kennels, activeKennels, verifiedKennels, pendingKennels, users, recentSignups };
+  const weekAhead = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const [pendingMemberships, unpublishedEvents, runsThisWeek, readiness] = await Promise.all([
+    prisma.membership.count({ where: { status: MembershipStatus.PENDING_REVIEW } }),
+    prisma.domainEvent.count({ where: { publishedAt: null } }),
+    prisma.run.count({
+      where: { startsAt: { gte: new Date(), lte: weekAhead }, status: { notIn: [RunStatus.DRAFT, RunStatus.CANCELLED] } },
+    }),
+    verificationReadiness(),
+  ]);
+  return {
+    kennels,
+    activeKennels,
+    verifiedKennels,
+    pendingKennels,
+    users,
+    recentSignups,
+    pendingMemberships,
+    unpublishedEvents,
+    runsThisWeek,
+    // Active kennels with fewer mismanagement members than D10 asks for.
+    kennelsAtRisk: readiness.items.filter((k) => k.atRisk).length,
+  };
 }
 
 // The review queue (D33/D10). A founded kennel is reachable by link but stays

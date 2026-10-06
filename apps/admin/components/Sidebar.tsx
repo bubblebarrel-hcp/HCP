@@ -3,19 +3,13 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Building2, Flag, LayoutDashboard, LogOut, Users } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import api from '@/services/api';
 import { useAuth } from '@/context/AuthContext';
 import { BrandMark } from '@/components/brand/HashLogo';
 import { ThemeToggleButton } from '@/components/ui/theme-toggle';
+import { NAV } from '@/lib/nav';
 import { cn } from '@/lib/utils';
-
-const nav = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/kennels', label: 'Kennels', icon: Building2 },
-  { href: '/users', label: 'Hashers', icon: Users },
-  { href: '/reports', label: 'Reports', icon: Flag },
-];
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -50,36 +44,45 @@ export function Sidebar() {
         </Link>
         <ThemeToggleButton />
       </div>
-      <nav className="flex gap-1 overflow-x-auto px-3 md:flex-col" aria-label="Admin">
-        {nav.map(({ href, label, icon: Icon }) => {
-          const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-2 rounded-md px-3 py-2 text-sm',
-                active ? 'bg-primary/10 font-semibold text-primary-strong' : 'hover:bg-muted',
-              )}
-              aria-current={active ? 'page' : undefined}
-            >
-              <Icon className="h-4 w-4" aria-hidden />
-              {label}
-              {href === '/reports' && open && open.open > 0 && (
-                <span
+      <nav className="flex gap-1 overflow-x-auto px-3 md:flex-col md:overflow-visible" aria-label="Admin">
+        {NAV.map((group, gi) => (
+          <div key={group.label ?? gi} className="flex gap-1 md:flex-col">
+            {group.label && (
+              <p className="hidden px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:block">
+                {group.label}
+              </p>
+            )}
+            {group.items.map(({ href, label, icon: Icon, badge }) => {
+              const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
                   className={cn(
-                    'ml-auto rounded-full px-2 py-0.5 text-xs font-semibold',
-                    open.urgent > 0 ? 'bg-destructive text-white' : 'bg-primary text-primary-foreground',
+                    'flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm',
+                    active ? 'bg-primary/10 font-semibold text-primary-strong' : 'hover:bg-muted',
                   )}
-                  data-testid="reports-badge"
-                  aria-label={`${open.open} open reports${open.urgent ? `, ${open.urgent} urgent` : ''}`}
+                  aria-current={active ? 'page' : undefined}
                 >
-                  {open.open}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+                  <Icon className="h-4 w-4" aria-hidden />
+                  {label}
+                  {badge === 'reports' && open && open.open > 0 && (
+                    <span
+                      className={cn(
+                        'ml-auto rounded-full px-2 py-0.5 text-xs font-semibold',
+                        open.urgent > 0 ? 'bg-destructive text-white' : 'bg-primary text-primary-foreground',
+                      )}
+                      data-testid="reports-badge"
+                      aria-label={`${open.open} open reports${open.urgent ? `, ${open.urgent} urgent` : ''}`}
+                    >
+                      {open.open}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
       <div className="mt-auto hidden border-t border-border p-4 md:block">
         <p className="truncate text-sm font-medium">{user?.displayName}</p>

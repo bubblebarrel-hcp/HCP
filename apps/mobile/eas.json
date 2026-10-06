@@ -1,0 +1,23 @@
+{
+  "cli": {
+    "version": ">= 21.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.shiggytrails.com/api/v1",
+        "EXPO_PUBLIC_WEB_URL": "https://shiggytrails.com"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.shiggytrails.com/api/v1",
+        "EXPO_PUBLIC_WEB_URL": "https://shiggytrails.com"
+      }
+    }
+  }
+}

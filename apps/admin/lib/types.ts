@@ -85,6 +85,10 @@ export interface AdminStats {
   pendingKennels: number;
   users: number;
   recentSignups: number;
+  pendingMemberships: number;
+  unpublishedEvents: number;
+  runsThisWeek: number;
+  kennelsAtRisk: number;
 }
 
 // The review queue (GET /admin/kennels/pending). A founded kennel is out of the
@@ -190,4 +194,136 @@ export interface ReportDetail {
   priorActions: { kind: ModerationActionKind; at: string; reason: ReportReason }[];
   actions: { id: string; kind: ModerationActionKind; note: string | null; by: string; at: string }[];
   may: ModerationActionKind[];
+}
+
+// --- platform oversight (GET /admin/audit, events, settings, memberships, runs, posts, reels) ---
+
+type KennelRef = { id: string; shortName: string; slug: string };
+type HasherRef = { id: string; displayName: string | null };
+
+export interface AuditEntry {
+  id: string;
+  actorId: string | null;
+  actorName: string | null;
+  actorType: 'USER' | 'SYSTEM';
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  kennelId: string | null;
+  decision: 'ALLOWED' | 'DENIED';
+  previousState: unknown;
+  newState: unknown;
+  reason: string | null;
+  policyRef: string | null;
+  domainEventId: string | null;
+  createdAt: string;
+}
+
+export interface DomainEventRow {
+  id: string;
+  eventType: string;
+  version: number;
+  occurredAt: string;
+  actorId: string | null;
+  actorName: string | null;
+  actorType: 'USER' | 'SYSTEM';
+  aggregateType: string;
+  aggregateId: string;
+  payload: unknown;
+  publishedAt: string | null;
+  attempts: number;
+}
+
+export interface EventsHealth {
+  unpublished: number;
+  stuck: number;
+  failing: number;
+  oldestUnpublishedAt: string | null;
+  lastPublishedAt: string | null;
+}
+
+export interface PlatformSettingRow {
+  key: string;
+  description: string;
+  defaultValue: number;
+  value: number;
+  overridden: boolean;
+  updatedAt: string | null;
+}
+
+export interface MembershipRow {
+  id: string;
+  type: string;
+  status: string;
+  isHomeKennel: boolean;
+  startDate: string | null;
+  approvedAt: string | null;
+  suspendedUntil: string | null;
+  createdAt: string;
+  hasher: HasherRef;
+  kennel: KennelRef;
+}
+
+export interface ReadinessRow {
+  id: string;
+  name: string;
+  shortName: string;
+  slug: string;
+  status: string;
+  verificationLevel: string;
+  activeMembers: number;
+  mismanagementCount: number;
+  mismanagementNeeded: number;
+  meetsRule: boolean;
+  atRisk: boolean;
+}
+
+export interface RunRow {
+  id: string;
+  runNumber: number;
+  title: string;
+  runType: string;
+  status: string;
+  visibility: string;
+  startsAt: string;
+  city: string;
+  country: string;
+  isPaused: boolean;
+  cancelReason: string | null;
+  createdAt: string;
+  kennel: KennelRef;
+  hareCount: number;
+  attendeeCount: number;
+  trailReleased: boolean;
+  reportStatus: string | null;
+  capsuleStatus: string | null;
+}
+
+export interface PostRow {
+  id: string;
+  body: string;
+  status: string;
+  visibility: string;
+  publishedAt: string | null;
+  removedAt: string | null;
+  removedReason: string | null;
+  createdAt: string;
+  author: HasherRef;
+  kennel: KennelRef | null;
+}
+
+export interface ReelRow {
+  id: string;
+  caption: string | null;
+  status: string;
+  visibility: string;
+  viewCount: number;
+  pinned: boolean;
+  publishedAt: string | null;
+  removedAt: string | null;
+  removedReason: string | null;
+  createdAt: string;
+  author: HasherRef;
+  kennel: KennelRef | null;
+  media: { thumbnailUrl: string | null; kind: string } | null;
 }

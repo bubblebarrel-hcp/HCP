@@ -8,7 +8,18 @@ import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/async';
 import { createKennelSchema, listKennelsQuery, updateKennelSchema } from '../validators/kennel.validator';
 import { actionSchema, queueQuery } from '../validators/moderation.validator';
-import { listUsersQuery, updateUserRoleSchema, updateUserStatusSchema } from '../validators/admin.validator';
+import {
+  auditQuery,
+  contentQuery,
+  eventsQuery,
+  listUsersQuery,
+  membershipsQuery,
+  runsQuery,
+  takedownSchema,
+  updateSettingSchema,
+  updateUserRoleSchema,
+  updateUserStatusSchema,
+} from '../validators/admin.validator';
 
 // Platform admin boundary. Applied once at the top so a route added later
 // cannot ship open by accident.
@@ -40,5 +51,25 @@ router.get('/reports', validate(queueQuery, 'query'), asyncHandler(moderationCon
 router.get('/reports/counts', asyncHandler(moderationController.counts));
 router.get('/reports/:id', asyncHandler(moderationController.detail));
 router.post('/reports/:id/actions', validate(actionSchema), asyncHandler(moderationController.act));
+
+// Governance record and event stream (append-only; read here, never edited).
+router.get('/audit', validate(auditQuery, 'query'), asyncHandler(adminController.listAudit));
+// Before any ':id' route should one be added, or 'health' is read as an id.
+router.get('/events/health', asyncHandler(adminController.eventsHealth));
+router.get('/events', validate(eventsQuery, 'query'), asyncHandler(adminController.listEvents));
+
+router.get('/settings', asyncHandler(adminController.listSettings));
+router.patch('/settings/:key', validate(updateSettingSchema), asyncHandler(adminController.updateSetting));
+
+// Read-only oversight: a kennel decides its members, the platform sees them.
+router.get('/memberships', validate(membershipsQuery, 'query'), asyncHandler(adminController.listMemberships));
+router.get('/verification-readiness', asyncHandler(adminController.verificationReadiness));
+router.get('/runs', validate(runsQuery, 'query'), asyncHandler(adminController.listRuns));
+router.get('/runs/awaiting-report', asyncHandler(adminController.runsAwaitingReport));
+
+router.get('/posts', validate(contentQuery, 'query'), asyncHandler(adminController.listPosts));
+router.post('/posts/:id/remove', validate(takedownSchema), asyncHandler(adminController.takedownPost));
+router.get('/reels', validate(contentQuery, 'query'), asyncHandler(adminController.listReels));
+router.post('/reels/:id/remove', validate(takedownSchema), asyncHandler(adminController.takedownReel));
 
 export default router;

@@ -12,6 +12,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio --port 5566",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:seed:production": "ts-node prisma/seed-production.ts",
     "prisma:seed:heavy": "ts-node prisma/seed-heavy/index.ts"
   },
   "dependencies": {

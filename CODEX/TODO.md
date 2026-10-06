@@ -249,6 +249,14 @@ Still open from this pass:
 - [x] Offline trail release behavior. (2026-09-14 — release signal to hosting kennel members; D6.)
 - [x] Direct messaging at launch. (2026-09-14 — confirmed none; D8.)
 
+## Platform admin dashboard follow-ups (D68, 2026-10-06)
+
+- [ ] Platform setting changes write an `AuditLog` entry but no `DomainEvent`: `DomainEvent.aggregateId` is a uuid and a setting's key is a string. If settings should emit events, give `PlatformSetting` an id.
+- [ ] Owner to confirm the D57 exception: platform admins see posts and reels at any audience in `/admin/posts` and `/admin/reels`, to act on reports.
+- [ ] Only one platform admin tier exists (USER/ADMIN). A read-only or super-admin split needs a Chapter 22/23 change.
+- [ ] Exercise a platform-admin takedown of a kennel's post and reel (only a kennel-less post has been tested).
+- [ ] `GET /admin/runs/awaiting-report` has no page; add a "stuck reports" view.
+
 ## Follow-ups From Stakeholder Decisions (2026-09-14)
 
 - [x] D1: Launch scope — all domains (D9).
