@@ -8,6 +8,8 @@ export interface RegisterPayload {
   email: string;
   password: string;
   acceptTerms: boolean;
+  // Which version of the Terms and Privacy Policy was read (lib/legal.ts).
+  termsVersion?: string;
   firstName: string;
   middleName?: string;
   lastName: string;

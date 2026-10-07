@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { ConsentRows, type Consent } from '@/components/legal/ConsentRows';
+import { LEGAL_VERSION } from '@/lib/legal';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -79,11 +81,18 @@ export default function RegisterPage() {
   useEffect(() => {
     if (!loading && user) router.replace('/account');
   }, [loading, user, router]);
-  const { register, handleSubmit, watch, formState } = useForm<Values>({
+  const { register, handleSubmit, watch, setValue, formState } = useForm<Values>({
     resolver: zodResolver(schema),
     defaultValues: defaults,
   });
   const e = formState.errors;
+  // Accepted only by reading each document to the end (ConsentRows); the form's
+  // acceptTerms is true once both have been.
+  const [consent, setConsent] = useState<Consent>({ terms: false, privacy: false });
+  const changeConsent = (next: Consent) => {
+    setConsent(next);
+    setValue('acceptTerms', next.terms && next.privacy, { shouldValidate: formState.isSubmitted });
+  };
   const firstName = watch('firstName');
   const hashHandle = watch('hashHandle');
 
@@ -91,6 +100,7 @@ export default function RegisterPage() {
     try {
       await signUp({
         ...v,
+        termsVersion: LEGAL_VERSION,
         languages: v.languages.split(',').map((l) => l.trim()).filter(Boolean),
       });
       // D31: no session yet. Send them to confirm their address rather than
@@ -168,13 +178,7 @@ export default function RegisterPage() {
               {text('password', 'Password', { type: 'password', autoComplete: 'new-password', hint: '8+ characters with a letter and a number' })}
             </Section>
 
-            <div className="space-y-2">
-              <label className="flex items-start gap-3 text-sm">
-                <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[var(--primary)]" data-testid="register-acceptTerms" {...register('acceptTerms')} />
-                <span>I accept the Terms of Service and Privacy Policy.</span>
-              </label>
-              {e.acceptTerms && <p className="text-xs text-destructive" role="alert">{e.acceptTerms.message}</p>}
-            </div>
+            <ConsentRows value={consent} onChange={changeConsent} error={e.acceptTerms?.message} />
 
             <Button type="submit" size="lg" className="w-full" disabled={formState.isSubmitting} data-testid="register-submit">
               {formState.isSubmitting ? 'Creating your account…' : 'Create account'}

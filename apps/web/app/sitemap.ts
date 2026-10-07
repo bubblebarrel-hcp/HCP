@@ -5,7 +5,7 @@ import type { Page, PublicKennel } from '@/lib/types';
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3010';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const staticRoutes: MetadataRoute.Sitemap = ['', '/kennels', '/auth/register'].map((path) => ({
+  const staticRoutes: MetadataRoute.Sitemap = ['', '/kennels', '/auth/register', '/privacy-policy', '/terms', '/delete-account'].map((path) => ({
     url: `${SITE}${path}`,
     changeFrequency: 'weekly',
   }));

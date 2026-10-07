@@ -13,6 +13,8 @@ export const registerSchema = Joi.object({
     'any.only': 'You must accept the Terms of Service and Privacy Policy',
   }),
 
+  termsVersion: text(40),
+
   firstName: text(80).required(),
   middleName: text(80).allow('', null),
   lastName: text(80).required(),

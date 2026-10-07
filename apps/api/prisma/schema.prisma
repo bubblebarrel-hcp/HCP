@@ -719,6 +719,10 @@ model User {
   preferredLanguage String        @default("en")
   timeZone          String?
   termsAcceptedAt   DateTime
+  // Which version of the Terms and Privacy Policy they read to the end at
+  // sign-up (the web/mobile lib/legal.ts LEGAL_VERSION). Null on accounts made
+  // before the reader existed.
+  termsVersion      String?
   lastLoginAt       DateTime?
   deactivatedAt     DateTime?
   // Set when the hasher deletes their account (D57): the person is gone, the

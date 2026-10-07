@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Check } from 'lucide-react-native';
+import { Check, ChevronRight } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
 import { HashLogo } from '@/components/brand/hash-logo';
@@ -10,6 +10,8 @@ import { Select } from '@/components/ui/select';
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input } from '@/components/ui/web-ui';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
+import { LEGAL_DOCS, LEGAL_VERSION } from '@/lib/legal';
+import { resetLegalConsent, useLegalConsent } from '@/lib/legal-consent';
 
 // The register page, as the web lays it out (app/auth/register/page.tsx): one
 // card, four sections (About you, Contact & location, Emergency contact,
@@ -82,7 +84,7 @@ function validate(v: Values, acceptTerms: boolean): Errors {
   if (v.password.length < 8) e.password = 'At least 8 characters';
   else if (!/[A-Za-z]/.test(v.password)) e.password = 'Include at least one letter';
   else if (!/[0-9]/.test(v.password)) e.password = 'Include at least one number';
-  if (!acceptTerms) e.acceptTerms = 'You must accept the Terms of Service and Privacy Policy';
+  if (!acceptTerms) e.acceptTerms = 'Read and accept both the Terms of Service and the Privacy Policy';
   return e;
 }
 
@@ -103,14 +105,16 @@ export default function RegisterScreen() {
   const theme = useTheme();
   const router = useRouter();
   const [v, setV] = useState<Values>(defaults);
-  const [acceptTerms, setAcceptTerms] = useState(false);
+  const consent = useLegalConsent();
+  // The acceptance belongs to this sign-up, so start from nothing.
+  useEffect(() => resetLegalConsent(), []);
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
 
   const set = (key: keyof Values) => (value: string) => setV((prev) => ({ ...prev, [key]: value }));
 
   async function submit() {
-    const found = validate(v, acceptTerms);
+    const found = validate(v, consent.all);
     setErrors(found);
     if (Object.keys(found).length > 0) return;
     setBusy(true);
@@ -126,6 +130,7 @@ export default function RegisterScreen() {
           occupation: v.occupation.trim() || undefined,
           languages: v.languages.split(',').map((l) => l.trim()).filter(Boolean),
           acceptTerms: true,
+          termsVersion: LEGAL_VERSION,
         },
       });
       // D31: no session yet. Send them to confirm their address rather than
@@ -211,17 +216,27 @@ export default function RegisterScreen() {
                 </Section>
 
                 <View style={styles.terms}>
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: acceptTerms }}
-                    testID="register-acceptTerms"
-                    onPress={() => setAcceptTerms((on) => !on)}
-                    style={styles.termsRow}>
-                    <View style={[styles.box, { borderColor: acceptTerms ? theme.primary : theme.border, backgroundColor: acceptTerms ? theme.primary : 'transparent' }]}>
-                      {acceptTerms && <Check size={12} color={theme.onPrimary} />}
-                    </View>
-                    <ThemedText style={styles.termsText}>I accept the Terms of Service and Privacy Policy.</ThemedText>
-                  </Pressable>
+                  <ThemedText style={styles.termsTitle}>Terms and privacy</ThemedText>
+                  <ThemedText themeColor="textSecondary" style={styles.xs}>Read each document to the end and accept it to create your account.</ThemedText>
+                  {(['terms', 'privacy'] as const).map((slug) => {
+                    const accepted = consent[slug];
+                    return (
+                      <Pressable
+                        key={slug}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${LEGAL_DOCS[slug].title}, ${accepted ? 'accepted' : 'read and accept'}`}
+                        testID={`register-read-${slug}`}
+                        onPress={() => router.push(`/legal/${slug}` as never)}
+                        style={[styles.termsRow, { borderColor: accepted ? theme.primaryStrong : theme.border }]}>
+                        <View style={[styles.box, { borderColor: accepted ? theme.primary : theme.border, backgroundColor: accepted ? theme.primary : 'transparent' }]}>
+                          {accepted && <Check size={12} color={theme.onPrimary} />}
+                        </View>
+                        <ThemedText style={styles.termsText}>{LEGAL_DOCS[slug].title}</ThemedText>
+                        <ThemedText style={[styles.xs, { color: accepted ? theme.primaryStrong : theme.textSecondary }]}>{accepted ? 'Accepted' : 'Read and accept'}</ThemedText>
+                        <ChevronRight size={16} color={theme.textSecondary} />
+                      </Pressable>
+                    );
+                  })}
                   {errors.acceptTerms ? (
                     <ThemedText accessibilityRole="alert" style={[styles.xs, { color: theme.danger }]}>{errors.acceptTerms}</ThemedText>
                   ) : null}
@@ -260,7 +275,8 @@ const styles = StyleSheet.create({
   xs: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
   bold: { fontWeight: '700' },
   terms: { gap: 8 },
-  termsRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, minHeight: 44 },
+  termsTitle: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  termsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingHorizontal: 12, borderWidth: 1, borderRadius: 10 },
   box: { marginTop: 2, width: 16, height: 16, borderRadius: 3, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   termsText: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: '400' },
   footer: { marginTop: 24, textAlign: 'center', fontSize: 14, lineHeight: 20, fontWeight: '400' },

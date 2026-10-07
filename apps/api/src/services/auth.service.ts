@@ -41,6 +41,7 @@ async function loadSessionUser(userId: string) {
 export interface RegisterInput {
   email: string;
   password: string;
+  termsVersion?: string;
   firstName: string;
   middleName?: string | null;
   lastName: string;
@@ -79,6 +80,7 @@ export async function register(input: RegisterInput) {
         // and theirs to change afterwards.
         username: await allocateUsername(tx, hashHandle),
         termsAcceptedAt: new Date(),
+        termsVersion: input.termsVersion ?? null,
         // The account exists but cannot be signed into until the address is
         // confirmed (D31). ACTIVE is about standing, not about verification:
         // emailVerifiedAt is what login checks.
