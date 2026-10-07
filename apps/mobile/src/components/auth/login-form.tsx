@@ -1,3 +1,4 @@
+import { LegalFooter } from '@/components/legal/legal-footer';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -128,6 +129,7 @@ export function LoginForm() {
           </ThemedText>
         </CardContent>
       </Card>
+      <LegalFooter />
     </ScrollView>
   );
 }

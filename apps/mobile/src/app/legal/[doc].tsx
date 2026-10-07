@@ -11,10 +11,13 @@ import { setLegalAccepted, useLegalConsent } from '@/lib/legal-consent';
 // How close to the bottom (px) counts as having reached the end.
 const END_TOLERANCE = 24;
 
-// The sign-up reader: the whole document, and an accept button that stays
-// disabled until it has been scrolled to the end.
+// The Terms and Privacy Policy, readable by anyone (no account needed): from the
+// footer on the log-in screen and the account page it is just a document. Opened
+// from registration (?accept=1) it also carries an accept button, disabled until
+// the document has been scrolled to the end.
 export default function LegalReaderScreen() {
-  const { doc: slug } = useLocalSearchParams<{ doc: string }>();
+  const { doc: slug, accept: acceptParam } = useLocalSearchParams<{ doc: string; accept?: string }>();
+  const acceptMode = acceptParam === '1';
   const doc = slug === 'privacy' ? LEGAL_DOCS.privacy : LEGAL_DOCS.terms;
   const theme = useTheme();
   const router = useRouter();
@@ -71,12 +74,14 @@ export default function LegalReaderScreen() {
         ))}
       </ScrollView>
 
-      <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.card }]}>
-        {!canAccept ? <ThemedText style={[styles.small, styles.hint, { color: theme.textSecondary }]}>Scroll to the end to accept</ThemedText> : null}
-        <Button size="lg" disabled={!canAccept} onPress={already ? () => router.back() : accept} testID={`legal-accept-${doc.slug}`}>
-          {already ? 'Accepted' : 'I have read and accept'}
-        </Button>
-      </View>
+      {acceptMode ? (
+        <View style={[styles.footer, { borderTopColor: theme.border, backgroundColor: theme.card }]}>
+          {!canAccept ? <ThemedText style={[styles.small, styles.hint, { color: theme.textSecondary }]}>Scroll to the end to accept</ThemedText> : null}
+          <Button size="lg" disabled={!canAccept} onPress={already ? () => router.back() : accept} testID={`legal-accept-${doc.slug}`}>
+            {already ? 'Accepted' : 'I have read and accept'}
+          </Button>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

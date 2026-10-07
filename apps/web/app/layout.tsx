@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { Footer } from "@/components/layout/Footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,8 +55,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col bg-canvas">
         <Providers>
           <Header />
-          {/* Bottom padding clears the phone tab bar */}
-          <main className="flex-1 pb-[calc(3.5rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
+          <main className="flex-1">{children}</main>
+          {/* Carries the bottom padding that clears the phone tab bar */}
+          <Footer />
           <BottomNav />
         </Providers>
       </body>

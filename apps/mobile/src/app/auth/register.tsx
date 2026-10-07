@@ -226,7 +226,7 @@ export default function RegisterScreen() {
                         accessibilityRole="button"
                         accessibilityLabel={`${LEGAL_DOCS[slug].title}, ${accepted ? 'accepted' : 'read and accept'}`}
                         testID={`register-read-${slug}`}
-                        onPress={() => router.push(`/legal/${slug}` as never)}
+                        onPress={() => router.push(`/legal/${slug}?accept=1` as never)}
                         style={[styles.termsRow, { borderColor: accepted ? theme.primaryStrong : theme.border }]}>
                         <View style={[styles.box, { borderColor: accepted ? theme.primary : theme.border, backgroundColor: accepted ? theme.primary : 'transparent' }]}>
                           {accepted && <Check size={12} color={theme.onPrimary} />}

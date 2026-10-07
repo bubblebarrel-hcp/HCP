@@ -1,3 +1,4 @@
+import { LegalFooter } from '@/components/legal/legal-footer';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -322,6 +323,7 @@ export function AccountView() {
               <Button onPress={() => router.push('/passport')} style={styles.findKennel}>Open your passport</Button>
             </Card>
           </View>
+          <LegalFooter />
         </ScrollView>
       </SafeAreaView>
     </ThemedView>

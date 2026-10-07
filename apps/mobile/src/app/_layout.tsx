@@ -77,7 +77,7 @@ function PushedScreens() {
       <Stack.Screen name="photo-tags" options={{ title: 'Photo tags' }} />
       <Stack.Screen name="report/[type]/[id]" options={{ title: 'Report' }} />
       <Stack.Screen name="reports" options={{ title: 'My reports' }} />
-      <Stack.Screen name="legal/[doc]" options={{ title: 'Read and accept' }} />
+      <Stack.Screen name="legal/[doc]" options={{ title: 'Terms and privacy' }} />
       <Stack.Screen name="auth/register" options={{ title: 'Create account' }} />
       <Stack.Screen name="auth/verify" options={{ title: 'Confirm email' }} />
       <Stack.Screen name="auth/forgot-password" options={{ title: 'Forgot password' }} />
