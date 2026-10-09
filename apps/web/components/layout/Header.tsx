@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LogOut, Search } from 'lucide-react';
+import { LogOut, Plus, Search } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar } from '@/components/Avatar';
 import { BrandMark } from '@/components/brand/HashLogo';
+import { PhotoPostDialog } from '@/components/feed/PhotoPostDialog';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle, ThemeToggleButton } from '@/components/ui/theme-toggle';
 import { isActive, primaryNav, type NavItem } from '@/components/layout/nav';
@@ -151,6 +152,7 @@ export function Header() {
   const { user, loading } = useAuth();
   const pathname = usePathname();
   const [companionImage, setCompanionImage] = useState<number | null>(null);
+  const [posting, setPosting] = useState(false);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -222,6 +224,28 @@ export function Header() {
           >
             <Search className="h-5 w-5" aria-hidden />
           </Link>
+          {/* Phone width has the + in the bottom bar; this is its desktop twin. */}
+          {!loading &&
+            (user ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setPosting(true)}
+                data-testid="header-post"
+                className="hidden md:inline-flex"
+              >
+                <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                <span className="hidden lg:inline">Post</span>
+                <span className="sr-only lg:hidden">Post photos</span>
+              </Button>
+            ) : (
+              <Button asChild size="sm" className="hidden md:inline-flex">
+                <Link href="/auth/login" data-testid="header-post" aria-label="Post photos">
+                  <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+                  <span className="hidden lg:inline">Post</span>
+                </Link>
+              </Button>
+            ))}
           <ThemeToggleButton />
           <NotificationBell />
           {loading ? (
@@ -240,6 +264,7 @@ export function Header() {
           )}
         </div>
       </div>
+      {user && <PhotoPostDialog open={posting} onOpenChange={setPosting} />}
     </header>
   );
 }
