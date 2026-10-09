@@ -32,7 +32,7 @@ const KEEP_ORIGINAL_HOURS = 48;
 const MAX_SIDE = 1280;
 // A clip that is already an MP4 of H.264 at this size or smaller is left alone.
 const SKIP_BYTES = 12 * 1024 * 1024;
-const POSTER_WIDTH = 480;
+const POSTER_WIDTH = 1200;
 
 export function ffmpegBinary(): string | null {
   return env.media.ffmpegPath || ffmpegStatic || null;

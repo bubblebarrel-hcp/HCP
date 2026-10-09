@@ -31,8 +31,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return shareMetadata({
     title: reel.caption?.slice(0, 70) || `A reel by ${reel.author.name}`,
     description: `${reel.author.name} at ${where} on Shiggy Trails.`,
-    // A video still has no frame grab (D41), so the preview borrows the cover
-    // photo if the post has one and shows no picture otherwise.
+    // A cover photo wins; otherwise a video's poster frame (made by transcoding
+    // or set by the uploader). No poster means a text-only card.
     image: reel.items.find((item) => item.kind === 'PHOTO')?.url ?? reel.items[0]?.posterUrl,
   });
 }
