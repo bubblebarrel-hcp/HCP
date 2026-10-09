@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { BookOpen, Footprints, ImagePlus, Video, X } from 'lucide-react-native';
+import { BookOpen, Footprints, ImagePlus, ListPlus, Video, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -22,6 +22,8 @@ import type { Audience, TaggableRun } from '@/lib/types';
 // composer: the "Reel" button beside the pill opens it.
 const MAX_POST_BODY = 5000;
 const MAX_POST_PHOTOS = 4;
+// The first post and its parts together; the API holds the same line.
+const MAX_THREAD_POSTS = 10;
 
 // Who may read the post (D57): it can narrow the hasher's profile, never widen it.
 const AUDIENCES: { value: Audience; label: string; hint: string }[] = [
@@ -59,9 +61,15 @@ export function Composer({
   const [runs, setRuns] = useState<TaggableRun[]>([]);
   const [runId, setRunId] = useState<string | null>(null);
 
+  // The later posts of a thread, in order. Each is words only; the first post
+  // carries the photos, the poll, the run and the audience for all of them.
+  const [thread, setThread] = useState<string[]>([]);
+
   const filled = pollOptions.map((o) => o.trim()).filter(Boolean);
   const pollReady = !pollOn || (filled.length >= 2 && body.trim().length > 0);
-  const ready = (body.trim().length > 0 || photos.length > 0) && pollReady;
+  // A thread goes up whole, so an empty part holds Post back rather than being dropped.
+  const threadReady = thread.every((part) => part.trim().length > 0);
+  const ready = (body.trim().length > 0 || photos.length > 0) && pollReady && threadReady;
 
   // The runs worth tagging are fetched when the box opens, not for everybody who
   // merely loads the feed.
@@ -121,8 +129,13 @@ export function Composer({
         await uploadAsset(asset, { type: 'POST', id: draft.post.id }, index);
       }
       setProgress(photos.length ? { done: photos.length, total: photos.length } : null);
+      // Each part is written in order, so its place in the chain is the order typed.
+      for (const words of thread) {
+        await api('/posts', { method: 'POST', body: { body: words.trim(), threadRootId: draft.post.id } });
+      }
       await api(`/posts/${draft.post.id}/publish`, { method: 'POST' });
       setBody('');
+      setThread([]);
       setPhotos([]);
       setPollOn(false);
       setPollOptions(['', '']);
@@ -261,6 +274,45 @@ export function Composer({
                 ))}
               </View>
             )}
+
+            {thread.length > 0 && (
+              <ScrollView style={styles.threadScroll} testID="composer-thread" keyboardShouldPersistTaps="handled">
+                {thread.map((part, index) => (
+                  <View key={index} style={[styles.threadPart, { borderLeftColor: theme.primary }]}>
+                    <TextInput
+                      value={part}
+                      onChangeText={(next) =>
+                        setThread((cur) => cur.map((p, i) => (i === index ? next.slice(0, MAX_POST_BODY) : p)))
+                      }
+                      placeholder={`Part ${index + 2}`}
+                      placeholderTextColor={theme.textSecondary}
+                      accessibilityLabel={`Part ${index + 2} of the thread`}
+                      multiline
+                      editable={!busy}
+                      style={[styles.threadInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]}
+                    />
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove part ${index + 2}`}
+                      disabled={busy}
+                      onPress={() => setThread((cur) => cur.filter((_, i) => i !== index))}
+                      style={[styles.remove, { backgroundColor: theme.text }]}>
+                      <X size={14} color={theme.background} />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+
+            <Pressable
+              accessibilityRole="button"
+              testID="composer-add-thread"
+              disabled={busy || thread.length + 1 >= MAX_THREAD_POSTS}
+              onPress={() => setThread((cur) => [...cur, ''])}
+              style={[styles.chip, styles.pollToggle, { borderColor: theme.border, backgroundColor: theme.card, flexDirection: 'row', gap: 6, opacity: busy || thread.length + 1 >= MAX_THREAD_POSTS ? 0.5 : 1 }]}>
+              <ListPlus size={16} color={theme.textSecondary} />
+              <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>Add to thread</ThemedText>
+            </Pressable>
 
             <Pressable
               accessibilityRole="button"
@@ -409,6 +461,9 @@ const styles = StyleSheet.create({
   runScroll: { flexGrow: 0 },
   runRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, alignItems: 'center' },
   pollToggle: { alignSelf: 'flex-start' },
+  threadScroll: { flexGrow: 0, maxHeight: 220 },
+  threadPart: { borderLeftWidth: 2, paddingLeft: 12, marginBottom: 8 },
+  threadInput: { minHeight: 70, borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: 8, fontSize: 16, textAlignVertical: 'top' },
   photos: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   thumb: { width: 80, height: 80, borderRadius: 8, borderWidth: 1 },
   remove: { position: 'absolute', right: -6, top: -6, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

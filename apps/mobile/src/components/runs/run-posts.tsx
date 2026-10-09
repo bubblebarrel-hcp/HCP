@@ -31,7 +31,7 @@ export function RunPosts({ runId }: { runId: string }) {
     <View style={styles.wrap} testID="run-posts">
       <ThemedText accessibilityRole="header" style={styles.heading}>What hashers are saying</ThemedText>
       {posts.map((post) => (
-        <PostDetail key={post.id} post={post} />
+        <PostDetail key={post.id} post={post} clamp />
       ))}
     </View>
   );

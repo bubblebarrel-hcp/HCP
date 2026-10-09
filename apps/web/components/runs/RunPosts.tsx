@@ -32,7 +32,7 @@ export function RunPosts({ runId }: { runId: string }) {
         What hashers are saying
       </h2>
       {posts.map((post) => (
-        <PostDetail key={post.id} post={post} />
+        <PostDetail key={post.id} post={post} clamp />
       ))}
     </section>
   );

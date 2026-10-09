@@ -1144,6 +1144,8 @@ export type FeedItem =
       run: { id: string; runNumber: number | null; title: string | null } | null;
       poll: PostPoll | null;
       linkPreview: LinkPreview | null;
+      // How many posts follow this one in the author's thread.
+      threadCount: number;
     }
   | {
       // A hasher passing 10, 50, 100 runs (D60). News, so it has no engagement bar.
@@ -1515,5 +1517,11 @@ export interface HasherPost {
   engagement: Engagement;
   poll: PostPoll | null;
   linkPreview: LinkPreview | null;
+  // A thread is one hasher's chain of posts. A part names its first post; the
+  // first post counts the parts after it and, on its own page, carries them.
+  threadRootId: string | null;
+  threadPosition: number;
+  threadCount: number;
+  thread?: HasherPost[];
   isMine: boolean;
 }

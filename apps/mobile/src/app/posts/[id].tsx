@@ -25,6 +25,11 @@ export default function PostScreen() {
   const load = useCallback(async () => {
     try {
       const data = await api<{ post: HasherPost }>(`/posts/${id}`);
+      // A part of a thread has no screen of its own: it is read in its place in the chain.
+      if (data.post.threadRootId) {
+        router.replace(`/posts/${data.post.threadRootId}`);
+        return;
+      }
       setPost(data.post);
       setState('ready');
       void countView('posts', id);
@@ -35,7 +40,7 @@ export default function PostScreen() {
         setState('error');
       }
     }
-  }, [id]);
+  }, [id, router]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

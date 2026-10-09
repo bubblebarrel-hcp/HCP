@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { FeedLayout } from '@/components/layout/FeedLayout';
 import { LeftNav } from '@/components/layout/LeftNav';
 import { PostDetail } from '@/components/feed/PostDetail';
@@ -43,6 +44,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function PostPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const data = await load(id);
+  // A part of a thread has no page of its own: it is read in its place in the chain.
+  if (data?.post.threadRootId) redirect(`/posts/${data.post.threadRootId}#part-${data.post.id}`);
   // The anonymous render cannot open a post from a locked profile, so a signed-in
   // reader gets a second chance from the browser (D57).
   return (

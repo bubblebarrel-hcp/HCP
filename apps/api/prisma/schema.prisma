@@ -2800,30 +2800,39 @@ enum PostStatus {
 // one value is a promise the schema cannot keep; adding audiences meant adding
 // the column then, with the migration that admits it, and this is that.
 model Post {
-  id            String     @id @default(uuid()) @db.Uuid
-  authorId      String     @db.Uuid
+  id             String     @id @default(uuid()) @db.Uuid
+  authorId       String     @db.Uuid
   // Optional context, like a reel's: where the hasher was, not who may read it.
-  kennelId      String?    @db.Uuid
-  runId         String?    @db.Uuid
-  body          String
+  kennelId       String?    @db.Uuid
+  runId          String?    @db.Uuid
+  body           String
   // Who may read this post (D57). It can narrow its author's profile and never
   // widen it, exactly as a reel's audience does.
-  visibility    Audience   @default(PUBLIC)
-  status        PostStatus @default(DRAFT)
-  publishedAt   DateTime?
-  editedAt      DateTime?
-  archivedAt    DateTime?
+  visibility     Audience   @default(PUBLIC)
+  status         PostStatus @default(DRAFT)
+  publishedAt    DateTime?
+  editedAt       DateTime?
+  archivedAt     DateTime?
   // Set when a moderator takes it down; the row stays (append-only history).
-  removedAt     DateTime?
-  removedById   String?    @db.Uuid
-  removedReason String?
+  removedAt      DateTime?
+  removedById    String?    @db.Uuid
+  removedReason  String?
   // The first link in the words, once fetched (D60). Null until then, and null
   // for good if it could not be read.
-  linkPreviewId String?    @db.Uuid
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  linkPreviewId  String?    @db.Uuid
+  // A thread is one hasher's chain of posts. The first is the root (this is
+  // null); every later part points at it and carries its place in the chain.
+  // A part is a post in its own right, so it can be liked and answered, but it
+  // takes its audience, kennel and run from the root and appears in no list on
+  // its own: the root's card leads to the whole chain.
+  threadRootId   String?    @db.Uuid
+  threadPosition Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
   linkPreview LinkPreview? @relation(fields: [linkPreviewId], references: [id])
+  threadRoot  Post?        @relation("PostThread", fields: [threadRootId], references: [id])
+  threadParts Post[]       @relation("PostThread")
   poll        Poll?
   author      User         @relation("PostAuthor", fields: [authorId], references: [id])
   removedBy   User?        @relation("PostRemover", fields: [removedById], references: [id])
@@ -2833,6 +2842,7 @@ model Post {
   @@index([status, publishedAt])
   @@index([authorId, status])
   @@index([kennelId, status])
+  @@index([threadRootId, threadPosition])
 }
 
 // ───────────────────── Part K — Hashtags and mentions (D59) ─────────────────────

@@ -8,6 +8,7 @@ import { activeFollowSet, contentVisibleAuthors } from './audience.service';
 import { hiddenFor } from './block.service';
 import { previewSelect } from './link-preview.service';
 import { type SerializedPoll, pollsFor } from './poll.service';
+import { threadCounts } from './post.service';
 import * as stats from './stats.service';
 import { resolveVisible, segmentFor } from './subject.service';
 
@@ -345,7 +346,7 @@ async function upcomingRuns(actor: Actor | undefined, limit: number): Promise<Fe
 // returns is what goes on the page.
 async function recentPosts(actor: Actor | undefined, limit: number): Promise<FeedItem[]> {
   const candidates = await prisma.post.findMany({
-    where: { status: 'PUBLISHED' },
+    where: { status: 'PUBLISHED', threadRootId: null },
     distinct: ['authorId'],
     select: { authorId: true },
   });
@@ -354,6 +355,8 @@ async function recentPosts(actor: Actor | undefined, limit: number): Promise<Fee
   const rows = await prisma.post.findMany({
     where: {
       status: 'PUBLISHED',
+      // A thread is one card, its first post; the rest are on its page.
+      threadRootId: null,
       // The profile lets the viewer in; then each post's own audience decides (D57).
       OR: [
         ...(actor ? [{ authorId: actor.id }] : []),
@@ -377,6 +380,7 @@ async function recentPosts(actor: Actor | undefined, limit: number): Promise<Fee
   });
   if (rows.length === 0) return [];
   const polls = await pollsFor(actor?.id, new Map(rows.map((r) => [r.id, r.author.id])));
+  const threads = await threadCounts(rows.map((r) => r.id));
 
   const links = await prisma.mediaLink.findMany({
     where: { targetType: 'POST', targetId: { in: rows.map((r) => r.id) } },
@@ -427,6 +431,7 @@ async function recentPosts(actor: Actor | undefined, limit: number): Promise<Fee
     run: row.run,
     poll: polls.get(row.id) ?? null,
     linkPreview: row.linkPreview,
+    threadCount: threads.get(row.id) ?? 0,
   }));
 }
 

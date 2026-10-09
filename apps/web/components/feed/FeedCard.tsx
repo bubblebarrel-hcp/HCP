@@ -1,9 +1,20 @@
 import Link from 'next/link';
-import { Beer, BookOpen, CalendarDays, Camera, MapPin, Megaphone, MessageSquare, Rabbit, Repeat2 } from 'lucide-react';
+import {
+  Beer,
+  BookOpen,
+  CalendarDays,
+  Camera,
+  ListTree,
+  MapPin,
+  Megaphone,
+  MessageSquare,
+  Rabbit,
+  Repeat2,
+} from 'lucide-react';
 import { Avatar } from '@/components/Avatar';
 import { Card } from '@/components/ui/card';
 import { EngagementBar } from '@/components/social/EngagementBar';
-import { RichText } from '@/components/social/RichText';
+import { ExpandableText } from '@/components/social/ExpandableText';
 import { LinkPreviewCard } from '@/components/social/LinkPreviewCard';
 import { PollCard } from '@/components/social/PollCard';
 import { MilestoneCard } from '@/components/feed/MilestoneCard';
@@ -281,9 +292,12 @@ function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> })
           at={item.at}
           icon={<MessageSquare className="h-3.5 w-3.5" aria-hidden />}
         />
-        <p className="mt-2 whitespace-pre-line leading-relaxed text-[15px]" data-testid="feed-post-body">
-          <RichText text={item.body} />
-        </p>
+        <ExpandableText
+          text={item.body}
+          href={`/posts/${item.id}`}
+          className="mt-2 whitespace-pre-line leading-relaxed text-[15px]"
+          data-testid="feed-post-body"
+        />
         {item.edited && <p className="mt-1 text-xs text-muted-foreground">edited</p>}
         {item.poll && <PollCard postId={item.id} initial={item.poll} />}
         {item.linkPreview && <LinkPreviewCard preview={item.linkPreview} />}
@@ -306,6 +320,19 @@ function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> })
             />
           ))}
         </div>
+      )}
+
+      {item.threadCount > 0 && (
+        <p className="px-4 py-3 text-sm">
+          <Link
+            href={`/posts/${item.id}`}
+            className="inline-flex items-center gap-1.5 font-medium text-primary-strong hover:underline"
+            data-testid="feed-post-thread"
+          >
+            <ListTree className="h-4 w-4" aria-hidden />
+            Thread · {item.threadCount} more {item.threadCount === 1 ? 'post' : 'posts'}
+          </Link>
+        </p>
       )}
 
       {item.run && (

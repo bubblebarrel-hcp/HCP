@@ -44,7 +44,7 @@ export function TagResults({
       {posts.length > 0 && (
         <section aria-label={`Posts tagged #${tag}`} className="space-y-4" data-testid="tag-posts">
           {posts.map((post) => (
-            <PostDetail key={post.id} post={post} />
+            <PostDetail key={post.id} post={post} clamp />
           ))}
         </section>
       )}

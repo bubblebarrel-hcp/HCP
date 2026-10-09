@@ -38,6 +38,8 @@ import * as stats from './stats.service';
 const S = PostStatus;
 
 export const MAX_BODY = 5000;
+// The root and its parts together. Past this it is a trail report, not a thread.
+export const MAX_THREAD_POSTS = 10;
 
 export interface PostInput {
   body?: string;
@@ -46,6 +48,9 @@ export interface PostInput {
   visibility?: Audience;
   kennelId?: string | null;
   runId?: string | null;
+  // Makes this draft the next part of the author's own thread (the root's id).
+  // The part takes the root's audience, kennel and run.
+  threadRootId?: string | null;
 }
 
 const postSelect = {
@@ -59,6 +64,8 @@ const postSelect = {
   authorId: true,
   kennelId: true,
   runId: true,
+  threadRootId: true,
+  threadPosition: true,
   // The picture is public identity like the handle (D11).
   author: { select: { ...userPublicSelect, avatarUrl: true } },
   kennel: { select: { id: true, slug: true, shortName: true, primaryColor: true } },
@@ -130,6 +137,7 @@ function serialize(
   photos: PostPhoto[] = [],
   engagement: stats.Engagement = stats.EMPTY,
   poll: SerializedPoll | null = null,
+  threadCount = 0,
 ) {
   return {
     id: post.id,
@@ -152,19 +160,53 @@ function serialize(
     engagement,
     poll,
     linkPreview: post.linkPreview,
+    // Null on a root and on a post that is not in a thread; a part names its root.
+    threadRootId: post.threadRootId,
+    threadPosition: post.threadPosition,
+    // On a root: how many parts follow it. The card says so and links to them.
+    threadCount,
     isMine: viewerId ? post.authorId === viewerId : false,
   };
 }
 
 export type SerializedPost = ReturnType<typeof serialize>;
 
-async function serializeOne(post: PostRow, viewerId?: string) {
+// How many published parts follow each root.
+export async function threadCounts(rootIds: string[]) {
+  const counts = new Map<string, number>();
+  if (rootIds.length === 0) return counts;
+  const rows = await prisma.post.groupBy({
+    by: ['threadRootId'],
+    where: { threadRootId: { in: rootIds }, status: S.PUBLISHED },
+    _count: { _all: true },
+  });
+  for (const row of rows) if (row.threadRootId) counts.set(row.threadRootId, row._count._all);
+  return counts;
+}
+
+type SerializedWithThread = SerializedPost & { thread: SerializedPost[] };
+
+async function serializeOne(post: PostRow, viewerId?: string, withThread = false): Promise<SerializedWithThread> {
   const [photos, engagement, polls] = await Promise.all([
     photosFor([post.id]),
     stats.engagementOne(viewerId, SubjectType.POST, post.id),
     pollsFor(viewerId, new Map([[post.id, post.authorId]])),
   ]);
-  return serialize(post, viewerId, photos.get(post.id) ?? [], engagement, polls.get(post.id) ?? null);
+  const base = serialize(post, viewerId, photos.get(post.id) ?? [], engagement, polls.get(post.id) ?? null);
+  if (!withThread || post.threadRootId) return { ...base, thread: [] };
+
+  // The rest of the chain, in order. A draft part is its author's alone; one
+  // that was archived or taken down is simply not in the chain any more.
+  const parts = await prisma.post.findMany({
+    where: {
+      threadRootId: post.id,
+      OR: [{ status: S.PUBLISHED }, ...(viewerId === post.authorId ? [{ status: S.DRAFT }] : [])],
+    },
+    orderBy: { threadPosition: 'asc' },
+    select: postSelect,
+  });
+  const thread = await Promise.all(parts.map((part) => serializeOne(part, viewerId)));
+  return { ...base, threadCount: parts.filter((part) => part.status === S.PUBLISHED).length, thread };
 }
 
 async function findPost(id: string) {
@@ -184,7 +226,38 @@ function cleanBody(body: string | undefined) {
 
 // ─── Writing one ───
 
+async function createPart(actor: Actor, input: PostInput, rootId: string) {
+  const root = await findPost(rootId);
+  if (root.authorId !== actor.id) throw ApiError.forbidden('Only the author adds to their thread.', 'NOT_THE_AUTHOR');
+  if (root.threadRootId) throw ApiError.badRequest('Add to the first post of the thread.', 'THREAD_NOT_ROOT');
+  if (root.status !== S.DRAFT) {
+    throw ApiError.badRequest('A thread is written before it is posted.', 'THREAD_ALREADY_POSTED');
+  }
+  const last = await prisma.post.aggregate({ where: { threadRootId: root.id }, _max: { threadPosition: true } });
+  const position = (last._max.threadPosition ?? 0) + 1;
+  if (position >= MAX_THREAD_POSTS) {
+    throw ApiError.badRequest('That is long enough for a trail report.', 'THREAD_TOO_LONG');
+  }
+
+  const part = await prisma.post.create({
+    data: {
+      authorId: actor.id,
+      body: cleanBody(input.body),
+      // The root decides who may read the chain.
+      visibility: root.visibility,
+      kennelId: root.kennelId,
+      runId: root.runId,
+      threadRootId: root.id,
+      threadPosition: position,
+      status: S.DRAFT,
+    },
+    select: postSelect,
+  });
+  return serializeOne(part, actor.id);
+}
+
 export async function createDraft(actor: Actor, input: PostInput) {
+  if (input.threadRootId) return createPart(actor, input, input.threadRootId);
   // Context is optional, but a context that is claimed has to be real and the
   // hasher has to be entitled to it — the same rule a reel follows (D41).
   if (input.kennelId) {
@@ -218,8 +291,14 @@ export async function updateDraft(actor: Actor, postId: string, input: PostInput
   if (post.authorId !== actor.id) throw ApiError.forbidden('Only the author edits their post.', 'NOT_THE_AUTHOR');
   if (post.status === S.REMOVED) throw ApiError.badRequest('That post was taken down.', 'POST_REMOVED');
 
+  if (post.threadRootId && input.visibility) {
+    throw ApiError.badRequest('A thread has one audience: change it on the first post.', 'THREAD_AUDIENCE');
+  }
   const body = input.body === undefined ? undefined : cleanBody(input.body);
   const updated = await prisma.$transaction(async (tx) => {
+    if (input.visibility && !post.threadRootId) {
+      await tx.post.updateMany({ where: { threadRootId: post.id }, data: { visibility: input.visibility } });
+    }
     const row = await tx.post.update({
       where: { id: post.id },
       data: {
@@ -249,12 +328,26 @@ export async function updateDraft(actor: Actor, postId: string, input: PostInput
 export async function publish(actor: Actor, postId: string) {
   const post = await findPost(postId);
   if (post.authorId !== actor.id) throw ApiError.forbidden('Only the author posts their post.', 'NOT_THE_AUTHOR');
-  if (post.status === S.PUBLISHED) return serializeOne(post, actor.id);
+  if (post.threadRootId) {
+    throw ApiError.badRequest('A thread is posted from its first post.', 'THREAD_PART');
+  }
+  if (post.status === S.PUBLISHED) return serializeOne(post, actor.id, true);
   if (post.status !== S.DRAFT) throw ApiError.badRequest('That post is no longer a draft.', 'POST_NOT_DRAFT');
 
-  const photos = (await photosFor([post.id])).get(post.id) ?? [];
-  if (!post.body.trim() && photos.length === 0) {
-    throw ApiError.badRequest('Say something, or add a photo.', 'POST_EMPTY');
+  const parts = await prisma.post.findMany({
+    where: { threadRootId: post.id, status: S.DRAFT },
+    orderBy: { threadPosition: 'asc' },
+    select: postSelect,
+  });
+  const photoMap = await photosFor([post.id, ...parts.map((part) => part.id)]);
+  const photos = photoMap.get(post.id) ?? [];
+  for (const each of [post, ...parts]) {
+    if (!each.body.trim() && (photoMap.get(each.id) ?? []).length === 0) {
+      throw ApiError.badRequest(
+        each.id === post.id ? 'Say something, or add a photo.' : `Part ${each.threadPosition + 1} is empty.`,
+        'POST_EMPTY',
+      );
+    }
   }
 
   const published = await prisma.$transaction(async (tx) => {
@@ -268,7 +361,7 @@ export async function publish(actor: Actor, postId: string) {
       aggregateType: 'Post',
       aggregateId: post.id,
       actorId: actor.id,
-      payload: { kennelId: post.kennelId, runId: post.runId, photoCount: photos.length },
+      payload: { kennelId: post.kennelId, runId: post.runId, photoCount: photos.length, threadParts: parts.length },
     });
     // A poll's clock starts now, not when the draft was begun (D60).
     await startClock(tx, post.id);
@@ -279,12 +372,35 @@ export async function publish(actor: Actor, postId: string) {
       authorId: actor.id,
       text: post.body,
     });
+    // The rest of the chain goes up with the first post, in the same
+    // transaction, so a thread is never half-public.
+    for (const part of parts) {
+      await tx.post.update({ where: { id: part.id }, data: { status: S.PUBLISHED, publishedAt: new Date() } });
+      await recordEvent(tx, {
+        eventType: 'PostPublished',
+        aggregateType: 'Post',
+        aggregateId: part.id,
+        actorId: actor.id,
+        payload: {
+          kennelId: part.kennelId,
+          runId: part.runId,
+          photoCount: (photoMap.get(part.id) ?? []).length,
+          threadRootId: post.id,
+        },
+      });
+      await syncEntities(tx, {
+        subject: { type: SubjectType.POST, id: part.id },
+        authorId: actor.id,
+        text: part.body,
+      });
+    }
     return row;
   });
   // The link's card is fetched after the post is up, not before: a slow site must
   // not hold up posting (D60).
   attachPreview(post.id, post.body);
-  return serializeOne(published, actor.id);
+  for (const part of parts) attachPreview(part.id, part.body);
+  return serializeOne(published, actor.id, true);
 }
 
 // ─── Ending one ───
@@ -301,6 +417,13 @@ export async function archive(actor: Actor, postId: string) {
       data: { status: S.ARCHIVED, archivedAt: new Date() },
       select: postSelect,
     });
+    // Archiving the first post archives the whole chain.
+    if (!post.threadRootId) {
+      await tx.post.updateMany({
+        where: { threadRootId: post.id, status: { in: [S.DRAFT, S.PUBLISHED] } },
+        data: { status: S.ARCHIVED, archivedAt: new Date() },
+      });
+    }
     await recordEvent(tx, {
       eventType: 'PostArchived',
       aggregateType: 'Post',
@@ -330,6 +453,12 @@ export async function remove(actor: Actor, postId: string, reason: string) {
       data: { status: S.REMOVED, removedAt: new Date(), removedById: actor.id, removedReason: reason },
       select: postSelect,
     });
+    if (!post.threadRootId) {
+      await tx.post.updateMany({
+        where: { threadRootId: post.id, status: { not: S.REMOVED } },
+        data: { status: S.REMOVED, removedAt: new Date(), removedById: actor.id, removedReason: reason },
+      });
+    }
     const event = await recordEvent(tx, {
       eventType: 'PostRemoved',
       aggregateType: 'Post',
@@ -370,6 +499,8 @@ export async function listPublished(
   }
   const where: Prisma.PostWhereInput = {
     status: S.PUBLISHED,
+    // A thread is one entry in a list: its first post. The rest are behind it.
+    threadRootId: null,
     ...(opts.kennelSlug ? { kennel: { slug: opts.kennelSlug } } : {}),
     ...(opts.authorId ? { authorId: opts.authorId } : {}),
     ...(opts.runId ? { runId: opts.runId } : {}),
@@ -413,13 +544,14 @@ export async function listPublished(
     prisma.post.count({ where: readableWhere }),
   ]);
 
-  const [photos, engagement, polls] = await Promise.all([
+  const [photos, engagement, polls, threads] = await Promise.all([
     photosFor(rows.map((r) => r.id)),
     stats.engagementFor(
       actor?.id,
       rows.map((r) => ({ type: SubjectType.POST, id: r.id })),
     ),
     pollsFor(actor?.id, new Map(rows.map((r) => [r.id, r.authorId]))),
+    threadCounts(rows.map((r) => r.id)),
   ]);
 
   const items = rows.map((row) =>
@@ -429,6 +561,7 @@ export async function listPublished(
       photos.get(row.id) ?? [],
       engagement.get(stats.subjectKey(SubjectType.POST, row.id)) ?? stats.EMPTY,
       polls.get(row.id) ?? null,
+      threads.get(row.id) ?? 0,
     ),
   );
   return page(items, total, opts.page, opts.limit);
@@ -441,5 +574,5 @@ export async function detail(actor: Actor | undefined, postId: string) {
   if (post.status === S.REMOVED) throw ApiError.notFound('Post not found');
   if (post.status !== S.PUBLISHED && !own) throw ApiError.notFound('Post not found');
   if (!own && !(await canSeeAudience(actor, post.authorId, post.visibility))) throw ApiError.notFound('Post not found');
-  return serializeOne(post, actor?.id);
+  return serializeOne(post, actor?.id, true);
 }

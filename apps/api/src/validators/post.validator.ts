@@ -21,6 +21,9 @@ export const createPostSchema = Joi.object({
   // Where the hasher was, not who may read it.
   kennelId: uuid.allow(null),
   runId: uuid.allow(null),
+  // The next part of the author's own thread: the id of its first post. The part
+  // takes that post's audience, kennel and run, so none of them are sent with it.
+  threadRootId: uuid.allow(null),
 });
 
 export const updatePostSchema = Joi.object({

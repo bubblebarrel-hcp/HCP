@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BarChart3, BookOpen, Footprints, ImagePlus, Loader2, Plus, Video, X } from 'lucide-react';
+import { BarChart3, BookOpen, Footprints, ImagePlus, ListPlus, Loader2, Plus, Video, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar } from '@/components/Avatar';
@@ -14,7 +14,7 @@ import { FEED_REFRESH_EVENT } from '@/components/feed/PullToRefresh';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ACCEPTED_IMAGES, MAX_UPLOAD_BYTES, fileSize } from '@/lib/media';
-import { MAX_POST_BODY, MAX_POST_PHOTOS, post as sendPost } from '@/lib/posts';
+import { MAX_POST_BODY, MAX_POST_PHOTOS, MAX_THREAD_POSTS, post as sendPost } from '@/lib/posts';
 import { bleedCard, cn } from '@/lib/utils';
 import type { Audience, TaggableRun } from '@/lib/types';
 import api, { errorMessage } from '@/services/api';
@@ -48,12 +48,19 @@ export function Composer() {
   const [runs, setRuns] = useState<TaggableRun[]>([]);
   const [runId, setRunId] = useState('');
 
+  // The later posts of a thread, in order. Each is words only; the first post
+  // carries the photos, the poll, the run and the audience for all of them.
+  const [thread, setThread] = useState<string[]>([]);
+
   const filledOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
   const pollReady = !pollOn || (filledOptions.length >= 2 && body.trim().length > 0);
-  const ready = (body.trim().length > 0 || photos.length > 0) && pollReady;
+  // A thread goes up whole, so a part left empty holds the Post button back
+  // rather than being dropped without a word.
+  const threadReady = thread.every((part) => part.trim().length > 0);
+  const ready = (body.trim().length > 0 || photos.length > 0) && pollReady && threadReady;
   // Open once there is something to say, so the box does not take over the top
   // of the feed before anybody has typed.
-  const expanded = body.length > 0 || photos.length > 0;
+  const expanded = body.length > 0 || photos.length > 0 || thread.length > 0;
 
   // The runs worth tagging are fetched once the box opens, not for everybody who
   // merely loads the page.
@@ -103,10 +110,12 @@ export function Composer() {
           visibility: audience,
           runId: runId || null,
           poll: pollOn ? { options: filledOptions, hours: pollHours } : undefined,
+          thread: thread.map((part) => part.trim()),
         },
         (done, total) => setProgress({ done, total }),
       );
       setBody('');
+      setThread([]);
       setPhotos([]);
       setPollOn(false);
       setPollOptions(['', '']);
@@ -161,6 +170,36 @@ export function Composer() {
               }
             }}
           />
+
+          {thread.length > 0 && (
+            <ol className="mt-2 space-y-2 border-l-2 border-primary/40 pl-3" data-testid="composer-thread">
+              {thread.map((part, index) => (
+                <li key={index} className="relative">
+                  <MentionTextarea
+                    value={part}
+                    onValueChange={(next) =>
+                      setThread((current) => current.map((p, i) => (i === index ? next.slice(0, MAX_POST_BODY) : p)))
+                    }
+                    placeholder={`Part ${index + 2}`}
+                    aria-label={`Part ${index + 2} of the thread`}
+                    rows={3}
+                    disabled={busy}
+                    className="w-full resize-none rounded-2xl bg-muted px-4 py-2.5 text-[15px] placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-60"
+                    data-testid="composer-thread-part"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setThread((current) => current.filter((_, i) => i !== index))}
+                    disabled={busy}
+                    aria-label={`Remove part ${index + 2}`}
+                    className="absolute -right-1.5 -top-1.5 grid h-6 w-6 place-items-center rounded-full bg-foreground text-background hover:opacity-90"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
 
           {photos.length > 0 && (
             <ul className="mt-2 flex flex-wrap gap-2" data-testid="composer-photos">
@@ -260,6 +299,18 @@ export function Composer() {
               >
                 <ImagePlus className="h-4 w-4" aria-hidden />
                 Photo
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy || thread.length + 1 >= MAX_THREAD_POSTS}
+                onClick={() => setThread((current) => [...current, ''])}
+                data-testid="composer-add-thread"
+              >
+                <ListPlus className="h-4 w-4" aria-hidden />
+                Thread
               </Button>
 
               <Button

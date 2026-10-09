@@ -83,7 +83,7 @@ export default function TagScreen() {
       ) : (
         <View style={styles.results} testID="tag-results">
           {posts.map((post) => (
-            <PostDetail key={post.id} post={post} />
+            <PostDetail key={post.id} post={post} clamp />
           ))}
 
           {(reels.length > 0 || user) && (

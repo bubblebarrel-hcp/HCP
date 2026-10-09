@@ -18,7 +18,7 @@ import { Avatar } from '@/components/feed/avatar';
 import { EngagementBar } from '@/components/social/engagement-bar';
 import { LinkPreviewCard } from '@/components/social/link-preview-card';
 import { PollCard } from '@/components/social/poll-card';
-import { RichText } from '@/components/social/rich-text';
+import { ExpandableText } from '@/components/social/expandable-text';
 import { ThemedText } from '@/components/themed-text';
 import { Card } from '@/components/ui/web-ui';
 import { MaxContentWidth } from '@/constants/theme';
@@ -251,7 +251,7 @@ function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> })
           icon={MessageSquare}
         />
         <Pressable accessibilityRole="link" accessibilityLabel="Open this post" onPress={() => router.push(`/posts/${item.id}`)}>
-          <RichText text={item.body} style={[styles.body, styles.mt8]} testID="feed-post-body" />
+          <ExpandableText text={item.body} style={[styles.body, styles.mt8]} testID="feed-post-body" />
         </Pressable>
         {item.edited ? <ThemedText themeColor="textSecondary" style={[styles.xs, styles.mt4]}>edited</ThemedText> : null}
         {item.poll ? <PollCard postId={item.id} initial={item.poll} /> : null}
@@ -273,6 +273,18 @@ function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> })
             />
           ))}
         </View>
+      )}
+
+      {item.threadCount > 0 && (
+        <Pressable
+          accessibilityRole="link"
+          testID="feed-post-thread"
+          onPress={() => router.push(`/posts/${item.id}`)}
+          style={styles.runLink}>
+          <ThemedText style={[styles.sm, styles.medium, { color: theme.primaryStrong }]}>
+            Thread · {item.threadCount} more {item.threadCount === 1 ? 'post' : 'posts'}
+          </ThemedText>
+        </Pressable>
       )}
 
       {item.run && (

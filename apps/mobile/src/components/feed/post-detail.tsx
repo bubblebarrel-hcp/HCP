@@ -6,6 +6,7 @@ import { Avatar } from '@/components/feed/avatar';
 import { EngagementBar } from '@/components/social/engagement-bar';
 import { LinkPreviewCard } from '@/components/social/link-preview-card';
 import { PollCard } from '@/components/social/poll-card';
+import { ExpandableText } from '@/components/social/expandable-text';
 import { RichText } from '@/components/social/rich-text';
 import { ThemedText } from '@/components/themed-text';
 import { Select } from '@/components/ui/select';
@@ -27,7 +28,20 @@ const AUDIENCES = [
   { value: 'ONLY_ME', label: 'Only me' },
 ];
 
-export function PostDetail({ post }: { post: HasherPost }) {
+// One post of a page. On a post's own screen the words are whole; where posts are
+// stacked in a list, `clamp` cuts a long one short with "Read more". A thread is
+// the first post and then each part under it; a part has its own likes and
+// conversation but no audience of its own.
+function PostCard({
+  post,
+  clamp,
+  part,
+}: {
+  post: HasherPost;
+  clamp: boolean;
+  // Set on the posts after the first in a thread: their place, "2 of 5".
+  part?: { number: number; of: number };
+}) {
   const theme = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -53,8 +67,8 @@ export function PostDetail({ post }: { post: HasherPost }) {
   }
 
   return (
-    <Card style={styles.overflow}>
-      <View testID="post-page">
+    <Card style={[styles.overflow, part && { borderLeftWidth: 4, borderLeftColor: theme.primary }]}>
+      <View testID={part ? 'post-thread-part' : 'post-page'}>
         <View style={styles.padded}>
           <View style={styles.author}>
             <Avatar name={post.author.name} size={40} src={post.author.avatarUrl} color={brandColor(post.kennel?.primaryColor)} />
@@ -76,12 +90,17 @@ export function PostDetail({ post }: { post: HasherPost }) {
                 <ThemedText themeColor="textSecondary" style={styles.sm}>
                   {formatDate(post.publishedAt)}
                   {post.editedAt ? ' · edited' : ''}
+                  {part ? ` · ${part.number} of ${part.of}` : ''}
                 </ThemedText>
               ) : null}
             </View>
           </View>
 
-          <RichText text={post.body} style={styles.body} testID="post-body" />
+          {clamp ? (
+            <ExpandableText text={post.body} style={styles.body} testID="post-body" />
+          ) : (
+            <RichText text={post.body} style={styles.body} testID="post-body" />
+          )}
           {post.poll ? <PollCard postId={post.id} initial={post.poll} /> : null}
           {post.linkPreview ? <LinkPreviewCard preview={post.linkPreview} /> : null}
         </View>
@@ -103,7 +122,16 @@ export function PostDetail({ post }: { post: HasherPost }) {
           </View>
         )}
 
-        {post.run && (
+        {/* In a list the whole chain is behind the first post. */}
+        {!part && !post.thread?.length && post.threadCount > 0 && (
+          <Pressable accessibilityRole="link" onPress={() => router.push(`/posts/${post.id}`)} style={styles.runLink}>
+            <ThemedText style={[styles.sm, styles.medium, { color: theme.primaryStrong }]}>
+              Thread · {post.threadCount} more {post.threadCount === 1 ? 'post' : 'posts'}
+            </ThemedText>
+          </Pressable>
+        )}
+
+        {post.run && !part && (
           <Pressable accessibilityRole="link" onPress={() => router.push(`/run/${post.run!.id}`)} style={styles.runLink}>
             <ThemedText style={[styles.sm, styles.medium, { color: theme.primaryStrong }]}>
               Run #{post.run.runNumber ?? '—'}
@@ -112,7 +140,7 @@ export function PostDetail({ post }: { post: HasherPost }) {
           </Pressable>
         )}
 
-        {post.isMine && (
+        {post.isMine && !part && (
           <View testID="audience-control" style={[styles.audience, { borderTopColor: theme.border }]}>
             <ThemedText themeColor="textSecondary" style={styles.sm}>Who can read it</ThemedText>
             <View style={styles.select}>
@@ -127,8 +155,23 @@ export function PostDetail({ post }: { post: HasherPost }) {
   );
 }
 
+export function PostDetail({ post, clamp = false }: { post: HasherPost; clamp?: boolean }) {
+  const parts = post.thread ?? [];
+  if (parts.length === 0) return <PostCard post={post} clamp={clamp} />;
+
+  return (
+    <View style={styles.thread} testID="post-thread">
+      <PostCard post={post} clamp={false} />
+      {parts.map((part, index) => (
+        <PostCard key={part.id} post={part} clamp={false} part={{ number: index + 2, of: parts.length + 1 }} />
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   overflow: { overflow: 'hidden' },
+  thread: { gap: 4 },
   sm: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
   medium: { fontWeight: '500' },
   padded: { padding: 16 },
