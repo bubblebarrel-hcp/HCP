@@ -12,6 +12,14 @@ import type { MediaAsset } from '@/lib/types';
 // already measured the file, so there is no element to measure it with.
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+// A video on a post may be larger; everything else keeps the cap above. The API
+// holds the same line (MEDIA_MAX_POST_VIDEO_BYTES).
+export const MAX_POST_VIDEO_BYTES = 100 * 1024 * 1024;
+
+// The most one file may weigh where it is going.
+function uploadLimit(kind: 'PHOTO' | 'VIDEO', targetType?: string) {
+  return kind === 'VIDEO' && targetType === 'POST' ? MAX_POST_VIDEO_BYTES : MAX_UPLOAD_BYTES;
+}
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/avif'];
 const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
@@ -59,11 +67,38 @@ export const VIDEO_PICK_OPTIONS = {
   videoQuality: ImagePicker.UIImagePickerControllerQualityType.Medium,
 } as const;
 
-export function tooBigMessage(kind: 'PHOTO' | 'VIDEO', bytes: number, name?: string | null) {
+export function tooBigMessage(kind: 'PHOTO' | 'VIDEO', bytes: number, name?: string | null, targetType?: string) {
   const what = name ?? `That ${kind === 'VIDEO' ? 'video' : 'photo'}`;
-  return `${what} is ${fileSize(bytes)}. Each one must be 25MB or smaller${
+  return `${what} is ${fileSize(bytes)}. Each one must be ${Math.round(uploadLimit(kind, targetType) / (1024 * 1024))}MB or smaller${
     kind === 'VIDEO' ? ': try a shorter clip, or trim it in your Photos app first' : ''
   }.`;
+}
+
+// What the picker adds to what is already chosen for a post: four in all, at most
+// one of them a video, each within the upload limit (the API holds the same line).
+// Whatever does not fit is left out and the first reason comes back, so the
+// composer can say why.
+export const MAX_POST_MEDIA = 4;
+
+export function mergePostMedia(
+  current: ImagePickerAsset[],
+  picked: ImagePickerAsset[],
+): { assets: ImagePickerAsset[]; error: string | null } {
+  const assets = [...current];
+  let error: string | null = null;
+  for (const asset of picked) {
+    const kind = assetKind(asset);
+    if (asset.fileSize !== undefined && asset.fileSize > uploadLimit(kind, 'POST')) {
+      error ??= tooBigMessage(kind, asset.fileSize, asset.fileName, 'POST');
+    } else if (kind === 'VIDEO' && assets.some((a) => assetKind(a) === 'VIDEO')) {
+      error ??= 'A post carries one video.';
+    } else if (assets.length >= MAX_POST_MEDIA) {
+      error ??= `${MAX_POST_MEDIA} is the limit on a post.`;
+    } else {
+      assets.push(asset);
+    }
+  }
+  return { assets, error };
 }
 
 export function fileSize(bytes: number) {
@@ -142,8 +177,8 @@ async function uploadInternal(
 
   // The size the picker reports can be missing; the bytes are the truth.
   const bytes = await (await fetch(asset.uri)).blob();
-  if (bytes.size > MAX_UPLOAD_BYTES) {
-    throw new Error(tooBigMessage(kind, bytes.size));
+  if (bytes.size > uploadLimit(kind, target.type)) {
+    throw new Error(tooBigMessage(kind, bytes.size, null, target.type));
   }
 
   const asked = await api<{ media: { id: string }; upload: UploadTarget }>('/media/uploads', {

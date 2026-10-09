@@ -22,12 +22,16 @@ import { resolveVisible, segmentFor } from './subject.service';
 // nothing here forecloses it.
 
 // A photo on a post, as the card shows it.
+// A picture or a clip on a post; `thumbnailUrl` is a video's poster frame.
 export interface FeedPhoto {
   id: string;
+  kind: 'PHOTO' | 'VIDEO';
   url: string;
   thumbnailUrl: string | null;
+  mimeType: string;
   width: number | null;
   height: number | null;
+  durationSec: number | null;
 }
 
 export type FeedItem =
@@ -390,10 +394,13 @@ async function recentPosts(actor: Actor | undefined, limit: number): Promise<Fee
       media: {
         select: {
           id: true,
+          kind: true,
           url: true,
           thumbnailUrl: true,
+          mimeType: true,
           width: true,
           height: true,
+          durationSec: true,
           uploadState: true,
           moderationState: true,
         },
@@ -406,13 +413,17 @@ async function recentPosts(actor: Actor | undefined, limit: number): Promise<Fee
     if (media.uploadState !== UploadState.AVAILABLE) continue;
     if (media.moderationState === ModerationState.REJECTED) continue;
     if (!media.url) continue;
+    if (media.kind !== 'PHOTO' && media.kind !== 'VIDEO') continue;
     const list = photosByPost.get(link.targetId) ?? [];
     list.push({
       id: media.id,
+      kind: media.kind,
       url: media.url,
       thumbnailUrl: media.thumbnailUrl,
+      mimeType: media.mimeType,
       width: media.width,
       height: media.height,
+      durationSec: media.durationSec,
     });
     photosByPost.set(link.targetId, list);
   }

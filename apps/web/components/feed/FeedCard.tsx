@@ -18,6 +18,7 @@ import { ExpandableText } from '@/components/social/ExpandableText';
 import { LinkPreviewCard } from '@/components/social/LinkPreviewCard';
 import { PollCard } from '@/components/social/PollCard';
 import { MilestoneCard } from '@/components/feed/MilestoneCard';
+import { PostMedia } from '@/components/feed/PostMedia';
 import type { FeedEntry, FeedItem, SubjectSegment } from '@/lib/types';
 import { formatRunWhen } from '@/lib/runs';
 import { bleedCard, brandColor, cn, formatDate } from '@/lib/utils';
@@ -277,10 +278,6 @@ function engagementTarget(item: FeedEntry): { segment: SubjectSegment; id: strin
 // A hasher's own words (D51). Words first, photos under them — the opposite of
 // a reel, which is media with a caption.
 function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> }) {
-  // One photo fills the width; several tile. Four is the composer's cap, so
-  // this never has to deal with a ninth.
-  const many = item.photos.length > 1;
-
   return (
     <Card className={cn(bleedCard, 'overflow-hidden')} data-testid="feed-post">
       <div className="p-4 pb-3">
@@ -303,24 +300,7 @@ function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> })
         {item.linkPreview && <LinkPreviewCard preview={item.linkPreview} />}
       </div>
 
-      {item.photos.length > 0 && (
-        <div className={cn('grid gap-0.5', many && 'grid-cols-2')}>
-          {item.photos.map((photo) => (
-            // Storage is an arbitrary host, so next/image would need every
-            // deployment's domain configured up front.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={photo.id}
-              src={photo.url}
-              alt=""
-              width={photo.width ?? undefined}
-              height={photo.height ?? undefined}
-              loading="lazy"
-              className={cn('w-full bg-muted object-cover', many ? 'aspect-square' : 'max-h-[36rem]')}
-            />
-          ))}
-        </div>
-      )}
+      <PostMedia items={item.photos} />
 
       {item.threadCount > 0 && (
         <p className="px-4 py-3 text-sm">

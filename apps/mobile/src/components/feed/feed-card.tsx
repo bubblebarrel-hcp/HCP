@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
+import { PostMedia } from '@/components/feed/post-media';
 import { EngagementBar } from '@/components/social/engagement-bar';
 import { LinkPreviewCard } from '@/components/social/link-preview-card';
 import { PollCard } from '@/components/social/poll-card';
@@ -233,11 +234,6 @@ function Reshare({ item }: { item: Extract<FeedItem, { kind: 'RESHARE' }> }) {
 function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> }) {
   const theme = useTheme();
   const router = useRouter();
-  const { width } = useWindowDimensions();
-  const content = Math.min(width, MaxContentWidth);
-  // One photo fills the width; several tile. Four is the composer's cap.
-  const many = item.photos.length > 1;
-  const tile = (content - 2) / 2;
 
   return (
     <View testID="feed-post">
@@ -258,22 +254,7 @@ function HasherPostCard({ item }: { item: Extract<FeedItem, { kind: 'POST' }> })
         {item.linkPreview ? <LinkPreviewCard preview={item.linkPreview} /> : null}
       </View>
 
-      {item.photos.length > 0 && (
-        <View style={many ? styles.photoGrid : undefined}>
-          {item.photos.map((photo) => (
-            <Image
-              key={photo.id}
-              source={{ uri: photo.url }}
-              style={[
-                { backgroundColor: theme.backgroundElement },
-                many ? { width: tile, height: tile } : { width: content, height: Math.min(content * 1.1, 576) },
-              ]}
-              resizeMode="cover"
-              accessibilityIgnoresInvertColors
-            />
-          ))}
-        </View>
-      )}
+      <PostMedia items={item.photos} />
 
       {item.threadCount > 0 && (
         <Pressable
@@ -488,7 +469,6 @@ const styles = StyleSheet.create({
   quotePad: { padding: 12 },
   quoteType: { fontSize: 12, lineHeight: 16, fontWeight: '400', letterSpacing: 0.6 },
   quoteTitle: { marginTop: 2, fontSize: 16, lineHeight: 22, fontWeight: '600' },
-  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2 },
   runLink: { paddingHorizontal: 16, paddingVertical: 12 },
   reportTitle: { fontSize: 18, lineHeight: 23, fontWeight: '600' },
   milestone: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 16 },

@@ -55,6 +55,17 @@ const IMMEDIATE_TARGETS: MediaTargetType[] = [
   MediaTargetType.PROFILE,
 ];
 
+// The most one file may weigh. A video on a post gets its own, larger cap; the
+// local-upload route reads this too, so it can accept what the cap allows.
+export function uploadLimit(kind: MediaKind, target: MediaTargetType) {
+  return kind === MediaKind.VIDEO && target === MediaTargetType.POST
+    ? Math.max(env.media.maxPostVideoBytes, env.media.maxUploadBytes)
+    : env.media.maxUploadBytes;
+}
+
+// Pictures and clips on one post, together.
+const MAX_POST_MEDIA = 4;
+
 // Formats every browser can show in an <img> (D56).
 const PROFILE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
 
@@ -105,9 +116,9 @@ async function resolveTarget(actor: Actor, target: MediaTarget): Promise<TargetC
     return { kennelId: reel.kennelId ?? '', runId: null, canUpload: true, canModerate: true };
   }
 
-  // The photos on a hasher's written post (D51). Same rule as a reel: the
-  // post belongs to the person writing it, so only its author may put a photo
-  // on it, and a post that is still a draft is nobody else's business.
+  // The pictures and clips on a hasher's written post (D51). Same rule as a reel:
+  // the post belongs to the person writing it, so only its author may put
+  // anything on it, and a post that is still a draft is nobody else's business.
   if (target.type === MediaTargetType.POST) {
     const post = await prisma.post.findUnique({
       where: { id: target.id },
@@ -115,7 +126,7 @@ async function resolveTarget(actor: Actor, target: MediaTarget): Promise<TargetC
     });
     if (!post) throw ApiError.notFound('Post not found');
     if (post.authorId !== actor.id) {
-      throw ApiError.forbidden('Only the author adds photos to their post.', 'NOT_THE_AUTHOR');
+      throw ApiError.forbidden('Only the author adds to their post.', 'NOT_THE_AUTHOR');
     }
     return { kennelId: post.kennelId ?? '', runId: null, canUpload: true, canModerate: true };
   }
@@ -242,8 +253,9 @@ export async function requestUpload(
   if (!ALLOWED[input.kind].includes(input.mimeType)) {
     throw ApiError.badRequest(`${input.mimeType} is not an accepted ${input.kind.toLowerCase()} format.`, 'UNSUPPORTED_MEDIA_TYPE');
   }
-  if (input.sizeBytes > env.media.maxUploadBytes) {
-    const mb = Math.floor(env.media.maxUploadBytes / (1024 * 1024));
+  const limit = uploadLimit(input.kind, input.target.type);
+  if (input.sizeBytes > limit) {
+    const mb = Math.floor(limit / (1024 * 1024));
     throw ApiError.badRequest(`Files must be ${mb}MB or smaller.`, 'FILE_TOO_LARGE');
   }
 
@@ -255,6 +267,22 @@ export async function requestUpload(
       const target = await createUploadTarget(existing.storageKey, existing.mimeType);
       const media = await prisma.mediaAsset.findUniqueOrThrow({ where: { id: existing.id }, select: mediaSelect });
       return { media: serialize(media), upload: { ...target, storageKey: existing.storageKey }, reused: true };
+    }
+  }
+
+  // A post carries up to four pictures, or one clip with up to three pictures. The
+  // composers hold the same line; this is the one that cannot be skipped. A clip
+  // alone is the cap that matters: two would be two players in a feed card.
+  if (input.target.type === MediaTargetType.POST) {
+    const existing = await prisma.mediaLink.findMany({
+      where: { targetType: MediaTargetType.POST, targetId: input.target.id },
+      select: { media: { select: { kind: true } } },
+    });
+    if (existing.length >= MAX_POST_MEDIA) {
+      throw ApiError.badRequest(`${MAX_POST_MEDIA} is the limit on a post.`, 'POST_MEDIA_LIMIT');
+    }
+    if (input.kind === MediaKind.VIDEO && existing.some((link) => link.media.kind === MediaKind.VIDEO)) {
+      throw ApiError.badRequest('A post carries one video.', 'POST_VIDEO_LIMIT');
     }
   }
 

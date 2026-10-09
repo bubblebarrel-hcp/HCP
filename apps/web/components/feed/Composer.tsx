@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BarChart3, BookOpen, Footprints, ImagePlus, ListPlus, Loader2, Plus, Video, X } from 'lucide-react';
+import { BarChart3, BookOpen, Footprints, ImagePlus, ListPlus, Loader2, Play, Plus, Video, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar } from '@/components/Avatar';
@@ -13,8 +13,16 @@ import { AudienceSelect } from '@/components/profile/AudienceSelect';
 import { FEED_REFRESH_EVENT } from '@/components/feed/PullToRefresh';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ACCEPTED_IMAGES, MAX_UPLOAD_BYTES, fileSize } from '@/lib/media';
-import { MAX_POST_BODY, MAX_POST_PHOTOS, MAX_THREAD_POSTS, post as sendPost } from '@/lib/posts';
+import { FilePreview } from '@/components/feed/FilePreview';
+import { ACCEPTED_IMAGES, ACCEPTED_VIDEOS } from '@/lib/media';
+import {
+  MAX_POST_BODY,
+  MAX_POST_PHOTOS,
+  MAX_THREAD_POSTS,
+  isVideoFile,
+  mergeMedia,
+  post as sendPost,
+} from '@/lib/posts';
 import { bleedCard, cn } from '@/lib/utils';
 import type { Audience, TaggableRun } from '@/lib/types';
 import api, { errorMessage } from '@/services/api';
@@ -80,20 +88,9 @@ export function Composer() {
 
   const addPhotos = (chosen: FileList | null) => {
     if (!chosen) return;
-    const room = MAX_POST_PHOTOS - photos.length;
-    if (room <= 0) {
-      toast.error(`${MAX_POST_PHOTOS} photos is the limit on a post.`);
-      return;
-    }
-    const accepted: File[] = [];
-    for (const file of Array.from(chosen).slice(0, room)) {
-      if (file.size > MAX_UPLOAD_BYTES) {
-        toast.error(`${file.name} is ${fileSize(file.size)} — the limit is ${fileSize(MAX_UPLOAD_BYTES)}.`);
-        continue;
-      }
-      accepted.push(file);
-    }
-    setPhotos((current) => [...current, ...accepted]);
+    const merged = mergeMedia(photos, Array.from(chosen));
+    if (merged.error) toast.error(merged.error);
+    setPhotos(merged.files);
     // Let the same file be picked again after it is dropped.
     if (fileRef.current) fileRef.current.value = '';
   };
@@ -207,12 +204,12 @@ export function Composer() {
                 <li key={`${file.name}-${index}`} className="relative">
                   {/* Object URLs, not uploads: nothing leaves the browser until
                       the hasher presses Post. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    className="h-20 w-20 rounded-lg border border-border object-cover"
-                  />
+                  <FilePreview file={file} className="h-20 w-20 rounded-lg border border-border object-cover" />
+                  {isVideoFile(file) && (
+                    <span className="absolute bottom-1 left-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white">
+                      <Play className="h-3 w-3 fill-current" aria-hidden />
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => setPhotos((current) => current.filter((_, i) => i !== index))}
@@ -283,7 +280,7 @@ export function Composer() {
               <input
                 ref={fileRef}
                 type="file"
-                accept={ACCEPTED_IMAGES}
+                accept={`${ACCEPTED_IMAGES},${ACCEPTED_VIDEOS}`}
                 multiple
                 hidden
                 onChange={(event) => addPhotos(event.target.files)}
@@ -298,7 +295,7 @@ export function Composer() {
                 data-testid="composer-add-photo"
               >
                 <ImagePlus className="h-4 w-4" aria-hidden />
-                Photo
+                Photo / video
               </Button>
 
               <Button
@@ -355,7 +352,7 @@ export function Composer() {
               <span className="ml-auto flex items-center gap-2">
                 {progress && (
                   <span className="text-xs text-muted-foreground" aria-live="polite">
-                    Photo {Math.min(progress.done + 1, progress.total)} of {progress.total}…
+                    Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}…
                   </span>
                 )}
                 {body.length > MAX_POST_BODY - 500 && (

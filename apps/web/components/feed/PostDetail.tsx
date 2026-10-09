@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ListTree } from 'lucide-react';
 import { Avatar } from '@/components/Avatar';
+import { PostMedia } from '@/components/feed/PostMedia';
 import { Card } from '@/components/ui/card';
 import { AudienceControl } from '@/components/profile/AudienceControl';
 import { EngagementBar } from '@/components/social/EngagementBar';
@@ -31,7 +32,6 @@ function PostCard({
   // Set on the posts after the first in a thread: their place, "2 of 5".
   part?: { number: number; of: number };
 }) {
-  const many = post.photos.length > 1;
   const bodyClass = 'mt-3 whitespace-pre-line leading-relaxed text-[15px]';
 
   return (
@@ -84,23 +84,7 @@ function PostCard({
         {post.linkPreview && <LinkPreviewCard preview={post.linkPreview} />}
       </div>
 
-      {post.photos.length > 0 && (
-        <div className={cn('grid gap-0.5', many && 'grid-cols-2')}>
-          {post.photos.map((photo) => (
-            // Storage is an arbitrary host, so next/image would need every
-            // deployment's domain configured up front.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={photo.id}
-              src={photo.url}
-              alt=""
-              width={photo.width ?? undefined}
-              height={photo.height ?? undefined}
-              className={cn('w-full bg-muted object-cover', many ? 'aspect-square' : 'max-h-[40rem]')}
-            />
-          ))}
-        </div>
-      )}
+      <PostMedia items={post.photos} tallest="40rem" />
 
       {post.run && !part && (
         <p className="px-4 py-3 text-sm">

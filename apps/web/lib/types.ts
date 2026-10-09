@@ -1471,12 +1471,17 @@ export interface SubjectPreview {
 
 export type PostStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED' | 'REMOVED';
 
+// A picture or a clip on a post. The key stays `photos`; `kind` says which, and
+// for a video `thumbnailUrl` is its poster frame.
 export interface PostPhoto {
   id: string;
+  kind: 'PHOTO' | 'VIDEO';
   url: string;
   thumbnailUrl: string | null;
+  mimeType: string;
   width: number | null;
   height: number | null;
+  durationSec: number | null;
 }
 
 // Always public once published (D51), so there is no visibility to choose.

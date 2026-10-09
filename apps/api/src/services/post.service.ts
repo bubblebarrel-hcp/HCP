@@ -76,17 +76,23 @@ const postSelect = {
 
 type PostRow = Prisma.PostGetPayload<{ select: typeof postSelect }>;
 
+// A picture or a clip on a post. The key is still `photos` because that is what
+// clients already read; `kind` says which it is, and for a video `thumbnailUrl` is
+// the poster frame, exactly as on a reel item (D48).
 export interface PostPhoto {
   id: string;
+  kind: 'PHOTO' | 'VIDEO';
   url: string;
   thumbnailUrl: string | null;
+  mimeType: string;
   width: number | null;
   height: number | null;
+  durationSec: number | null;
 }
 
-// The photos on a post, in the order they were added — the same rule a reel's
-// items follow (D48), and for the same reason: that is the order the hasher
-// picked them.
+// The pictures and clips on a post, in the order they were added — the same rule
+// a reel's items follow (D48), and for the same reason: that is the order the
+// hasher picked them.
 async function photosFor(postIds: string[]) {
   const byPost = new Map<string, PostPhoto[]>();
   if (postIds.length === 0) return byPost;
@@ -102,8 +108,10 @@ async function photosFor(postIds: string[]) {
           kind: true,
           url: true,
           thumbnailUrl: true,
+          mimeType: true,
           width: true,
           height: true,
+          durationSec: true,
           uploadState: true,
           moderationState: true,
         },
@@ -113,18 +121,22 @@ async function photosFor(postIds: string[]) {
 
   for (const link of links) {
     const media = link.media;
-    // A half-uploaded or rejected photo is simply not on the post.
+    // A half-uploaded or rejected file is simply not on the post.
     if (media.uploadState !== UploadState.AVAILABLE) continue;
     if (media.moderationState === ModerationState.REJECTED) continue;
     if (!media.url) continue;
+    if (media.kind !== 'PHOTO' && media.kind !== 'VIDEO') continue;
 
     const list = byPost.get(link.targetId) ?? [];
     list.push({
       id: media.id,
+      kind: media.kind,
       url: media.url,
       thumbnailUrl: media.thumbnailUrl,
+      mimeType: media.mimeType,
       width: media.width,
       height: media.height,
+      durationSec: media.durationSec,
     });
     byPost.set(link.targetId, list);
   }
@@ -344,7 +356,7 @@ export async function publish(actor: Actor, postId: string) {
   for (const each of [post, ...parts]) {
     if (!each.body.trim() && (photoMap.get(each.id) ?? []).length === 0) {
       throw ApiError.badRequest(
-        each.id === post.id ? 'Say something, or add a photo.' : `Part ${each.threadPosition + 1} is empty.`,
+        each.id === post.id ? 'Say something, or add a photo or video.' : `Part ${each.threadPosition + 1} is empty.`,
         'POST_EMPTY',
       );
     }

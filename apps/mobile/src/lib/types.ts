@@ -236,12 +236,17 @@ export interface FeedKennel {
   primaryColor: string | null;
 }
 
+// A picture or a clip on a post. The key stays `photos`; `kind` says which, and
+// for a video `thumbnailUrl` is its poster frame.
 export interface PostPhoto {
   id: string;
+  kind: 'PHOTO' | 'VIDEO';
   url: string;
   thumbnailUrl: string | null;
+  mimeType: string;
   width: number | null;
   height: number | null;
+  durationSec: number | null;
 }
 
 // One post, as its own screen shows it (D51, D57).

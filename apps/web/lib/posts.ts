@@ -1,6 +1,6 @@
 'use client';
 import api from '@/services/api';
-import { uploadPhoto } from '@/lib/media';
+import { MAX_POST_VIDEO_BYTES, MAX_UPLOAD_BYTES, fileSize, uploadPhoto, uploadVideo } from '@/lib/media';
 import type { Audience, HasherPost, Page } from '@/lib/types';
 
 // A hasher's written post (D51).
@@ -11,7 +11,30 @@ import type { Audience, HasherPost, Page } from '@/lib/types';
 // than two, and nothing half-uploaded ever appears in the feed.
 
 export const MAX_POST_BODY = 5000;
+// Pictures and clips together; one of them may be a video.
 export const MAX_POST_PHOTOS = 4;
+export const isVideoFile = (file: File) => file.type.startsWith('video/');
+
+// What the picker adds to what is already chosen: four in all, one of them at
+// most a video, each within the upload limit. Whatever does not fit is left out
+// and the first reason is returned, so the composer can say why.
+export function mergeMedia(current: File[], chosen: File[]): { files: File[]; error: string | null } {
+  const files = [...current];
+  let error: string | null = null;
+  for (const file of chosen) {
+    const limit = isVideoFile(file) ? MAX_POST_VIDEO_BYTES : MAX_UPLOAD_BYTES;
+    if (file.size > limit) {
+      error ??= `${file.name} is ${fileSize(file.size)}. The limit is ${fileSize(limit)}.`;
+    } else if (isVideoFile(file) && files.some(isVideoFile)) {
+      error ??= 'A post carries one video.';
+    } else if (files.length >= MAX_POST_PHOTOS) {
+      error ??= `${MAX_POST_PHOTOS} is the limit on a post.`;
+    } else {
+      files.push(file);
+    }
+  }
+  return { files, error };
+}
 // The first post and its parts together; the API holds the same line.
 export const MAX_THREAD_POSTS = 10;
 
@@ -85,7 +108,9 @@ export async function post(
     // Sequential on purpose: a phone on a kennel's wifi uploading four photos
     // at once is four slow uploads, and a failure halfway leaves a draft that
     // was never published rather than a post with holes in it.
-    await uploadPhoto(file, { type: 'POST', id: draft.id });
+    const target = { type: 'POST' as const, id: draft.id };
+    if (isVideoFile(file)) await uploadVideo(file, target);
+    else await uploadPhoto(file, target);
   }
   onProgress?.(input.photos.length, input.photos.length);
 

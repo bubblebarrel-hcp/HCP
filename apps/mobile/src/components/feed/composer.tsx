@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { BookOpen, Footprints, ImagePlus, ListPlus, Video, X } from 'lucide-react-native';
+import { BookOpen, Footprints, ImagePlus, ListPlus, Play, Video, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -12,7 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
-import { MAX_UPLOAD_BYTES, fileSize, uploadAsset } from '@/lib/media';
+import { MAX_POST_MEDIA, VIDEO_PICK_OPTIONS, assetKind, mergePostMedia, uploadAsset } from '@/lib/media';
 import type { Audience, TaggableRun } from '@/lib/types';
 
 // A hasher's own post, straight from the composer (D51), the web's three steps:
@@ -21,7 +21,6 @@ import type { Audience, TaggableRun } from '@/lib/types';
 // it is about, and who may read it. A reel is the other kind of thing and has its own
 // composer: the "Reel" button beside the pill opens it.
 const MAX_POST_BODY = 5000;
-const MAX_POST_PHOTOS = 4;
 // The first post and its parts together; the API holds the same line.
 const MAX_THREAD_POSTS = 10;
 
@@ -84,26 +83,24 @@ export function Composer({
     };
   }, [open]);
 
+  // Pictures and one clip, four in all; the picker is asked for the room that is left.
   async function addPhotos() {
-    const room = MAX_POST_PHOTOS - photos.length;
+    const room = MAX_POST_MEDIA - photos.length;
     if (room <= 0) {
-      setError(`${MAX_POST_PHOTOS} photos is the limit on a post.`);
+      setError(`${MAX_POST_MEDIA} is the limit on a post.`);
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
+      mediaTypes: photos.some((a) => assetKind(a) === 'VIDEO') ? ['images'] : ['images', 'videos'],
       allowsMultipleSelection: true,
       selectionLimit: room,
       quality: 0.85,
+      ...VIDEO_PICK_OPTIONS,
     });
     if (result.canceled) return;
-    const tooBig = result.assets.find((a) => a.fileSize !== undefined && a.fileSize > MAX_UPLOAD_BYTES);
-    if (tooBig) {
-      setError(`${tooBig.fileName ?? 'That photo'} is ${fileSize(tooBig.fileSize ?? 0)} — the limit is ${fileSize(MAX_UPLOAD_BYTES)}.`);
-      return;
-    }
-    setError(null);
-    setPhotos((current) => [...current, ...result.assets].slice(0, MAX_POST_PHOTOS));
+    const merged = mergePostMedia(photos, result.assets);
+    setError(merged.error);
+    setPhotos(merged.assets);
   }
 
   async function submit() {
@@ -261,7 +258,17 @@ export function Composer({
               <View style={styles.photos} testID="composer-photos">
                 {photos.map((asset, index) => (
                   <View key={`${asset.uri}-${index}`}>
-                    <Image source={{ uri: asset.uri }} accessibilityLabel={asset.fileName ?? 'Photo'} style={[styles.thumb, { borderColor: theme.border }]} />
+                    {assetKind(asset) === 'VIDEO' ? (
+                      // A clip's file is not an image the Image view can draw on
+                      // every phone, so it is a dark tile with a play mark.
+                      <View
+                        accessibilityLabel={asset.fileName ?? 'Video'}
+                        style={[styles.thumb, styles.videoThumb, { borderColor: theme.border }]}>
+                        <Play size={22} color="#fff" fill="#fff" />
+                      </View>
+                    ) : (
+                      <Image source={{ uri: asset.uri }} accessibilityLabel={asset.fileName ?? 'Photo'} style={[styles.thumb, { borderColor: theme.border }]} />
+                    )}
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Remove ${asset.fileName ?? 'photo'}`}
@@ -317,11 +324,11 @@ export function Composer({
             <Pressable
               accessibilityRole="button"
               testID="composer-add-photo"
-              disabled={busy || photos.length >= MAX_POST_PHOTOS}
+              disabled={busy || photos.length >= MAX_POST_MEDIA}
               onPress={() => void addPhotos()}
-              style={[styles.chip, styles.pollToggle, { borderColor: theme.border, backgroundColor: theme.card, flexDirection: 'row', gap: 6, opacity: busy || photos.length >= MAX_POST_PHOTOS ? 0.5 : 1 }]}>
+              style={[styles.chip, styles.pollToggle, { borderColor: theme.border, backgroundColor: theme.card, flexDirection: 'row', gap: 6, opacity: busy || photos.length >= MAX_POST_MEDIA ? 0.5 : 1 }]}>
               <ImagePlus size={16} color={theme.textSecondary} />
-              <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>Photo</ThemedText>
+              <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>Photo / video</ThemedText>
             </Pressable>
 
             {runs.length > 0 && (
@@ -392,7 +399,7 @@ export function Composer({
             {error && <ThemedText style={{ color: theme.danger }}>{error}</ThemedText>}
             {progress ? (
               <ThemedText type="small" themeColor="textSecondary" accessibilityLiveRegion="polite">
-                Photo {Math.min(progress.done + 1, progress.total)} of {progress.total}…
+                Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}…
               </ThemedText>
             ) : null}
             {body.length > MAX_POST_BODY - 500 ? (
@@ -466,6 +473,7 @@ const styles = StyleSheet.create({
   threadInput: { minHeight: 70, borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: 8, fontSize: 16, textAlignVertical: 'top' },
   photos: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   thumb: { width: 80, height: 80, borderRadius: 8, borderWidth: 1 },
+  videoThumb: { backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
   remove: { position: 'absolute', right: -6, top: -6, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   poll: { gap: Spacing.two },
   pollInput: { minHeight: 44, borderWidth: 1, borderRadius: Spacing.two, paddingHorizontal: Spacing.three, fontSize: 16 },

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ImagePlus, Loader2, X } from 'lucide-react';
+import { ImagePlus, Loader2, Play, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/Avatar';
 import { FEED_REFRESH_EVENT } from '@/components/feed/PullToRefresh';
@@ -11,8 +11,9 @@ import { MentionTextarea } from '@/components/social/MentionTextarea';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useAuth } from '@/context/AuthContext';
-import { ACCEPTED_IMAGES, MAX_UPLOAD_BYTES, fileSize } from '@/lib/media';
-import { MAX_POST_BODY, MAX_POST_PHOTOS, post as sendPost } from '@/lib/posts';
+import { FilePreview } from '@/components/feed/FilePreview';
+import { ACCEPTED_IMAGES, ACCEPTED_VIDEOS } from '@/lib/media';
+import { MAX_POST_BODY, MAX_POST_PHOTOS, isVideoFile, mergeMedia, post as sendPost } from '@/lib/posts';
 import type { Audience } from '@/lib/types';
 import { errorMessage } from '@/services/api';
 
@@ -32,20 +33,9 @@ export function PhotoPostDialog({ open, onOpenChange }: { open: boolean; onOpenC
 
   const addPhotos = (chosen: FileList | null) => {
     if (!chosen) return;
-    const room = MAX_POST_PHOTOS - photos.length;
-    if (room <= 0) {
-      toast.error(`${MAX_POST_PHOTOS} photos is the limit on a post.`);
-      return;
-    }
-    const accepted: File[] = [];
-    for (const file of Array.from(chosen).slice(0, room)) {
-      if (file.size > MAX_UPLOAD_BYTES) {
-        toast.error(`${file.name} is ${fileSize(file.size)} — the limit is ${fileSize(MAX_UPLOAD_BYTES)}.`);
-        continue;
-      }
-      accepted.push(file);
-    }
-    setPhotos((current) => [...current, ...accepted]);
+    const merged = mergeMedia(photos, Array.from(chosen));
+    if (merged.error) toast.error(merged.error);
+    setPhotos(merged.files);
     if (fileRef.current) fileRef.current.value = '';
   };
 
@@ -72,7 +62,7 @@ export function PhotoPostDialog({ open, onOpenChange }: { open: boolean; onOpenC
 
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent title="Post photos" description="Up to four. Words are optional.">
+      <DialogContent title="Post photos or a video" description="Up to four, and one of them may be a video. Words are optional.">
         <div className="space-y-4" data-testid="photo-post-dialog">
           {user && (
             <div className="flex items-center gap-3">
@@ -86,12 +76,12 @@ export function PhotoPostDialog({ open, onOpenChange }: { open: boolean; onOpenC
               {photos.map((file, index) => (
                 <li key={`${file.name}-${index}`} className="relative">
                   {/* Object URLs, not uploads: nothing leaves the browser until Post is pressed. */}
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    className="h-20 w-20 rounded-lg border border-border object-cover"
-                  />
+                  <FilePreview file={file} className="h-20 w-20 rounded-lg border border-border object-cover" />
+                  {isVideoFile(file) && (
+                    <span className="absolute bottom-1 left-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white">
+                      <Play className="h-3 w-3 fill-current" aria-hidden />
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => setPhotos((current) => current.filter((_, i) => i !== index))}
@@ -110,7 +100,7 @@ export function PhotoPostDialog({ open, onOpenChange }: { open: boolean; onOpenC
             <input
               ref={fileRef}
               type="file"
-              accept={ACCEPTED_IMAGES}
+              accept={`${ACCEPTED_IMAGES},${ACCEPTED_VIDEOS}`}
               multiple
               hidden
               onChange={(event) => addPhotos(event.target.files)}
@@ -125,7 +115,7 @@ export function PhotoPostDialog({ open, onOpenChange }: { open: boolean; onOpenC
               data-testid="photo-post-add"
             >
               <ImagePlus className="h-4 w-4" aria-hidden />
-              Photos
+              Photos / video
             </Button>
             <span className="text-xs text-muted-foreground">
               {photos.length} of {MAX_POST_PHOTOS}
@@ -150,7 +140,7 @@ export function PhotoPostDialog({ open, onOpenChange }: { open: boolean; onOpenC
             <span className="ml-auto flex items-center gap-2">
               {progress && (
                 <span className="text-xs text-muted-foreground" aria-live="polite">
-                  Photo {Math.min(progress.done + 1, progress.total)} of {progress.total}…
+                  Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}…
                 </span>
               )}
               <Button type="button" size="sm" disabled={photos.length === 0 || busy} onClick={submit} data-testid="photo-post-submit">

@@ -37,7 +37,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     // words be the description rather than inventing a headline from them.
     title: `A post by ${post.author.name}`,
     description: firstLine(post.body, 200) || 'A post on Shiggy Trails.',
-    image: post.photos[0]?.url,
+    // A clip is not a picture: its poster frame is, when it has one.
+    image: post.photos.map((p) => (p.kind === 'VIDEO' ? p.thumbnailUrl : p.url)).find(Boolean) ?? undefined,
   });
 }
 

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
+import { PostMedia } from '@/components/feed/post-media';
 import { EngagementBar } from '@/components/social/engagement-bar';
 import { LinkPreviewCard } from '@/components/social/link-preview-card';
 import { PollCard } from '@/components/social/poll-card';
@@ -11,7 +12,6 @@ import { RichText } from '@/components/social/rich-text';
 import { ThemedText } from '@/components/themed-text';
 import { Select } from '@/components/ui/select';
 import { Card } from '@/components/ui/web-ui';
-import { MaxContentWidth } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
 import { brandColor, formatDate } from '@/lib/format';
@@ -44,13 +44,8 @@ function PostCard({
 }) {
   const theme = useTheme();
   const router = useRouter();
-  const { width } = useWindowDimensions();
   const [audience, setAudience] = useState<Audience>(post.visibility);
   const [saving, setSaving] = useState(false);
-
-  const content = Math.min(width, MaxContentWidth);
-  const many = post.photos.length > 1;
-  const tile = (content - 2) / 2;
 
   async function changeAudience(next: Audience) {
     const before = audience;
@@ -105,22 +100,7 @@ function PostCard({
           {post.linkPreview ? <LinkPreviewCard preview={post.linkPreview} /> : null}
         </View>
 
-        {post.photos.length > 0 && (
-          <View style={many ? styles.photoGrid : undefined}>
-            {post.photos.map((photo) => (
-              <Image
-                key={photo.id}
-                source={{ uri: photo.url }}
-                style={[
-                  { backgroundColor: theme.backgroundElement },
-                  many ? { width: tile, height: tile } : { width: content, height: Math.min(content * 1.25, 640) },
-                ]}
-                resizeMode="cover"
-                accessibilityIgnoresInvertColors
-              />
-            ))}
-          </View>
-        )}
+        <PostMedia items={post.photos} tallest={640} />
 
         {/* In a list the whole chain is behind the first post. */}
         {!part && !post.thread?.length && post.threadCount > 0 && (
@@ -178,7 +158,6 @@ const styles = StyleSheet.create({
   author: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   authorText: { flex: 1, minWidth: 0 },
   body: { marginTop: 12, fontSize: 15, lineHeight: 24, fontWeight: '400' },
-  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2 },
   runLink: { paddingHorizontal: 16, paddingVertical: 12 },
   audience: { flexDirection: 'row', alignItems: 'center', gap: 8, borderTopWidth: 1, paddingHorizontal: 16, paddingVertical: 12 },
   select: { width: 150 },

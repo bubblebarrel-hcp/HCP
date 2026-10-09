@@ -27,7 +27,9 @@ router.get('/media/:id', requireAuth, asyncHandler(controller.detail));
 // the presigned URL points at Cloudflare instead.
 router.put(
   '/media/local/*',
-  express.raw({ type: '*/*', limit: env.media.maxUploadBytes }),
+  // The largest any file may be; the per-file cap was already checked when the
+  // upload target was handed out.
+  express.raw({ type: '*/*', limit: Math.max(env.media.maxUploadBytes, env.media.maxPostVideoBytes) }),
   asyncHandler(controller.putLocalObject),
 );
 
