@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import { email, password } from './common';
+import { dateOfBirth, email, password } from './common';
 
 const text = (max: number) => Joi.string().trim().max(max);
 
@@ -21,7 +21,7 @@ export const registerSchema = Joi.object({
   // Optional: many hashers are only named after several runs (D11)
   hashHandle: text(80).allow('', null),
 
-  dateOfBirth: Joi.date().iso().max('now').required(),
+  dateOfBirth: dateOfBirth.required(),
   gender: Joi.string().valid('FEMALE', 'MALE', 'NON_BINARY', 'OTHER', 'PREFER_NOT_TO_SAY').required(),
   phone: text(40).required(),
   nationality: text(80).required(),

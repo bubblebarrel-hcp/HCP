@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Image, Linking, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import {
   Beer,
@@ -16,6 +17,8 @@ import { useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
 import { PostMedia } from '@/components/feed/post-media';
+import { PostActions } from '@/components/feed/post-actions';
+import { emitFeedRefresh } from '@/lib/feed-refresh';
 import { EngagementBar } from '@/components/social/engagement-bar';
 import { LinkPreviewCard } from '@/components/social/link-preview-card';
 import { PollCard } from '@/components/social/poll-card';
@@ -413,10 +416,32 @@ function Body({ item }: { item: FeedItem }) {
 
 // The card, and under it what people have done to it (D50).
 export function FeedCard({ item }: { item: FeedEntry }) {
+  // What an author's own edit or delete does to the card on screen, so it changes at
+  // once rather than waiting for the list to reload.
+  const [gone, setGone] = useState(false);
+  const [editedBody, setEditedBody] = useState<string | null>(null);
+  if (gone) return null;
+  const shown: FeedEntry = editedBody !== null && item.kind === 'POST' ? { ...item, body: editedBody, edited: true } : item;
   const target = engagementTarget(item);
   return (
     <Card style={styles.overflow}>
-      <Body item={item} />
+      <Body item={shown} />
+      {item.kind === 'POST' ? (
+        <PostActions
+          id={item.id}
+          authorId={item.authorId}
+          body={shown.kind === 'POST' ? shown.body : item.body}
+          threadCount={item.threadCount}
+          onEdited={(body) => {
+            setEditedBody(body);
+            emitFeedRefresh();
+          }}
+          onDeleted={() => {
+            setGone(true);
+            emitFeedRefresh();
+          }}
+        />
+      ) : null}
       {target ? (
         <EngagementBar
           segment={target.segment}

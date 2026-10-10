@@ -59,6 +59,13 @@ const defaults: Values = {
 
 type Errors = Partial<Record<keyof Values | 'acceptTerms', string>>;
 
+// Mirrors api/src/validators/common.ts (MIN_AGE): change both together.
+function isAdult(dob: string) {
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - 18);
+  return new Date(dob) <= cutoff;
+}
+
 function validate(v: Values, acceptTerms: boolean): Errors {
   const e: Errors = {};
   const required = (key: keyof Values, label: string, max = 80) => {
@@ -78,6 +85,7 @@ function validate(v: Values, acceptTerms: boolean): Errors {
   required('emergencyContactRelationship', 'Relationship', 60);
   if (!v.dateOfBirth) e.dateOfBirth = 'Date of birth is required';
   else if (Number.isNaN(Date.parse(v.dateOfBirth)) || new Date(v.dateOfBirth) >= new Date()) e.dateOfBirth = 'Enter a valid past date';
+  else if (!isAdult(v.dateOfBirth)) e.dateOfBirth = 'You must be 18 or older to join Shiggy Trails';
   const email = v.email.trim();
   if (!email) e.email = 'Email is required';
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = 'Enter a valid email';

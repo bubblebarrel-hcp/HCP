@@ -1,4 +1,5 @@
 import Joi from 'joi';
+import { dateOfBirth } from './common';
 
 const text = (max: number) => Joi.string().trim().max(max);
 
@@ -10,7 +11,7 @@ export const updateProfileSchema = Joi.object({
   middleName: text(80).allow('', null),
   lastName: text(80),
 
-  dateOfBirth: Joi.date().iso().max('now'),
+  dateOfBirth,
   gender: Joi.string().valid('FEMALE', 'MALE', 'NON_BINARY', 'OTHER', 'PREFER_NOT_TO_SAY'),
   phone: text(40),
   nationality: text(80),

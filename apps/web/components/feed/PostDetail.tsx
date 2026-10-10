@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ListTree } from 'lucide-react';
 import { Avatar } from '@/components/Avatar';
+import { PostActions } from '@/components/feed/PostActions';
 import { PostMedia } from '@/components/feed/PostMedia';
 import { Card } from '@/components/ui/card';
 import { AudienceControl } from '@/components/profile/AudienceControl';
@@ -36,13 +37,22 @@ function PostCard({
 
   return (
     <Card
+      data-post-card=""
       className={cn(
-        'overflow-hidden rounded-none border-x-0 sm:rounded-xl sm:border-x',
+        'relative overflow-hidden rounded-none border-x-0 sm:rounded-xl sm:border-x',
         part && 'relative border-l-4 border-l-primary/40',
       )}
       data-testid={part ? 'post-thread-part' : 'post-page'}
       id={part ? `part-${post.id}` : undefined}
     >
+      <PostActions
+        id={post.id}
+        authorId={post.author.id}
+        body={post.body}
+        threadCount={part ? 0 : post.threadCount}
+        isPart={Boolean(part)}
+        onOwnPage
+      />
       <div className="p-4">
         <div className="flex items-center gap-3">
           <Avatar

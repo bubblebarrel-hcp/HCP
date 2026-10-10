@@ -16,6 +16,7 @@ import { type PollInput, type SerializedPoll, pollCreateData, pollsFor, startClo
 import { syncEntities, taggedIds } from './entity.service';
 import { type Actor, assertKennelPermission, resolveKennelContext } from './permission.service';
 import { recordAudit, recordEvent } from './record.service';
+import { revalidatePost } from './revalidate.service';
 import { canView, getAccess, publicName, userPublicSelect } from './run.service';
 import * as stats from './stats.service';
 
@@ -302,11 +303,20 @@ export async function updateDraft(actor: Actor, postId: string, input: PostInput
   const post = await findPost(postId);
   if (post.authorId !== actor.id) throw ApiError.forbidden('Only the author edits their post.', 'NOT_THE_AUTHOR');
   if (post.status === S.REMOVED) throw ApiError.badRequest('That post was taken down.', 'POST_REMOVED');
+  if (post.status === S.ARCHIVED) throw ApiError.badRequest('That post was deleted.', 'POST_ARCHIVED');
 
   if (post.threadRootId && input.visibility) {
     throw ApiError.badRequest('A thread has one audience: change it on the first post.', 'THREAD_AUDIENCE');
   }
   const body = input.body === undefined ? undefined : cleanBody(input.body);
+  // Editing a published post to nothing would leave an empty card in the feed; the
+  // same rule publishing has. Taking a post away is deleting it, not blanking it.
+  if (body === '' && post.status === S.PUBLISHED) {
+    const photos = (await photosFor([post.id])).get(post.id) ?? [];
+    if (photos.length === 0) {
+      throw ApiError.badRequest('A post needs words, a photo or a video. To take it away, delete it.', 'POST_EMPTY');
+    }
+  }
   const updated = await prisma.$transaction(async (tx) => {
     if (input.visibility && !post.threadRootId) {
       await tx.post.updateMany({ where: { threadRootId: post.id }, data: { visibility: input.visibility } });
@@ -332,7 +342,12 @@ export async function updateDraft(actor: Actor, postId: string, input: PostInput
     }
     return row;
   });
-  if (body !== undefined && post.status === S.PUBLISHED) attachPreview(post.id, body);
+  if (body !== undefined && post.status === S.PUBLISHED) {
+    attachPreview(post.id, body);
+    // An edit writes no event, so say so here: otherwise the cached pages show the
+    // old words for up to a minute. Best effort, never throws.
+    await revalidatePost(post.threadRootId ?? post.id, post.authorId);
+  }
   return serializeOne(updated, actor.id);
 }
 

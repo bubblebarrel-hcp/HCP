@@ -36,6 +36,7 @@ function LegalLinks({ className }: { className?: string }) {
     <nav className={`${LINKS} ${className ?? ''}`} aria-label="Legal">
       <Link href="/privacy-policy">Privacy Policy</Link>
       <Link href="/terms">Terms of Service</Link>
+      <Link href="/child-safety">Child safety</Link>
       <Link href="/delete-account">Delete your account</Link>
     </nav>
   );

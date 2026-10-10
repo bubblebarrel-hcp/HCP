@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Avatar } from '@/components/Avatar';
 import { Card } from '@/components/ui/card';
+import { PostActions } from '@/components/feed/PostActions';
 import { EngagementBar } from '@/components/social/EngagementBar';
 import { ExpandableText } from '@/components/social/ExpandableText';
 import { LinkPreviewCard } from '@/components/social/LinkPreviewCard';
@@ -406,10 +407,14 @@ export function FeedCard({ item }: { item: FeedEntry }) {
   const target = engagementTarget(item);
   if (!target) return <Body item={item} />;
   return (
-    <div className="overflow-hidden rounded-none border-y border-border bg-card sm:rounded-xl sm:border">
+    <div
+      className="relative overflow-hidden rounded-none border-y border-border bg-card sm:rounded-xl sm:border"
+      data-post-card={item.kind === 'POST' ? '' : undefined}
+    >
       <div className="[&>*]:rounded-none [&>*]:border-0">
         <Body item={item} />
       </div>
+      {item.kind === 'POST' && <PostActions id={item.id} authorId={item.authorId} body={item.body} threadCount={item.threadCount} />}
       <EngagementBar
         segment={target.segment}
         id={target.id}

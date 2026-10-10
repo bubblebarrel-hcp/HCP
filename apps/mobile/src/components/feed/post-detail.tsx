@@ -3,6 +3,7 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
+import { PostActions } from '@/components/feed/post-actions';
 import { PostMedia } from '@/components/feed/post-media';
 import { EngagementBar } from '@/components/social/engagement-bar';
 import { LinkPreviewCard } from '@/components/social/link-preview-card';
@@ -14,6 +15,7 @@ import { Select } from '@/components/ui/select';
 import { Card } from '@/components/ui/web-ui';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
+import { emitFeedRefresh } from '@/lib/feed-refresh';
 import { brandColor, formatDate } from '@/lib/format';
 import type { Audience, HasherPost } from '@/lib/types';
 
@@ -46,6 +48,10 @@ function PostCard({
   const router = useRouter();
   const [audience, setAudience] = useState<Audience>(post.visibility);
   const [saving, setSaving] = useState(false);
+  // An author's own edit or delete shows at once, without reloading the screen.
+  const [gone, setGone] = useState(false);
+  const [editedBody, setEditedBody] = useState<string | null>(null);
+  const bodyText = editedBody ?? post.body;
 
   async function changeAudience(next: Audience) {
     const before = audience;
@@ -61,9 +67,28 @@ function PostCard({
     }
   }
 
+  if (gone) return null;
+
   return (
     <Card style={[styles.overflow, part && { borderLeftWidth: 4, borderLeftColor: theme.primary }]}>
       <View testID={part ? 'post-thread-part' : 'post-page'}>
+        <PostActions
+          id={post.id}
+          authorId={post.author.id}
+          body={bodyText}
+          threadCount={part ? 0 : post.threadCount}
+          onEdited={(body) => {
+            setEditedBody(body);
+            emitFeedRefresh();
+          }}
+          onDeleted={() => {
+            emitFeedRefresh();
+            // On its own screen the first post is the page: leave it. Anywhere else
+            // (a list, a later part of a thread) just take the card away.
+            if (!part && !clamp) router.replace('/');
+            else setGone(true);
+          }}
+        />
         <View style={styles.padded}>
           <View style={styles.author}>
             <Avatar name={post.author.name} size={40} src={post.author.avatarUrl} color={brandColor(post.kennel?.primaryColor)} />
@@ -84,7 +109,7 @@ function PostCard({
               {post.publishedAt ? (
                 <ThemedText themeColor="textSecondary" style={styles.sm}>
                   {formatDate(post.publishedAt)}
-                  {post.editedAt ? ' · edited' : ''}
+                  {post.editedAt || editedBody !== null ? ' · edited' : ''}
                   {part ? ` · ${part.number} of ${part.of}` : ''}
                 </ThemedText>
               ) : null}
@@ -92,9 +117,9 @@ function PostCard({
           </View>
 
           {clamp ? (
-            <ExpandableText text={post.body} style={styles.body} testID="post-body" />
+            <ExpandableText text={bodyText} style={styles.body} testID="post-body" />
           ) : (
-            <RichText text={post.body} style={styles.body} testID="post-body" />
+            <RichText text={bodyText} style={styles.body} testID="post-body" />
           )}
           {post.poll ? <PollCard postId={post.id} initial={post.poll} /> : null}
           {post.linkPreview ? <LinkPreviewCard preview={post.linkPreview} /> : null}

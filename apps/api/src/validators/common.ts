@@ -15,6 +15,20 @@ export const password = Joi.string()
 
 export const uuid = Joi.string().uuid();
 
+// Shiggy Trails is for adults (Terms of Service, and the child safety standards
+// at /child-safety). Web (register/page.tsx) and mobile (auth/register.tsx) check
+// the same rule on the form; this is the one that counts.
+export const MIN_AGE = 18;
+export const dateOfBirth = Joi.date()
+  .iso()
+  .max('now')
+  .custom((value: Date, helpers) => {
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - MIN_AGE);
+    return value <= cutoff ? value : helpers.error('date.adult');
+  })
+  .messages({ 'date.adult': `You must be ${MIN_AGE} or older to join Shiggy Trails` });
+
 export const paging = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(20),
