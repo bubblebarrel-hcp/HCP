@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ImagePlus, Loader2, Play, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/Avatar';
-import { FEED_REFRESH_EVENT } from '@/components/feed/PullToRefresh';
+import { FEED_REFRESH_EVENT } from '@/lib/feed-refresh';
 import { AudienceSelect } from '@/components/profile/AudienceSelect';
 import { MentionTextarea } from '@/components/social/MentionTextarea';
 import { Button } from '@/components/ui/button';

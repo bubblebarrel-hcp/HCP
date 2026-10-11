@@ -57,6 +57,30 @@ function HasherCard({ title, hasher, tone }: { title: string; hasher: ReportHash
 function Evidence({ report }: { report: ReportDetail }) {
   const s = report.snapshot as Record<string, string | null | undefined>;
   if (report.targetType === 'USER') return null;
+  // A direct message (D71): staff see only what the reporter showed them, the
+  // message and the few before it. Never the rest of the conversation.
+  if (report.targetType === 'DIRECT_MESSAGE') {
+    const messages = (report.snapshot.messages ?? []) as { id: string; senderId: string; body: string; createdAt: string; reported: boolean }[];
+    const reportedSender = report.answerable?.id;
+    return (
+      <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm" data-testid="report-evidence">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Shown by the reporter · the message and what came before it{report.current?.removed ? ' · now removed' : ''}
+        </p>
+        <ul className="mt-3 space-y-2">
+          {messages.map((m) => (
+            <li key={m.id} className={m.reported ? 'rounded-md border border-destructive/40 bg-destructive/5 p-2' : 'p-2'}>
+              <p className="text-xs text-muted-foreground">
+                {m.senderId === reportedSender ? 'Reported hasher' : 'Reporter'} · {formatDate(m.createdAt)}
+                {m.reported ? ' · reported' : ''}
+              </p>
+              <p className="whitespace-pre-line">{m.body}</p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
   return (
     <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm" data-testid="report-evidence">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

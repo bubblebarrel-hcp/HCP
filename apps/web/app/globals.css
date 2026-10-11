@@ -122,9 +122,9 @@ body {
 }
 
 /* ── Clinking mugs (D46) ──────────────────────────────────────────────────
-   Pull-to-refresh: two mugs drawn from beer-mug.svg, the right one mirrored.
-   The gap closes with the pull (--pull, 0 to 1) and nothing moves on its own
-   until they meet — the sloshing belongs to the clink, not to the waiting. */
+   The loading spinner: two mugs drawn from beer-mug.svg, the right one mirrored.
+   They strike, recoil and strike again for as long as `data-state` is
+   `refreshing`. */
 
 .hcp-clink {
   --pull: 0;

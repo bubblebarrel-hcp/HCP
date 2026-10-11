@@ -6,6 +6,11 @@ const isDev = process.env.NODE_ENV !== "production";
 // and a source with a path in it silently fails to match.
 const backendOrigin = new URL(process.env.BACKEND_API_URL ?? "http://localhost:5010/api/v1").origin;
 
+// The realtime socket (D72) connects from the browser straight to the API, the
+// one thing that does: a socket cannot go through the same-origin proxy. A CSP
+// source of http(s) does not always cover its ws(s) twin, so name both.
+const realtimeOrigin = backendOrigin.replace(/^http/, "ws");
+
 // Uploads go browser → storage directly (D28): the browser PUTs to a presigned
 // URL on Cloudflare, which is a different origin from the API and so needs its
 // own connect-src entry. The default covers R2's S3 endpoint for any bucket;
@@ -34,7 +39,7 @@ const csp = [
   // MapLibre fetches raster tiles with fetch(), not <img>, so the tile host has
   // to be allowed here rather than in img-src. Without it both maps draw their
   // markers over a blank background (D15).
-  `connect-src 'self' ${backendOrigin} ${uploadOrigin} https://tile.openstreetmap.org${isDev ? " ws://localhost:*" : ""}`,
+  `connect-src 'self' ${backendOrigin} ${realtimeOrigin} ${uploadOrigin} https://tile.openstreetmap.org${isDev ? " ws://localhost:*" : ""}`,
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'self'",
@@ -42,6 +47,8 @@ const csp = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Inlined into the client bundle: where the realtime socket connects (D72).
+  env: { NEXT_PUBLIC_REALTIME_URL: backendOrigin },
   async headers() {
     return [
       {

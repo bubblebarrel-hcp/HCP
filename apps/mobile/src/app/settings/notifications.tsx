@@ -38,6 +38,7 @@ const categoryLabel: Record<string, string> = {
   MEDIA: 'Photos',
   SAFETY: 'Safety',
   SOCIAL: 'Likes, replies and follows',
+  MESSAGE: 'Messages',
   SYSTEM: 'System',
 };
 
@@ -53,6 +54,7 @@ const categoryHint: Record<string, string> = {
   MEDIA: 'Photos added to your runs.',
   SAFETY: 'A run paused, a hazard, an emergency.',
   SOCIAL: 'Someone liked or replied to your post, reshared it, or followed you.',
+  MESSAGE: 'Someone sent you a direct message, or asked to. It says who, never what.',
   SYSTEM: 'Account and platform notices.',
 };
 

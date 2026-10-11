@@ -306,6 +306,9 @@ export function AccountView() {
                   <Button variant="outline" size="sm" testID="account-following" onPress={() => router.push(`/hashers/${user.id}?tab=following`)}>
                     Following
                   </Button>
+                  <Button variant="outline" size="sm" testID="account-messages" onPress={() => router.push('/messages')}>
+                    Messages
+                  </Button>
                   <Button variant="outline" size="sm" testID="account-saved" onPress={() => router.push('/saved')}>
                     Saved
                   </Button>

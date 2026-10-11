@@ -10,6 +10,7 @@ import { AudiencePicker } from '@/components/profile/AudiencePicker';
 import { PasswordConfirmDialog } from '@/components/profile/PasswordConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select } from '@/components/ui/input';
 import type { Audience } from '@/lib/types';
 import api, { errorMessage } from '@/services/api';
 
@@ -24,6 +25,8 @@ export default function PrivacyPage() {
   const [saving, setSaving] = useState(false);
   // Whether a milestone may appear in the feed as a card (D60).
   const [milestones, setMilestones] = useState(true);
+  // Who may start a direct message with me (D71).
+  const [dmPolicy, setDmPolicy] = useState<'EVERYONE' | 'NOBODY'>('EVERYONE');
 
   useEffect(() => {
     if (!loading && !user) router.replace('/auth/login');
@@ -35,10 +38,11 @@ export default function PrivacyPage() {
     if (!user) return;
     let alive = true;
     api
-      .get<{ data: { profileVisibility: Audience; pendingRequests: number; shareMilestones: boolean } }>('/me/privacy')
+      .get<{ data: { profileVisibility: Audience; pendingRequests: number; shareMilestones: boolean; dmPolicy: 'EVERYONE' | 'NOBODY' } }>('/me/privacy')
       .then((res) => {
         if (!alive) return;
         setMilestones(res.data.data.shareMilestones);
+        setDmPolicy(res.data.data.dmPolicy);
         setLevel(res.data.data.profileVisibility);
         setPending(res.data.data.pendingRequests);
       })
@@ -81,6 +85,18 @@ export default function PrivacyPage() {
       toast.success(next ? 'Your milestones can show in the feed.' : 'Your milestones stay off the feed.');
     } catch (err) {
       setMilestones(!next);
+      toast.error(errorMessage(err, 'Could not save that'));
+    }
+  }
+
+  async function changeDmPolicy(next: 'EVERYONE' | 'NOBODY') {
+    const before = dmPolicy;
+    setDmPolicy(next);
+    try {
+      await api.patch('/me/privacy', { dmPolicy: next });
+      toast.success(next === 'EVERYONE' ? 'Anyone can message you. Strangers arrive as requests.' : 'No new conversations. Ones already open stay open.');
+    } catch (err) {
+      setDmPolicy(before);
       toast.error(errorMessage(err, 'Could not save that'));
     }
   }
@@ -146,6 +162,27 @@ export default function PrivacyPage() {
               Follow requests{pending > 0 ? ` (${pending})` : ''}
             </Link>
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card data-testid="privacy-messages">
+        <CardHeader>
+          <CardTitle>Who can message me</CardTitle>
+          <CardDescription>
+            People you follow or share a kennel with arrive in your inbox. Anyone else arrives as a request that you accept
+            or decline, and they can send one message until you do. Blocking someone ends it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Select
+            value={dmPolicy}
+            onChange={(event) => void changeDmPolicy(event.target.value as 'EVERYONE' | 'NOBODY')}
+            aria-label="Who can message me"
+            data-testid="dm-policy"
+          >
+            <option value="EVERYONE">Anyone can send me a message or a request</option>
+            <option value="NOBODY">No new conversations</option>
+          </Select>
         </CardContent>
       </Card>
 

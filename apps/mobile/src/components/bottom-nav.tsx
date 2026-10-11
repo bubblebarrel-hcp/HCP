@@ -12,8 +12,8 @@ import { useTheme } from '@/hooks/use-theme';
 // by the shared frame so it is on every screen, as web's fixed bar is on every
 // page: Home, Kennels, Runs, then Menu (or Log in when signed out). 56pt tall, a
 // 24pt icon over a 12pt medium label, primary-strong when active and muted
-// otherwise, hairline above. No messaging tab: Shiggy Trails has no direct
-// messaging (D8).
+// otherwise, hairline above. Messages are reached from Menu and the
+// bell, not a tab (D71).
 
 interface Item {
   label: string;

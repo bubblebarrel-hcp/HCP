@@ -1,9 +1,9 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Loader2 } from 'lucide-react';
+import { ClinkSpinner } from '@/components/feed/ClinkSpinner';
 import { FeedCard } from '@/components/feed/FeedCard';
-import { FEED_REFRESH_EVENT } from '@/components/feed/PullToRefresh';
+import { FEED_REFRESH_EVENT } from '@/lib/feed-refresh';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/services/api';
@@ -143,9 +143,9 @@ export function FeedTabs({ initial, hasMore }: { initial: FeedEntry[]; hasMore: 
       )}
 
       {busy && items.length === 0 ? (
-        <p className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground sm:px-0">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading…
-        </p>
+        <div className="flex justify-center px-4 py-6 sm:px-0">
+          <ClinkSpinner />
+        </div>
       ) : items.length === 0 ? (
         <div className="border-y border-dashed border-border bg-card p-10 text-center sm:rounded-xl sm:border-x">
           {scope === 'FOLLOWING' ? (

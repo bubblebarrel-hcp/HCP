@@ -471,6 +471,8 @@ export type NotificationCategory =
   | 'SAFETY'
   // Follows, likes, comments and reshares (D50).
   | 'SOCIAL'
+  // A direct message, or a request to send one (D71).
+  | 'MESSAGE'
   | 'SYSTEM';
 
 export type NotificationPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';

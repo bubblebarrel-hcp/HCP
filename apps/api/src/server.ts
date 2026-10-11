@@ -33,8 +33,10 @@ import followRoutes from './routes/follow.routes';
 import profileRoutes from './routes/profile.routes';
 import invitationRoutes from './routes/invitation.routes';
 import searchRoutes from './routes/search.routes';
+import messageRoutes from './routes/message.routes';
 import { localRoot, storageDriver } from './services/storage.service';
 import { startOutbox, stopOutbox } from './services/outbox.service';
+import { closeRealtime, initRealtime } from './services/realtime.service';
 import { startDigestSweeper, stopDigestSweeper } from './services/digest.service';
 import { startTranscodeWorker, stopTranscodeWorker } from './services/transcode.service';
 import { startEscalationSweeper, stopEscalationSweeper } from './services/escalation.service';
@@ -117,6 +119,7 @@ app.use('/api/v1', moderationRoutes);
 app.use('/api/v1', engagementRoutes);
 app.use('/api/v1', followRoutes);
 app.use('/api/v1', profileRoutes);
+app.use('/api/v1', messageRoutes);
 app.use('/api/v1', invitationRoutes);
 // Global search (Annex 08Q). After every router above so a more specific
 // route always wins if a path ever collides.
@@ -162,6 +165,8 @@ app.use(errorHandler);
 
 const server = app.listen(env.port, () => {
   logger.info(`Shiggy Trails API listening on http://localhost:${env.port}/api/v1`);
+  // Pushes direct-message changes to connected hashers (D72).
+  initRealtime(server);
   // Drains DomainEvent rows into notifications (D26).
   startOutbox();
   // Speaks up about dates nobody is haring (D45).
@@ -184,6 +189,7 @@ async function shutdown(signal: string) {
   stopDigestSweeper();
   stopEscalationSweeper();
   stopTranscodeWorker();
+  closeRealtime();
   server.close(() => {
     prisma.$disconnect().finally(() => process.exit(0));
   });

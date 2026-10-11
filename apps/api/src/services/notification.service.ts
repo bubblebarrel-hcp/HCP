@@ -240,6 +240,39 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
   const payload = (event.payload ?? {}) as Payload;
 
   switch (event.eventType) {
+    // ── Direct messages (D71) ──
+    //
+    // The notice says who, never what: the words stay in the conversation, so
+    // a lock screen, an email log or a push provider never holds them.
+    case 'DirectMessageSent': {
+      const recipientId = str(payload, 'recipientId');
+      if (!event.actorId || !recipientId) return null;
+      const side = await prisma.directParticipant.findUnique({
+        where: { conversationId_userId: { conversationId: event.aggregateId, userId: recipientId } },
+        select: { mutedAt: true, conversation: { select: { status: true } } },
+      });
+      // A muted conversation, or a request the recipient already declined, is silent.
+      if (!side || side.mutedAt || side.conversation.status === 'DECLINED') return null;
+      const sender = await publicNameOf(event.actorId);
+      const requested = payload.requested === true;
+      return {
+        category: C.MESSAGE,
+        priority: P.NORMAL,
+        title: requested ? `${sender} wants to message you` : `${sender} sent you a message`,
+        body: requested ? 'Open your message requests to read it and decide.' : 'Open the conversation to read it.',
+        contextType: 'DirectConversation',
+        contextId: event.aggregateId,
+        kennelId: null,
+        recipients: [recipientId],
+        pushByDefault: true,
+        link: { label: 'Open the conversation', path: `/messages/${event.aggregateId}` },
+        // A chatty evening is one notice per conversation, not one per line.
+        group: {
+          key: `dm:${event.aggregateId}`,
+          title: (who, others) => `${nameList(who, others)} sent you messages`,
+        },
+      };
+    }
     // ── Membership ──
     case 'MembershipRequested': {
       const kennelId = str(payload, 'kennelId');
@@ -1008,14 +1041,14 @@ const EMAIL_BY_DEFAULT = new Set<NotificationCategory>([C.MEMBERSHIP, C.TRAIL_RE
 // interrupted for: something about their standing in a kennel, a run they are
 // part of, a trail going live, and anything about safety. Announcements,
 // reports and media wait to be looked at (FR-NOT-009 lets anyone change this).
-const PUSH_BY_DEFAULT = new Set<NotificationCategory>([C.MEMBERSHIP, C.RUN, C.TRAIL_RELEASE, C.SAFETY]);
+const PUSH_BY_DEFAULT = new Set<NotificationCategory>([C.MEMBERSHIP, C.RUN, C.TRAIL_RELEASE, C.SAFETY, C.MESSAGE]);
 
 // FR-NOT-007/008. A digest is for what can wait. These categories are about
 // something happening at a time (a trail going live, a run tomorrow, a safety
 // call), so they are never held, whatever a hasher chose for the others. A
 // HIGH or CRITICAL priority is never held either, in any category: a suspension
 // or a cancelled run is not news to read on Monday.
-export const NEVER_DIGEST = new Set<NotificationCategory>([C.SAFETY, C.TRAIL_RELEASE, C.REMINDER]);
+export const NEVER_DIGEST = new Set<NotificationCategory>([C.SAFETY, C.TRAIL_RELEASE, C.REMINDER, C.MESSAGE]);
 
 export function mayHold(category: NotificationCategory, priority: NotificationPriority) {
   return !NEVER_DIGEST.has(category) && (priority === P.LOW || priority === P.NORMAL);
@@ -1168,7 +1201,9 @@ export async function fanOut(event: DomainEvent) {
   // Somebody who blocked or muted the actor hears nothing from them, and the
   // actor's blocks hold too (D60). Only social notices: a trail release is not
   // an act by a person.
-  if (spec.category === C.SOCIAL && event.actorId) recipients = await reachable(event.actorId, recipients);
+  if ((spec.category === C.SOCIAL || spec.category === C.MESSAGE) && event.actorId) {
+    recipients = await reachable(event.actorId, recipients);
+  }
   const now = new Date();
   const emailable = isEmailConfigured();
   const pushOn = isPushConfigured();
@@ -1437,6 +1472,8 @@ export const PREFERENCE_CATEGORIES: NotificationCategory[] = [
   // Follows, likes, comments and reshares (D50). Its own switch, because
   // applause and a trail release are not the same kind of interruption.
   C.SOCIAL,
+  // Direct messages (D71): who wrote, never what.
+  C.MESSAGE,
 ];
 
 export async function getPreferences(actor: Actor) {

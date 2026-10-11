@@ -33,6 +33,7 @@ const categoryLabel: Record<string, string> = {
   MEDIA: 'Photos',
   SAFETY: 'Safety',
   SOCIAL: 'Likes, replies and follows',
+  MESSAGE: 'Messages',
   SYSTEM: 'System',
 };
 

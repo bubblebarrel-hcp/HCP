@@ -269,7 +269,7 @@ Consequences: AI assistance (report drafting, summaries, Hash term explanations,
 
 ## 2026-09-14 - D8: No direct messaging at launch — confirmed
 
-Status: Active
+Status: Superseded by D71 (2026-10-11)
 
 Decision: Confirmed: no one-to-one private messaging at launch. Communication is announcements, run updates, notifications, and group/committee channels.
 
@@ -1280,3 +1280,44 @@ Rationale: D67 (the pipeline this extends), D41 (the cap that stays for everythi
 - **Limits.** Photos and videos are not kept (a file chosen on one device is not on another), so a restored draft says to add them again. One draft per hasher, last write wins if two devices type at once.
 
 Rationale: D28, D51, D60 (polls), D65.
+
+## 2026-10-11 - D71: One-to-one direct messages (supersedes D8)
+
+Status: Active
+
+Decision: After review the stakeholders reversed D8. Hashers can send each other private, one-to-one, text-only messages. The reversal is deliberately narrow, and each limit below is a rule, not a default.
+
+- **Two people, text only.** `DirectConversation` holds exactly two hashers (pair stored in id order, unique). A message is up to 2000 characters of text: no media, no groups. Group channels (`Channel`) are unchanged and still kennel/event/committee/run scoped.
+- **Anyone may ask; strangers are requests.** The first message lands in the recipient's inbox if they follow the sender or share an active kennel membership with them, and is a *request* otherwise (also when the recipient has muted the sender). The asker may send one message until the recipient accepts. Replying to a request accepts it. A decline is silent: the asker still sees "waiting", cannot send more (403 `DM_UNAVAILABLE`), and the decliner can reopen it by replying.
+- **Following is still not belonging (D50).** A follow does not let you message someone and does not stop them being asked; the follow or shared kennel only chooses inbox or request.
+- **A closed door.** `User.dmPolicy` EVERYONE or NOBODY. NOBODY refuses new conversations with 403 `DM_CLOSED`; conversations already open stay open. Changing it writes `DirectMessagePolicyChanged` and an `AuditLog`.
+- **Block ends it, both ways, as a 404 (D60).** Neither side can list, read, or send; the conversation leaves both lists; "can I message them" answers not found. Unblocking restores it. Mute is per conversation, each side's own: the conversation still arrives, the notification stops.
+- **Adults only.** Every account already confirmed 18+ at registration, so DMs inherit that. The child-safety page was rewritten to say what is now true (request-gated, text-only, reportable, blockable).
+- **Private by construction.** `DirectMessage.body` is AES-256-GCM encrypted with the existing `PERSON_ENCRYPTION_KEY` (`field-crypto`). Notifications say who, never what (`MESSAGE` category: push by default, never digested, grouped per conversation); domain-event payloads carry ids and a flag, never the words. Staff cannot browse a conversation. A report on a message (`ReportTargetType.DIRECT_MESSAGE`) stores the message and up to five before it as its snapshot; that is the only time staff see any of it, and only because one of the two people chose to show it. Kennel moderators never see DM reports (no kennel on them). `REMOVE_CONTENT` marks the message REMOVED (words no longer served to either side, row kept).
+- **History is append-only.** Unsend sets `DELETED` and stops serving the words; the row stays. Archive hides a conversation from one side until something new arrives. A deleted hasher is anonymised: their messages stay for the other person as "Deleted hasher", and nobody can reply.
+- **Limits.** 60 messages per 10 minutes and 20 new conversations per day per sender (429 `DM_RATE_LIMITED`, `DM_NEW_RATE_LIMITED`). Sends are idempotent per `clientKey`.
+- **Delivery was polling, now realtime (D72).** Push still covers a phone in the background.
+- **Surfaces.** API `/me/conversations`, `/conversations/*`, `/messages/:id`, `/hashers/:id/can-message`, `PATCH /me/privacy { dmPolicy }`. Web `/messages`, `/messages/new?to=`, `/messages/:id`, header link with badge, Message button on a profile, privacy setting. Mobile has the same screens, reached from Menu and the profile. Admin renders the reported excerpt.
+- **Checked.** `scripts/dm-check.ts` (68 assertions) against the live API and database, plus a browser pass of start, request, accept and reply on web.
+
+Not done, and the owner's call: the Terms and Privacy Policy text does not mention direct messages yet (changing it and bumping `LEGAL_VERSION` forces every hasher to re-consent); DM media; group DMs; a realtime transport; message search; encryption key rotation; mobile is typechecked but not run on a device.
+
+Rationale: stakeholder review (D8 reversed), D50 (follow is interest), D57 and D60 (audience, block), D61 (a report asks a person to look), Ch.13 (privacy by design), Ch.22 (state machines), Ch.24 (a state change writes its event in the same transaction).
+
+## 2026-10-11 - D72: Direct messages arrive over socket.io
+
+Status: Active
+
+Decision: Direct-message changes are pushed to connected hashers over socket.io instead of waiting for a poll. It is a faster way of hearing what REST already says, not a second API.
+
+- **Receive-only.** A client sends nothing over the socket; every inbound event is dropped. Sending, reading, accepting, unsending, muting and blocking stay REST, so validation, rate limits, the request rules and block checks (D71) cannot be bypassed by a socket. The server announces a change after it commits, never inside the transaction, and an emit that fails is swallowed: the client's slow poll and its refetch on reconnect are the net.
+- **A room is a hasher, never a conversation.** Clients do not join anything. There is no subscription to authorise, so staying connected cannot outlive a block. A client that emits `join` is ignored (checked).
+- **Events.** `dm:message` (to the recipient, serialized for them, and a copy to the sender's other devices), `dm:message-updated` (an unsend or a removal, to both, without the words), `dm:conversation` (accepted or reopened, to both; declined only to the decliner), `dm:read` (only the reader's own devices: there are still no read receipts), `dm:unread` (the counts for the header badge), `dm:refresh` (a block or unblock, to both, or the hasher's own mute or archive). Payloads carry exactly what the REST answer would. A decline is never pushed to the asker (D71).
+- **Authentication is a ticket, not a token.** Browsers hold no token (the Auth rules above), and a socket cannot go through the same-origin proxy, so the browser asks `POST /me/realtime-ticket` through it. The ticket is a JWT signed with `JWT_ACCESS_SECRET:realtime` and the audience `hcp-realtime`, valid 60 seconds, accepted once (checked: a reused ticket, a garbage one and a real access token are all refused). Mobile asks the same endpoint with its bearer token. The browser then connects straight to the API: the web CSP `connect-src` names the API's `ws(s)` origin and `next.config.ts` inlines it as `NEXT_PUBLIC_REALTIME_URL`. The websocket upgrade checks `Origin` against `CORS_ORIGINS`; no Origin (the phone, a script) is allowed because the ticket is the credential.
+- **Bounded life.** A connection is closed by the server after 10 minutes (`REALTIME_MAX_AGE_MS`) and the client reconnects with a fresh ticket, which needs a live session. A logout, suspension or deleted account therefore stops delivery within minutes. At most 8 connections per hasher; only an ACTIVE, undeleted user may connect.
+- **Clients.** One shared, ref-counted connection per tab (web) or per app (mobile), kept open by the header badge on web and by the messages screens on mobile, closed 5 seconds after the last holder lets go, and on mobile whenever the app is backgrounded (push takes over). Every reconnect fires `resync`, and each screen refetches. While the socket is up the polls slow right down (thread 60 seconds, inbox and badge 2 minutes); while it is down they are the old 4, 15 and 30 seconds.
+- **One process.** Rooms are in memory, like the outbox, so this is correct for one API instance. Before a second instance runs, add a socket.io adapter (Redis) in `realtime.service.ts`; nothing else changes.
+- **Not built.** Typing indicators and online presence (a privacy cost with no stakeholder ask), live updates for anything that is not a direct message (notifications still poll), and the account-menu badge on mobile.
+- **Checked.** `scripts/realtime-check.ts` (26 assertions): tickets, who hears what, no read receipts, a silent decline, a block, a forged client emit. In a browser a message sent through the API appeared on an open thread in under a second with no message-list request. Mobile is typechecked and linted but not run on a device.
+
+Rationale: D71 (what a conversation is allowed to do), D26 (in-app notifications are still pulled), the Auth rule that browsers hold no token, Ch.24 (the socket announces what a committed change already wrote an event for).

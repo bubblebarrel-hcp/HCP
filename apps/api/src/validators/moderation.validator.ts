@@ -8,7 +8,7 @@ const REASONS = ['SPAM', 'SCAM', 'HARASSMENT', 'HATE', 'VIOLENCE', 'SEXUAL', 'PR
 const KINDS = ['DISMISS', 'REMOVE_CONTENT', 'WARN_USER', 'SUSPEND_USER', 'RESET_IDENTITY', 'ESCALATE', 'NOTE'];
 
 export const fileReportSchema = Joi.object({
-  targetType: Joi.string().valid('USER', 'POST', 'REEL', 'COMMENT', 'MEDIA_ASSET').required(),
+  targetType: Joi.string().valid('USER', 'DIRECT_MESSAGE', 'POST', 'REEL', 'COMMENT', 'MEDIA_ASSET').required(),
   targetId: uuid.required(),
   reason: Joi.string().valid(...REASONS).required(),
   details: Joi.string().trim().allow('', null).max(1000),

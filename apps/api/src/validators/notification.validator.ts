@@ -14,6 +14,8 @@ const CATEGORIES = [
   // D50: its own category so a hasher can mute applause without muting the
   // trail release that tells them where to run.
   'SOCIAL',
+  // D71: a direct message, or a request to send one.
+  'MESSAGE',
   'SYSTEM',
 ];
 

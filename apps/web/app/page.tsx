@@ -2,7 +2,6 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { Composer } from "@/components/feed/Composer";
 import { FeedTabs } from "@/components/feed/FeedTabs";
-import { PullToRefresh } from "@/components/feed/PullToRefresh";
 import { ReelStrip } from "@/components/feed/ReelStrip";
 import { WelcomeCard } from "@/components/feed/WelcomeCard";
 import { FeedLayout } from "@/components/layout/FeedLayout";
@@ -36,16 +35,14 @@ export default async function Home() {
   return (
     <FeedLayout left={<LeftNav />} right={<RightRail kennelCount={kennels?.total ?? 0} />}>
       <h1 className="sr-only">Home</h1>
-      <PullToRefresh>
-        <div className="space-y-4">
-          {signedIn ? <Composer /> : <WelcomeCard />}
-          <ReelStrip initial={reels?.items ?? []} />
+      <div className="space-y-4">
+        {signedIn ? <Composer /> : <WelcomeCard />}
+        <ReelStrip initial={reels?.items ?? []} />
 
-          {/* The cards are server-rendered above; FeedTabs only takes over when
-              a signed-in reader switches to what they follow (D50). */}
-          <FeedTabs initial={items} hasMore={feed?.hasMore ?? false} />
-        </div>
-      </PullToRefresh>
+        {/* The cards are server-rendered above; FeedTabs only takes over when
+            a signed-in reader switches to what they follow (D50). */}
+        <FeedTabs initial={items} hasMore={feed?.hasMore ?? false} />
+      </div>
     </FeedLayout>
   );
 }

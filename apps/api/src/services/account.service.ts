@@ -4,6 +4,7 @@ import {
   AccountStatus,
   Audience,
   CommentStatus,
+  DmPolicy,
   MediaTargetType,
   MembershipStatus,
   PostStatus,
@@ -25,12 +26,14 @@ import { deleteObject } from './storage.service';
 export async function getPrivacy(userId: string) {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { profileVisibility: true, shareMilestones: true },
+    select: { profileVisibility: true, shareMilestones: true, dmPolicy: true },
   });
   return {
     profileVisibility: user.profileVisibility,
     // Whether a milestone may appear in the feed as a card (D60).
     shareMilestones: user.shareMilestones,
+    // Who may start a direct message with me (D71).
+    dmPolicy: user.dmPolicy,
     pendingRequests: await pendingRequestCount(userId),
   };
 }
@@ -321,4 +324,32 @@ export async function deleteAccount(userId: string, password: string) {
     }
   }
   return { deleted: true };
+}
+
+// D71. NOBODY closes the door to new conversations; ones already open stay open,
+// and the hasher can still block or mute anyone in them.
+export async function setDmPolicy(userId: string, policy: DmPolicy) {
+  const current = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { dmPolicy: true } });
+  if (current.dmPolicy === policy) return getPrivacy(userId);
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: userId }, data: { dmPolicy: policy } });
+    const event = await recordEvent(tx, {
+      eventType: 'DirectMessagePolicyChanged',
+      aggregateType: 'Identity',
+      aggregateId: userId,
+      actorId: userId,
+      payload: { from: current.dmPolicy, to: policy },
+    });
+    await recordAudit(tx, {
+      actorId: userId,
+      action: 'identity.dm.policy',
+      resourceType: 'Identity',
+      resourceId: userId,
+      previousState: { dmPolicy: current.dmPolicy },
+      newState: { dmPolicy: policy },
+      policyRef: 'self',
+      domainEventId: event.id,
+    });
+  });
+  return getPrivacy(userId);
 }

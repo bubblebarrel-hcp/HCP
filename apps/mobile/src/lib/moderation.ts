@@ -1,7 +1,7 @@
 // Reporting (D61). The reasons, in the words a hasher reads. The API's
 // ReportReason enum is the source; keep them in step with apps/web/lib/moderation.ts.
 
-export type ReportTargetType = 'USER' | 'POST' | 'REEL' | 'COMMENT' | 'MEDIA_ASSET';
+export type ReportTargetType = 'USER' | 'DIRECT_MESSAGE' | 'POST' | 'REEL' | 'COMMENT' | 'MEDIA_ASSET';
 export type ReportReason =
   | 'SPAM'
   | 'SCAM'
@@ -29,6 +29,7 @@ export const REPORT_REASONS: { value: ReportReason; label: string; hint: string;
 
 export const TARGET_WORDS: Record<ReportTargetType, string> = {
   USER: 'this hasher',
+  DIRECT_MESSAGE: 'this message',
   POST: 'this post',
   REEL: 'this reel',
   COMMENT: 'this comment',

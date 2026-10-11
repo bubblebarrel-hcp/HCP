@@ -15,6 +15,7 @@ export const notificationCategoryLabel: Record<NotificationCategory, string> = {
   MEDIA: 'Photos',
   SAFETY: 'Safety',
   SOCIAL: 'Likes, replies and follows',
+  MESSAGE: 'Messages',
   SYSTEM: 'System',
 };
 
@@ -30,6 +31,7 @@ export const notificationCategoryHint: Record<NotificationCategory, string> = {
   MEDIA: 'Photos added to your runs.',
   SAFETY: 'A run paused, a hazard, an emergency.',
   SOCIAL: 'Someone liked or replied to your post, reshared it, or followed you.',
+  MESSAGE: 'Someone sent you a direct message, or asked to. It says who, never what.',
   SYSTEM: 'Account and platform notices.',
 };
 
@@ -59,6 +61,9 @@ export function notificationHref(item: NotificationItem) {
       return '/account/reports';
     case 'PhotoTag':
       return '/account/photo-tags';
+    // A direct message, or a request for one (D71).
+    case 'DirectConversation':
+      return `/messages/${item.contextId}`;
     case 'FollowRequest':
       return '/account/follow-requests';
     // A social notice about a person (an approved request, a follow) opens them.

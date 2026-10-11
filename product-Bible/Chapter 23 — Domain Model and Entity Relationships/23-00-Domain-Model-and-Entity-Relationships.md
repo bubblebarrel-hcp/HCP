@@ -227,13 +227,20 @@ Every MediaAsset must link to at least one of: Run, Trail (or Trail Segment/Wayp
 
 # Part G — Communication & Notification Domain
 
-Source: Annex 08O, Annex 08P. **Direct/one-to-one conversation types from 08O are modeled here as Future/out-of-MVP per Chapter 22, Contradictions & Gaps item 2 — not implemented in the initial schema.**
+Source: Annex 08O, Annex 08P. **Direct/one-to-one conversations from 08O are in scope as of D71 (2026-10-11), modeled below as DirectConversation; group DMs and DM media remain out of scope.**
 
 ## Announcement
 Attributes: kennel, author, pinned flag, schedule, category.
 - Kennel (1) — (0..*) Announcement
 
-## Channel (MVP scope: Kennel/Event/Committee-scoped group channels only — no private 1:1 Conversation entity in MVP)
+## DirectConversation / DirectParticipant / DirectMessage (D71)
+Attributes: the two participants (stored in id order, unique pair), initiator, status (Chapter 22 A.8c-1), last-message time. Each participant has their own last-read, muted and archived marks. A message has sender, body (encrypted at the application layer), status (Sent, Deleted, Removed), an optional client key for idempotent retry, and a removal reason.
+- Identity (1) — (0..*) DirectParticipant — (1) DirectConversation
+- DirectConversation (1) — (0..*) DirectMessage
+- A DirectMessage can be the target of a ContentReport; the report keeps a snapshot of it and the few messages before it. Nothing else lets staff read a conversation.
+- A DirectConversation is not a Channel: it never has more than two participants and no kennel, event, committee or run.
+
+## Channel (Kennel/Event/Committee/Run-scoped group channels only; one-to-one conversations are DirectConversation above)
 Attributes: type (Organization Channel, Event Channel, Committee Workspace, Governance Discussion), participants.
 - Kennel or Event or Committee (1) — (0..*) Channel
 - Channel (1) — (0..*) Message

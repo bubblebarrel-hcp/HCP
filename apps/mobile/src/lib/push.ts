@@ -154,6 +154,9 @@ export function routeFor(data: Record<string, unknown> | undefined): string | nu
     case 'Trail':
       return `/run/${id}`;
     // Somebody asked to follow a locked profile (D57): the thing to do is answer.
+    // A direct message, or a request for one (D71).
+    case 'DirectConversation':
+      return `/messages/${id}`;
     case 'FollowRequest':
       return '/follow-requests';
     // Somebody tagged you in a photo and wants your yes (D60).

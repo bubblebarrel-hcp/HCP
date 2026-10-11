@@ -2,6 +2,7 @@ import { BlockKind, FollowTargetType } from '@prisma/client';
 import prisma from '../config/prisma';
 import { ApiError, isUuid } from '../utils/http';
 import type { Actor } from './permission.service';
+import { emitToUser } from './realtime.service';
 import { recordEvent } from './record.service';
 import { publicName, userPublicSelect } from './run.service';
 
@@ -100,6 +101,13 @@ async function target(actor: Actor, userId: string) {
   if (!user) throw ApiError.notFound('Hasher not found');
 }
 
+// A block or an unblock changes which conversations exist for both people (D71),
+// so both are told to look again. The message does not say who did what.
+function announceBlockChange(a: string, b: string) {
+  emitToUser(a, 'dm:refresh', {});
+  emitToUser(b, 'dm:refresh', {});
+}
+
 export async function setRelation(actor: Actor, userId: string, kind: BlockKind) {
   await target(actor, userId);
 
@@ -140,6 +148,7 @@ export async function setRelation(actor: Actor, userId: string, kind: BlockKind)
       payload: {},
     });
   });
+  if (kind === BlockKind.BLOCK) announceBlockChange(actor.id, userId);
   return { kind };
 }
 
@@ -159,6 +168,7 @@ export async function clearRelation(actor: Actor, userId: string, kind: BlockKin
       payload: {},
     });
   });
+  if (kind === BlockKind.BLOCK) announceBlockChange(actor.id, userId);
   return { kind: null };
 }
 

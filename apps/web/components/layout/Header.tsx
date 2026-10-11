@@ -12,6 +12,7 @@ import { PhotoPostDialog } from '@/components/feed/PhotoPostDialog';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle, ThemeToggleButton } from '@/components/ui/theme-toggle';
 import { isActive, primaryNav, type NavItem } from '@/components/layout/nav';
+import { MessagesLink } from '@/components/layout/MessagesLink';
 import { NotificationBell } from '@/components/layout/NotificationBell';
 import type { SessionUser } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -265,6 +266,7 @@ export function Header() {
               </Button>
             ))}
           <ThemeToggleButton />
+          <MessagesLink />
           <NotificationBell />
           {loading ? (
             <span className="h-10 w-10 animate-pulse rounded-full bg-muted lg:w-32" aria-hidden />

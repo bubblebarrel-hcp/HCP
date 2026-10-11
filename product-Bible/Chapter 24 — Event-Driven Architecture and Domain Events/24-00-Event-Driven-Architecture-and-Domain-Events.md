@@ -90,6 +90,10 @@ Organized by Chapter 23 domain. "Consumers" lists which cross-cutting systems ca
 | `KennelVerificationLevelChanged` | A.8 | Kennel Service | Search Index, Audit |
 | `KennelArchived` | A.1 → Archived | Kennel Service | Search Index, Audit |
 | `AnnouncementPublished` | Kennel officer publishes | Communication Service | Notification, Search Index |
+| `DirectMessageSent` | D71. A hasher sends a direct message. The payload names the message, the recipient and whether it is a request, never the words | Communication Service | Notification |
+| `DirectMessageRequestAccepted` / `DirectMessageRequestDeclined` | D71. Requested → Active, or → Declined. Accepted also fires when the recipient replies to a request | Communication Service | Audit |
+| `DirectMessageDeleted` / `DirectMessageRemoved` | D71. The sender unsent it, or platform staff removed it after a report | Communication Service | Audit |
+| `DirectMessagePolicyChanged` | D71. A hasher opens or closes their messages to new conversations | Identity Service | Audit |
 | `CommitteeCreated` / `CommitteeDissolved` | Governance action | Governance Service | Notification, Audit |
 | `MotionSubmitted` / `VoteCast` / `MotionResolved` | 08L-02/03 governance workflow | Governance Service | Notification, Audit, Evidence |
 | `PolicyPublished` / `PolicyRevised` | FR-ID-027 | Governance Service | Notification, Search Index, Audit |

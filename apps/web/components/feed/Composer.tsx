@@ -10,7 +10,7 @@ import { Avatar } from '@/components/Avatar';
 import { ReelComposer } from '@/components/feed/ReelComposer';
 import { MentionTextarea } from '@/components/social/MentionTextarea';
 import { AudienceSelect } from '@/components/profile/AudienceSelect';
-import { FEED_REFRESH_EVENT } from '@/components/feed/PullToRefresh';
+import { FEED_REFRESH_EVENT } from '@/lib/feed-refresh';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { FilePreview } from '@/components/feed/FilePreview';

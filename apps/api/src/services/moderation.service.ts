@@ -21,6 +21,7 @@ import * as reels from './reel.service';
 import { publicName, userPublicSelect } from './run.service';
 import { resolveSubject } from './subject.service';
 import * as engagement from './engagement.service';
+import * as directMessages from './direct-message.service';
 
 // Reports and moderation (D61).
 //
@@ -117,6 +118,12 @@ async function userCard(id: string) {
 // to be able to see it themself: you cannot report what you cannot find.
 async function inspect(actor: Actor, type: ReportTargetType, id: string): Promise<TargetInfo> {
   if (!isUuid(id)) throw ApiError.notFound('Not found');
+
+  if (type === ReportTargetType.DIRECT_MESSAGE) {
+    // Only a person in the conversation can show it to staff (D71).
+    const found = await directMessages.inspectForReport(actor, id);
+    return { targetUserId: found.targetUserId, kennelId: null, snapshot: found.snapshot as Prisma.InputJsonObject };
+  }
 
   if (type === ReportTargetType.USER) {
     await followableUser(actor, id);
@@ -397,7 +404,8 @@ export async function queue(
 
 function summaryOf(snapshot: Prisma.JsonValue): string {
   const s = (snapshot ?? {}) as Record<string, unknown>;
-  const text = (s.body ?? s.caption ?? s.bio ?? s.name ?? '') as string;
+  const reported = Array.isArray(s.messages) ? (s.messages as { reported?: boolean; body?: string }[]).find((m) => m.reported) : undefined;
+  const text = (reported?.body ?? s.body ?? s.caption ?? s.bio ?? s.name ?? '') as string;
   const flat = String(text).replace(/\s+/g, ' ').trim();
   return flat.length > 140 ? `${flat.slice(0, 139)}…` : flat;
 }
@@ -466,6 +474,9 @@ export async function detail(actor: Actor, reportId: string, kennelSlug?: string
   } else if (report.targetType === ReportTargetType.COMMENT) {
     const c = await prisma.contentComment.findUnique({ where: { id: report.targetId }, select: { status: true } });
     current = { status: c?.status ?? null, removed: c?.status !== 'VISIBLE' };
+  } else if (report.targetType === ReportTargetType.DIRECT_MESSAGE) {
+    const status = await directMessages.currentStatus(report.targetId);
+    current = { status, removed: status !== 'SENT' };
   } else if (report.targetType === ReportTargetType.MEDIA_ASSET) {
     const m = await prisma.mediaAsset.findUnique({ where: { id: report.targetId }, select: { moderationState: true } });
     current = { status: m?.moderationState ?? null, removed: m?.moderationState === 'REJECTED' };
@@ -694,6 +705,7 @@ async function takeDown(actor: Actor, type: ReportTargetType, id: string, reason
     else if (type === ReportTargetType.REEL) await reels.remove(actor, id, reason);
     else if (type === ReportTargetType.COMMENT) await engagement.removeComment(actor, id, reason);
     else if (type === ReportTargetType.MEDIA_ASSET) await media.moderate(actor, id, false, reason);
+    else if (type === ReportTargetType.DIRECT_MESSAGE) await directMessages.removeByModeration(actor, id, reason);
   } catch (error) {
     // Already gone (the author withdrew it) is the outcome asked for.
     if (error instanceof ApiError && error.status === 404) return;

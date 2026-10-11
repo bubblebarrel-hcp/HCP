@@ -247,7 +247,8 @@ Still open from this pass:
 - [ ] What are the required event types for the first release?
 - [x] Which AI features are allowed in MVP? (2026-09-14 — AI at launch; D7. Exact feature list + provider still Phase 2.)
 - [x] Offline trail release behavior. (2026-09-14 — release signal to hosting kennel members; D6.)
-- [x] Direct messaging at launch. (2026-09-14 — confirmed none; D8.)
+- [x] Direct messaging at launch. (2026-09-14 — confirmed none; D8. **Reversed 2026-10-11, D71.**)
+- [ ] D71 follow-ups: Terms and Privacy Policy text (`apps/*/lib/legal.ts`) does not yet mention direct messages, and bumping `LEGAL_VERSION` forces re-consent, so the owner decides; realtime across more than one API instance (D72 rooms are in memory: add a socket.io adapter, e.g. Redis, before running a second instance); DM media; message search; encryption key rotation for `DirectMessage.body`.
 
 ## Platform admin dashboard follow-ups (D68, 2026-10-06)
 

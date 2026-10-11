@@ -537,7 +537,8 @@ enum ReelStatus {
   DELETED
 }
 
-// MVP channels are group-scoped only (D8)
+// Group channels are kennel/event/committee/run scoped. One-to-one messaging is
+// a separate model (D71, which supersedes D8): DirectConversation.
 enum ChannelType {
   KENNEL
   EVENT
@@ -561,6 +562,10 @@ enum NotificationCategory {
   // (D50). Its own category so a hasher can mute applause without muting the
   // trail release that tells them where to run.
   SOCIAL
+  // Somebody sent you a direct message, or asked to (D71). Its own category so
+  // a hasher can silence it without silencing a trail release. Never carries
+  // the words of the message.
+  MESSAGE
   SYSTEM
 }
 
@@ -713,6 +718,11 @@ model User {
   // Who sees what this hasher has made: posts, photos and reels (D57). A reel
   // can narrow this further for itself; it can never widen it.
   profileVisibility Audience      @default(PUBLIC)
+  // Whether anybody can start a direct message with this hasher (D71). People
+  // they follow or share a kennel with arrive in the inbox; the rest arrive as
+  // a request. NOBODY closes the door to new conversations; ones already open
+  // stay open.
+  dmPolicy          DmPolicy      @default(EVERYONE)
   // Whether a milestone (100th run) may appear in the feed as a card (D60).
   shareMilestones   Boolean       @default(true)
   homeKennelId      String?       @db.Uuid
@@ -775,6 +785,8 @@ model User {
   announcements                 Announcement[]
   channelMemberships            ChannelMember[]
   messages                      Message[]
+  directParticipations          DirectParticipant[]
+  directMessagesSent            DirectMessage[]
   notifications                 Notification[]
   notificationPreferences       NotificationPreference[]
   notificationDigestPreferences NotificationDigestPreference[]
@@ -2349,7 +2361,8 @@ model Announcement {
   @@index([kennelId, publishedAt])
 }
 
-// Group-scoped only. There is intentionally no 1:1 conversation model (D8).
+// Group-scoped (kennel, event, committee, run). One-to-one conversations are
+// DirectConversation below (D71); a group channel never holds two strangers.
 model Channel {
   id          String      @id @default(uuid()) @db.Uuid
   type        ChannelType
@@ -2397,6 +2410,95 @@ model Message {
   replies Message[] @relation("MessageThread")
 
   @@index([channelId, createdAt])
+}
+
+// ─── Direct messages (D71, supersedes D8) ───
+
+enum DmPolicy {
+  EVERYONE
+  NOBODY
+}
+
+// Ch.22: Requested -> Active | Declined. A conversation between hashers who
+// follow or share a kennel with the recipient starts Active. A decline is silent
+// to the asker and reversible by whoever declined (replying reopens it).
+enum ConversationStatus {
+  REQUESTED
+  ACTIVE
+  DECLINED
+}
+
+// SENT, then DELETED (the sender unsent it) or REMOVED (platform staff, after a
+// report). The row never leaves; only what it says changes.
+enum DirectMessageStatus {
+  SENT
+  DELETED
+  REMOVED
+}
+
+// Exactly two hashers. The pair is stored in id order (userLowId < userHighId)
+// so (a, b) and (b, a) are the same row; the unique index is what makes "start
+// a conversation" safe to race.
+model DirectConversation {
+  id            String             @id @default(uuid()) @db.Uuid
+  userLowId     String             @db.Uuid
+  userHighId    String             @db.Uuid
+  initiatorId   String             @db.Uuid
+  status        ConversationStatus @default(ACTIVE)
+  acceptedAt    DateTime?
+  declinedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  // Denormalised so the inbox sorts without touching the messages.
+  lastMessageAt DateTime           @default(now())
+
+  participants DirectParticipant[]
+  messages     DirectMessage[]
+
+  @@unique([userLowId, userHighId])
+  @@index([userLowId, lastMessageAt])
+  @@index([userHighId, lastMessageAt])
+}
+
+// Each side's own view of the conversation: what they have read, whether they
+// silenced it, whether they cleared it from their list.
+model DirectParticipant {
+  conversationId String    @db.Uuid
+  userId         String    @db.Uuid
+  lastReadAt     DateTime?
+  mutedAt        DateTime?
+  // Hidden from this hasher's inbox until something new arrives. Not deletion:
+  // the other side keeps their copy, and so does the record.
+  archivedAt     DateTime?
+  joinedAt       DateTime  @default(now())
+
+  conversation DirectConversation @relation(fields: [conversationId], references: [id])
+  user         User               @relation(fields: [userId], references: [id])
+
+  @@id([conversationId, userId])
+  @@index([userId, archivedAt])
+}
+
+model DirectMessage {
+  id             String              @id @default(uuid()) @db.Uuid
+  conversationId String              @db.Uuid
+  senderId       String              @db.Uuid
+  // AES-256-GCM at the application layer (utils/field-crypto), like biodata.
+  // Never in a notification, a domain event payload or a log.
+  body           String
+  status         DirectMessageStatus @default(SENT)
+  // Lets a phone retry a send without writing it twice.
+  clientKey      String?
+  createdAt      DateTime            @default(now())
+  deletedAt      DateTime?
+  removedAt      DateTime?
+  removedReason  String?
+
+  conversation DirectConversation @relation(fields: [conversationId], references: [id])
+  sender       User               @relation(fields: [senderId], references: [id])
+
+  @@unique([conversationId, senderId, clientKey])
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
 }
 
 // Ch.22 A.11 — immutable once delivered (FR-NOT-001). Guests are reachable by
@@ -2941,7 +3043,8 @@ enum BlockKind {
 }
 
 // One row per (who, whom), re-activated rather than duplicated, like a follow.
-// Not a message channel and not a role (D8): it only removes things.
+// Not a role: it only removes things. A block also ends any direct message
+// access between the two (D71).
 model UserBlock {
   id        String    @id @default(uuid()) @db.Uuid
   blockerId String    @db.Uuid
@@ -3056,6 +3159,9 @@ model LinkPreview {
 
 enum ReportTargetType {
   USER
+  // A direct message (D71). The reporter is the only person who can show it to
+  // staff: the report keeps the message and the few before it as a snapshot.
+  DIRECT_MESSAGE
   POST
   REEL
   COMMENT

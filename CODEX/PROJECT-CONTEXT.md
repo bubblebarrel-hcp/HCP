@@ -151,6 +151,8 @@ There is no implementation code to compare against the Product Bible. Current re
 
 ## Gap: Direct messaging scope
 
+D71 (2026-10-11) supersedes the original no-DM scope: one-to-one text messaging now exists. The earlier text follows.
+
 The current handoff states no DMs initially. Existing communication documents should be reviewed to ensure any "conversations" or "channels" language does not accidentally imply one-to-one private messaging for MVP.
 
 ## Gap: Technical stack is direction, not implemented reality
@@ -180,5 +182,5 @@ Out of scope for this handoff:
 - Bubble Barrel OS.
 - Shared engineering standards for other Bubble Barrel products.
 - Plugin marketplace implementation beyond HCP-specific extensibility needs.
-- One-to-one direct messaging in the initial product.
+- (Superseded by D71: one-to-one direct messaging is now in the product. Group DMs and DM media remain out.)
 - Generic social network features that do not support HCP goals.

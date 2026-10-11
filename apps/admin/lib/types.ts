@@ -130,7 +130,7 @@ export type ReportReason =
   | 'IMPERSONATION'
   | 'OTHER';
 export type ReportStatus = 'OPEN' | 'IN_REVIEW' | 'ACTIONED' | 'DISMISSED';
-export type ReportTargetType = 'USER' | 'POST' | 'REEL' | 'COMMENT' | 'MEDIA_ASSET';
+export type ReportTargetType = 'USER' | 'DIRECT_MESSAGE' | 'POST' | 'REEL' | 'COMMENT' | 'MEDIA_ASSET';
 export type ModerationActionKind =
   | 'DISMISS'
   | 'REMOVE_CONTENT'

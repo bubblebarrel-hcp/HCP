@@ -7,6 +7,7 @@ import { ReelStrip } from '@/components/feed/ReelStrip';
 import { ProfilePhotoGrid } from '@/components/profile/ProfilePhotoGrid';
 import { TaggedPhotos } from '@/components/profile/TaggedPhotos';
 import { FollowButton } from '@/components/social/FollowButton';
+import { MessageButton } from '@/components/social/MessageButton';
 import { FollowLists } from '@/components/social/FollowLists';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
@@ -183,20 +184,23 @@ export function HasherBody({
             Hashing here since <time dateTime={joinedAt}>{formatDate(joinedAt)}</time>
           </span>
         </p>
-        <FollowButton
-          kind="hasher"
-          target={hasherId}
-          initialFollowers={followers}
-          showCount={false}
-          onRelationChange={setRelation}
-          onCountChange={(next, isFollowing) => {
-            setCounts((current) => ({ ...current, followers: next }));
-            const was = amFollowing.current;
-            amFollowing.current = isFollowing;
-            // The first report is the button learning the truth, not a change.
-            if (was !== null && was !== isFollowing) setVersion((v) => v + 1);
-          }}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <MessageButton hasherId={hasherId} />
+          <FollowButton
+            kind="hasher"
+            target={hasherId}
+            initialFollowers={followers}
+            showCount={false}
+            onRelationChange={setRelation}
+            onCountChange={(next, isFollowing) => {
+              setCounts((current) => ({ ...current, followers: next }));
+              const was = amFollowing.current;
+              amFollowing.current = isFollowing;
+              // The first report is the button learning the truth, not a change.
+              if (was !== null && was !== isFollowing) setVersion((v) => v + 1);
+            }}
+          />
+        </div>
       </div>
 
       {visible ? (

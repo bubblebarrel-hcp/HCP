@@ -1,4 +1,4 @@
-import { Bookmark, BookOpen, Footprints, Home, IdCard, Settings, Users, type LucideIcon } from 'lucide-react';
+import { Bookmark, BookOpen, Footprints, Home, IdCard, MessageCircle, Settings, Users, type LucideIcon } from 'lucide-react';
 
 export interface NavItem {
   label: string;
@@ -10,7 +10,6 @@ export interface NavItem {
 }
 
 // One source for the top bar, bottom bar and left shortcuts so they never drift.
-// No messaging entry: Shiggy Trails has no direct messaging (D8).
 export const primaryNav: NavItem[] = [
   { label: 'Home', icon: Home, href: '/', match: (p) => p === '/' },
   { label: 'Kennels', icon: Users, href: '/kennels', match: (p) => p.startsWith('/kennels') },
@@ -21,6 +20,8 @@ export const primaryNav: NavItem[] = [
 export const shortcutNav: NavItem[] = [
   ...primaryNav,
   { label: 'Hash Passport', icon: IdCard, href: '/passport', match: (p) => p.startsWith('/passport') },
+  // One-to-one messages (D71). Private to the two people in them.
+  { label: 'Messages', icon: MessageCircle, href: '/messages', match: (p) => p.startsWith('/messages') },
   // What this hasher saved (D50). Private to them.
   { label: 'Saved', icon: Bookmark, href: '/saved', match: (p) => p.startsWith('/saved') },
   { label: 'Settings', icon: Settings, href: '/settings', match: (p) => p.startsWith('/settings') },

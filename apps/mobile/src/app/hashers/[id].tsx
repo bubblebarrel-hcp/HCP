@@ -11,6 +11,7 @@ import { ProfilePhotoGrid } from '@/components/profile/profile-photo-grid';
 import { SafetyMenu } from '@/components/profile/safety-menu';
 import { TaggedPhotos } from '@/components/profile/tagged-photos';
 import { FollowButton } from '@/components/social/follow-button';
+import { MessageButton } from '@/components/social/message-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button, Card, Skeleton } from '@/components/ui/web-ui';
@@ -207,25 +208,28 @@ export default function HasherProfileScreen() {
               Hashing here since {formatDate(hasher.joinedAt)}
             </ThemedText>
           </View>
-          <FollowButton
-            kind="hasher"
-            target={hasher.id}
-            initialFollowers={hasher.followers}
-            showCount={false}
-            onRelationChange={(next) => {
-              setRelation(next);
-            }}
-            onCountChange={(next, isFollowing) => {
-              setCounts((current) => (current ? { ...current, followers: next } : current));
-              const was = amFollowing.current;
-              amFollowing.current = isFollowing;
-              // The first report is the button learning the truth, not a change.
-              if (was !== null && was !== isFollowing) {
-                setVersion((v) => v + 1);
-                void load();
-              }
-            }}
+          <View style={styles.actionRow}>
+            <MessageButton hasherId={hasher.id} />
+            <FollowButton
+              kind="hasher"
+              target={hasher.id}
+              initialFollowers={hasher.followers}
+              showCount={false}
+              onRelationChange={(next) => {
+                setRelation(next);
+              }}
+              onCountChange={(next, isFollowing) => {
+                setCounts((current) => (current ? { ...current, followers: next } : current));
+                const was = amFollowing.current;
+                amFollowing.current = isFollowing;
+                // The first report is the button learning the truth, not a change.
+                if (was !== null && was !== isFollowing) {
+                  setVersion((v) => v + 1);
+                  void load();
+                }
+              }}
           />
+          </View>
         </View>
       </View>
 
@@ -299,6 +303,7 @@ export default function HasherProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   screen: { flex: 1, flexDirection: 'row', justifyContent: 'center' },
   safe: { flex: 1, width: '100%', maxWidth: MaxContentWidth },
   page: { paddingVertical: 16, paddingBottom: 32 },

@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar } from '@/components/Avatar';
 import { ReelComposer } from '@/components/feed/ReelComposer';
-import { FEED_REFRESH_EVENT } from '@/components/feed/PullToRefresh';
+import { FEED_REFRESH_EVENT } from '@/lib/feed-refresh';
 import { Button } from '@/components/ui/button';
 import { ReelViewer } from '@/components/feed/ReelViewer';
 import { Dialog } from '@/components/ui/dialog';

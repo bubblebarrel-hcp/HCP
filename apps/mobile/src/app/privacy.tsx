@@ -6,11 +6,11 @@ import { useRouter } from 'expo-router';
 import { AudiencePicker } from '@/components/profile/audience-picker';
 import { PasswordConfirmDialog } from '@/components/profile/password-confirm-dialog';
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton, Subpage } from '@/components/ui/web-ui';
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Segmented, Skeleton, Subpage } from '@/components/ui/web-ui';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { errorMessage } from '@/lib/api';
-import { deactivateAccount, deleteAccount, getPrivacy, setMilestoneSharing, setPrivacy } from '@/lib/social';
+import { deactivateAccount, deleteAccount, getPrivacy, setDmPolicy as saveDmPolicy, setMilestoneSharing, setPrivacy } from '@/lib/social';
 import type { Audience } from '@/lib/types';
 
 // Privacy and account (D57), as the web lays it out (app/account/privacy/page.tsx):
@@ -25,6 +25,8 @@ export default function PrivacyScreen() {
   const [saving, setSaving] = useState(false);
   // Whether a milestone may appear in the feed as a card (D60).
   const [milestones, setMilestones] = useState(true);
+  // Who may start a direct message with me (D71).
+  const [dmPolicy, setDmPolicy] = useState<'EVERYONE' | 'NOBODY'>('EVERYONE');
 
   useEffect(() => {
     if (!loading && !user) router.replace('/account');
@@ -37,6 +39,7 @@ export default function PrivacyScreen() {
       .then((data) => {
         if (!alive) return;
         setMilestones(data.shareMilestones);
+        setDmPolicy(data.dmPolicy);
         setLevel(data.profileVisibility);
         setPending(data.pendingRequests);
       })
@@ -45,6 +48,17 @@ export default function PrivacyScreen() {
       alive = false;
     };
   }, [user]);
+
+  async function changeDmPolicy(next: 'EVERYONE' | 'NOBODY') {
+    const before = dmPolicy;
+    setDmPolicy(next);
+    try {
+      await saveDmPolicy(next);
+    } catch (err) {
+      setDmPolicy(before);
+      Alert.alert('Could not save that', errorMessage(err, 'Could not save that'));
+    }
+  }
 
   async function change(next: Audience) {
     const before = level;
@@ -122,6 +136,29 @@ export default function PrivacyScreen() {
               <UserCheck size={16} color={theme.text} />
               <ThemedText style={styles.buttonLabel}>{`Follow requests${pending > 0 ? ` (${pending})` : ''}`}</ThemedText>
             </Button>
+          </CardContent>
+        </View>
+      </Card>
+
+      <Card bleed={false}>
+        <View testID="privacy-messages">
+          <CardHeader>
+            <CardTitle>Who can message me</CardTitle>
+            <CardDescription>
+              People you follow or share a kennel with arrive in your inbox. Anyone else arrives as a request that you accept or
+              decline, and they can send one message until you do. Blocking someone ends it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Segmented
+              value={dmPolicy}
+              onChange={(next) => void changeDmPolicy(next)}
+              testIDPrefix="dm-policy"
+              options={[
+                { value: 'EVERYONE', label: 'Anyone' },
+                { value: 'NOBODY', label: 'No new conversations' },
+              ]}
+            />
           </CardContent>
         </View>
       </Card>

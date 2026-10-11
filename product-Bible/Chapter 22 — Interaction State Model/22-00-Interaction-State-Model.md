@@ -190,13 +190,25 @@ A profile has an audience (`Audience`: PUBLIC, FOLLOWERS, ONLY_ME). FOLLOWERS ma
 
 ## A.8c Block and Mute (D60)
 
-One row per (who, whom), reused rather than duplicated. It only removes things; it never opens a channel (D8).
+One row per (who, whom), reused rather than duplicated. It only removes things; it never opens a channel; a block also ends any direct message access between the two (D71).
 
 | State | Meaning | Enters from |
 |---|---|---|
 | Muted | One way and silent. The muted hasher's things leave the muter's lists and notifications; their page and links still open. The muted hasher is not told and loses nothing | None; or Blocked is undone |
 | Blocked | Both ways. Neither sees the other's posts, reels or photos, follows, or notifies the other; existing follows end; the blocked one's page is a 404 to them | None, or Muted |
 | Ended | `endedAt` set. The row is reused if it happens again | Muted or Blocked |
+
+## A.8c-1 Direct Conversation (D71)
+
+Exactly two hashers. The pair is stored once, in id order.
+
+| State | Meaning | Enters from |
+|---|---|---|
+| Requested | The first message went to somebody who does not follow the sender and shares no active kennel. The asker may send one message; the recipient sees it under Requests | Start (recipient does not know the sender, or has muted them) |
+| Active | Both can write. Starts here when the recipient follows the sender or they share an active kennel | Start (known), Requested (accepted, or the recipient replies), Declined (the decliner replies) |
+| Declined | The recipient said no. Silent: the asker still sees Requested and cannot send more. Reversible by the decliner replying | Requested |
+
+A Direct Message is Sent, then Deleted (the sender unsent it) or Removed (platform staff, after a report). The row stays; only what is served changes. Blocking either way makes the conversation a 404 for both. Archiving and muting are each side's own and change nothing for the other.
 
 ## A.8d Photo Tag (D60)
 
@@ -341,7 +353,7 @@ Per the Required Codex Behavior in the handoff ("write down contradictions befor
 
 1. **Membership status vocabulary mismatch.** Annex 08L-01 (FR-GOV-002) lists organization-level membership states as *Applicant, Pending Review, Active, Visiting Member, Honorary Member, Inactive, Suspended, Archived*. Annex 08D (FR-MEMBER-004) lists member-facing statuses as *Pending, Active, Suspended, Inactive, Resigned, Removed, Archived*. Section A.2 above reconciles these by treating Visiting Member/Honorary Member as membership **types** (already modeled separately in 08D FR-MEMBER-003) rather than states, and by adopting 08D's Resigned/Removed as the terminal states 08L does not explicitly enumerate. This reconciliation is Codex-inferred; it should be confirmed against the referenced conversation's original Chapter 22 draft if that source becomes available, and is logged in `CODEX/DECISION-LOG.md`.
 
-2. **Communication Hub scope vs. no-DM MVP rule.** Annex 08O (Communication Hub overview) lists "Direct messaging" and "Private Chat" among its supported scope and conversation types. `CODEX/HCP-CODEX-HANDOFF.md` and `CODEX/ARCHITECTURE-RULES.md` both explicitly exclude one-to-one DMs from MVP. This chapter treats Direct/Private Chat as **out of MVP scope, Future** per the handoff's authority (handoff package outranks a Chapter 8 annex only where the annex is describing long-term platform scope rather than MVP scope — annexes elsewhere in Chapter 8 do distinguish current vs. future capability, e.g. 08P-02 "future"). No state machine for Direct Message is included in this chapter. Flagged in `CODEX/TODO.md`.
+2. **Communication Hub scope vs. no-DM MVP rule (resolved by D71, 2026-10-11: one-to-one direct messaging is now in scope, see A.8c-1; the text below is the earlier position).** Annex 08O (Communication Hub overview) lists "Direct messaging" and "Private Chat" among its supported scope and conversation types. `CODEX/HCP-CODEX-HANDOFF.md` and `CODEX/ARCHITECTURE-RULES.md` both explicitly exclude one-to-one DMs from MVP. This chapter treats Direct/Private Chat as **out of MVP scope, Future** per the handoff's authority (handoff package outranks a Chapter 8 annex only where the annex is describing long-term platform scope rather than MVP scope — annexes elsewhere in Chapter 8 do distinguish current vs. future capability, e.g. 08P-02 "future"). No state machine for Direct Message is included in this chapter. Flagged in `CODEX/TODO.md`.
 
 3. **Officer/Role Assignment (A.10) has no source state machine.** Synthesized from appointment/delegation business rules scattered across 08L and 08M. Marked Codex-inferred above.
 

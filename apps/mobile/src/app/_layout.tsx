@@ -126,8 +126,7 @@ export default function TabLayout() {
   const [fontsLoaded, fontError] = useFonts({ Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold });
   if (!fontsLoaded && !fontError) return null;
 
-  // Gesture Handler needs a root view above every GestureDetector (the feed's
-  // pull-to-refresh uses one).
+  // Gesture Handler needs a root view above every GestureDetector.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

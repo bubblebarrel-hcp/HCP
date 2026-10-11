@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Composer, WelcomeCard } from '@/components/feed/composer';
 import { FeedCard } from '@/components/feed/feed-card';
-import { PullToRefresh } from '@/components/feed/pull-to-refresh';
+import { ClinkSpinner } from '@/components/feed/clink-spinner';
 import { ReelStrip } from '@/components/feed/reel-strip';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -32,9 +32,8 @@ export default function HomeScreen() {
   const [scope, setScope] = useState<FeedScope>('ALL');
   const [items, setItems] = useState<FeedEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [atTop, setAtTop] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Bumped on every feed load so the reels strip refreshes with a pull (D46).
+  // Bumped on every feed load so the reels strip reloads with it (D46).
   const [railKey, setRailKey] = useState(0);
 
   const load = useCallback(async (nextScope: FeedScope) => {
@@ -63,7 +62,9 @@ export default function HomeScreen() {
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.canvas }]} edges={[]}>
         <View style={[styles.flex, { backgroundColor: theme.canvas }]}>
           {loading ? (
-            <ActivityIndicator color={theme.primary} style={styles.center} />
+            <View style={styles.center}>
+              <ClinkSpinner />
+            </View>
           ) : error ? (
             <View style={styles.center}>
               <ThemedText style={{ color: theme.danger }}>{error}</ThemedText>
@@ -75,10 +76,7 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           ) : (
-            <PullToRefresh atTop={atTop} onRefresh={() => load(scope)}>
               <FlatList
-                onScroll={(event) => setAtTop(event.nativeEvent.contentOffset.y <= 2)}
-                scrollEventThrottle={16}
                 data={items}
                 keyExtractor={(item) => `${item.kind}-${item.id}`}
                 renderItem={({ item }) => <FeedCard item={item} />}
@@ -133,7 +131,6 @@ export default function HomeScreen() {
                 }
                 contentContainerStyle={styles.list}
               />
-            </PullToRefresh>
           )}
         </View>
       </SafeAreaView>

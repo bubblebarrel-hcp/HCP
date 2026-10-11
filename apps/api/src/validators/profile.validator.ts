@@ -32,6 +32,8 @@ export const updateProfileSchema = Joi.object({
 // D57. Who sees what a hasher makes, and leaving.
 export const privacySchema = Joi.object({
   profileVisibility: Joi.string().valid('PUBLIC', 'FOLLOWERS', 'ONLY_ME'),
+  // Who may start a direct message with me (D71).
+  dmPolicy: Joi.string().valid('EVERYONE', 'NOBODY'),
   shareMilestones: Joi.boolean(),
 }).min(1);
 

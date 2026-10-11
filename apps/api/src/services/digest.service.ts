@@ -41,6 +41,7 @@ const CATEGORY_WORDS: Record<string, string> = {
   MEDIA: 'Photos and reels',
   SAFETY: 'Safety',
   SOCIAL: 'Followers and applause',
+  MESSAGE: 'Messages',
   SYSTEM: 'Shiggy Trails',
 };
 

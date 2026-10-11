@@ -75,7 +75,7 @@ This architecture is target direction only. No runnable implementation was found
 
 # Initial Scope Boundaries
 
-No direct messaging in MVP.
+Direct messaging exists, one-to-one and text only, under the limits in D71 (supersedes D8): request-gated for strangers, block-aware, encrypted at rest, reportable, never readable by staff except what a reporter files.
 
 Allowed initial communication:
 
@@ -87,7 +87,7 @@ Allowed initial communication:
 
 Not allowed without Product Bible update:
 
-- One-to-one private DMs.
+- Group DMs, media in DMs, or staff browsing of conversations (D71 limits).
 - Social-network-style messaging expansion.
 - Public trail leakage before configured release.
 - AI autonomous changes to event, attendance, membership, or governance records.
