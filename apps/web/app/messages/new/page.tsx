@@ -68,8 +68,8 @@ function NewInner() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4 px-4 py-8" data-testid="new-message">
-      <Link href="/messages" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+    <div className="mx-auto w-full max-w-2xl space-y-4 overflow-y-auto px-4 py-8" data-testid="new-message">
+      <Link href="/messages" className="inline-flex items-center gap-1 text-sm md:hidden text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" aria-hidden /> Messages
       </Link>
       {blocked ? (
@@ -79,7 +79,7 @@ function NewInner() {
       ) : !name ? (
         <div className="h-40 animate-pulse rounded-xl bg-card" aria-busy />
       ) : (
-        <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+        <div className="space-y-4 rounded-xl border border-border p-4">
           <div className="flex items-center gap-3">
             <Avatar name={name} />
             <div>
@@ -112,7 +112,7 @@ function NewInner() {
 
 export default function NewMessagePage() {
   return (
-    <Suspense fallback={<div className="mx-auto h-40 max-w-2xl animate-pulse rounded-xl bg-card" aria-busy />}>
+    <Suspense fallback={<div className="mx-auto h-40 w-full max-w-2xl animate-pulse rounded-xl bg-muted" aria-busy />}>
       <NewInner />
     </Suspense>
   );

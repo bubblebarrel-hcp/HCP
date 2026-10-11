@@ -215,8 +215,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
   if (missing) {
     return (
-      <div className="mx-auto max-w-2xl space-y-4 px-4 py-12">
-        <Link href="/messages" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <div className="space-y-4 px-4 py-12">
+        <Link href="/messages" className="inline-flex items-center gap-1 md:hidden text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" aria-hidden /> Messages
         </Link>
         <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground" data-testid="conversation-missing">
@@ -228,8 +228,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
 
   if (loading || !user || !detail) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-8" aria-busy>
-        <div className="h-96 animate-pulse rounded-xl bg-card" />
+      <div className="px-4 py-8" aria-busy>
+        <div className="h-96 animate-pulse rounded-xl bg-muted" />
       </div>
     );
   }
@@ -238,9 +238,9 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const name = other?.displayName ?? 'Deleted hasher';
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-8.5rem)] max-w-2xl flex-col px-4 py-4 md:h-[calc(100dvh-5rem)]" data-testid="conversation">
+    <div className="flex h-full min-h-0 flex-col px-4 py-3" data-testid="conversation">
       <header className="flex items-center gap-3 border-b border-border pb-3">
-        <Link href="/messages" aria-label="Back to messages" className="grid h-9 w-9 place-items-center rounded-full hover:bg-muted">
+        <Link href="/messages" aria-label="Back to messages" className="grid h-9 w-9 place-items-center rounded-full hover:bg-muted md:hidden">
           <ArrowLeft className="h-5 w-5" aria-hidden />
         </Link>
         {other && !other.deleted ? (
