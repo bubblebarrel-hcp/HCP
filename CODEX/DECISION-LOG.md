@@ -1260,3 +1260,23 @@ Rationale: D28 (the upload road), D41 (the 25MB cap), D48 (posters), D65 (mobile
 - **Stats.** `GET /admin/stats` also returns pending memberships, unpublished events, runs in the next 7 days and active kennels below the D10 minimum.
 
 Rationale: D3/D13 (kennel authority is not platform authority), D10, D11, D57 (and the one exception above), D61 (staff act on what is reported), D6/D12 (trail secrecy), and the append-only history rule.
+
+## 2026-10-11 - D69: Clips come in three sizes, and a post video may be 500MB
+
+- **The limit.** A video on a hasher's post may be 500MB (`MEDIA_MAX_POST_VIDEO_BYTES`, web and mobile `MAX_POST_VIDEO_BYTES`, the Joi ceiling was already 500MB). Photos, flyers, avatars and reels keep 25MB (D41). A bigger file takes longer to re-encode, so the per-clip ffmpeg timeout (`TRANSCODE_TIMEOUT_MS`) is now 20 minutes and work is presumed dead after 30 (D67 had 5 and 15). With the local-disk fallback the API buffers the upload in memory, so 500MB needs R2 or a roomy box; with R2 the bytes never touch the API.
+- **Renditions.** D67's re-encode is the 720p **default** and stays what `MediaAsset.url` points at. After it, the same worker makes up to two more and stores them in `MediaRendition` (`assetId + label` unique, cascade on delete): a **360p** when the clip is bigger than that, and a **1080p** when what was uploaded had a short side of 1000 or more. "360p" is the short side, so a portrait clip is 360 wide. Never upscaled. `MediaAsset.renditionsAt` says it has been done, so nothing is worked on twice, and a failure there never fails the clip (it plays at the default, `renditionsAt` is set anyway so it is not retried forever).
+- **Old clips.** When the queue is empty the worker catches one previously-finished clip up per sweep. Only what is still stored can be re-encoded, so these get a 360p and no 1080p (the original is gone after 48 hours, D67).
+- **Serving.** `GET /posts` and the feed return `photos[].renditions: { label, url, width, height }[]` (empty for a photo or a clip with none), smallest first. Reels do **not** carry renditions yet.
+- **Choosing.** The viewer's setting is per device (web `localStorage`, mobile secure store): Auto, 360p, 720p, 1080p. Auto is 360p on a connection the browser calls slow or save-data, or when Data saver is on, and 720p otherwise (the phone app has no network-type API, so only Data saver there). A size a clip does not have falls back to the default, never to nothing. Account deletion deletes the renditions' files with the original.
+- **Checked.** `scripts/rendition-check.ts`: a synthetic 1080p clip comes out as a 720p default plus a real 360p and 1080p, each with its sound, stored and serialized smallest first.
+- **Not done.** Reels, a per-video quality menu in the player, HLS/adaptive streaming, and on a clip uploaded before this release a 1080p.
+
+Rationale: D67 (the pipeline this extends), D41 (the cap that stays for everything but a post video), D65.
+
+## 2026-10-11 - D70: A post in progress follows the hasher across devices
+
+- **What.** `PostDraft` is one row per hasher holding the unfinished composer as JSON: words, thread parts, poll, audience and tagged run. `GET / PUT / DELETE /me/post-draft`. Both composers save a second after the last keystroke, bring it back on load, and offer Discard; posting deletes it. Saving something with nothing worth keeping deletes it. Deleting the account deletes it.
+- **Why not a `Post` row with status DRAFT.** `Post` already has that status, but it exists so photos have somewhere to land during the three upload steps (D28). Using it for a scratchpad would put half-written rows beside real ones, need updates for polls and thread parts that `updateDraft` does not offer, and make every list filter them out. A draft here is in no feed, has no state machine, no event and nothing to moderate; publishing still goes through create, upload, publish.
+- **Limits.** Photos and videos are not kept (a file chosen on one device is not on another), so a restored draft says to add them again. One draft per hasher, last write wins if two devices type at once.
+
+Rationale: D28, D51, D60 (polls), D65.

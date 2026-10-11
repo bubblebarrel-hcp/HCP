@@ -1,4 +1,5 @@
 import { MediaCarousel } from '@/components/feed/MediaCarousel';
+import { PostVideo } from '@/components/feed/PostVideo';
 import type { PostPhoto } from '@/lib/types';
 
 // The pictures and the clip on a post, edge to edge under its words. One item
@@ -14,15 +15,12 @@ export function PostMedia({ items, tallest = '36rem' }: { items: PostPhoto[]; ta
   return (
     <div data-testid="post-media">
       {item.kind === 'VIDEO' ? (
-        <video
+        <PostVideo
           src={item.url}
+          renditions={item.renditions}
           poster={item.thumbnailUrl ?? undefined}
-          controls
-          playsInline
-          preload="metadata"
           style={{ maxHeight: tallest }}
           className="w-full bg-black"
-          data-testid="post-video"
         />
       ) : (
         // Storage is an arbitrary host, so next/image would need every

@@ -4,6 +4,7 @@ import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
 import { asyncHandler } from '../utils/async';
 import {
+  changePasswordSchema,
   confirmPasswordSchema,
   deleteAccountSchema,
   privacySchema,
@@ -26,6 +27,7 @@ router.patch('/me/profile-images', requireAuth, validate(profileImagesSchema), a
 // person and keeps the record, and cannot be undone.
 router.get('/me/privacy', requireAuth, asyncHandler(controller.getPrivacy));
 router.patch('/me/privacy', requireAuth, validate(privacySchema), asyncHandler(controller.setPrivacy));
+router.post('/me/password', requireAuth, validate(changePasswordSchema), asyncHandler(controller.changePassword));
 router.post('/me/deactivate', requireAuth, validate(confirmPasswordSchema), asyncHandler(controller.deactivate));
 router.post('/me/delete', requireAuth, validate(deleteAccountSchema), asyncHandler(controller.deleteAccount));
 

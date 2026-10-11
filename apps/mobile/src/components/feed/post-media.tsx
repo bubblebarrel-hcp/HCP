@@ -9,12 +9,14 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { Play } from 'lucide-react-native';
+import { Play, Volume2, VolumeX } from 'lucide-react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 
 import { ThemedText } from '@/components/themed-text';
 import { MaxContentWidth } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useDevicePrefs } from '@/lib/device-prefs';
+import { pickVideoSource } from '@/lib/video-quality';
 import type { PostPhoto } from '@/lib/types';
 
 // The pictures and the clip on a post, edge to edge under its words (web
@@ -40,8 +42,11 @@ function Clip({
   // which stops it, so two never play over each other.
   active?: boolean;
 }) {
-  const [started, setStarted] = useState(false);
+  const [prefs] = useDevicePrefs();
   const theme = useTheme();
+  // Autoplay opens the clip, silent, as soon as it is on screen; data saver
+  // and a slide that is off screen always wait for a tap.
+  const [started, setStarted] = useState(prefs.autoplay && !prefs.dataSaver);
 
   useEffect(() => {
     if (!active) setStarted(false);
@@ -64,24 +69,48 @@ function Clip({
       </Pressable>
     );
   }
-  return <ClipPlayer url={item.url} width={width} height={height} />;
+  return <ClipPlayer url={pickVideoSource(item.url, item.renditions, prefs.quality, prefs.dataSaver)} width={width} height={height} muted={prefs.startMuted || prefs.autoplay} />;
 }
 
-function ClipPlayer({ url, width, height }: { url: string; width: number; height: number }) {
+function ClipPlayer({ url, width, height, muted: startMuted }: { url: string; width: number; height: number; muted: boolean }) {
+  const [muted, setMuted] = useState(startMuted);
   const player = useVideoPlayer(url, (p) => {
     p.loop = false;
+    p.muted = startMuted;
     p.play();
   });
+
+  // Android's native controls have no mute button, so there is one of ours on
+  // the corner of every clip.
+  const toggle = () => {
+    // expo-video players are mutated by design; the hook rule cannot know that.
+    // eslint-disable-next-line react-hooks/immutability
+    player.muted = !muted;
+    setMuted(!muted);
+  };
+
   return (
-    <VideoView
-      player={player}
-      style={{ width, height, backgroundColor: '#000' }}
-      contentFit="contain"
-      nativeControls
-      fullscreenOptions={{ enable: true }}
-      allowsPictureInPicture
-      accessibilityLabel="Post video"
-    />
+    <View style={{ width, height }}>
+      <VideoView
+        player={player}
+        style={{ width, height, backgroundColor: '#000' }}
+        contentFit="contain"
+        nativeControls
+        fullscreenOptions={{ enable: true }}
+        allowsPictureInPicture
+        accessibilityLabel="Post video"
+      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={muted ? 'Unmute video' : 'Mute video'}
+        accessibilityState={{ selected: muted }}
+        testID="post-video-mute"
+        onPress={toggle}
+        hitSlop={8}
+        style={styles.mute}>
+        {muted ? <VolumeX size={18} color="#fff" /> : <Volume2 size={18} color="#fff" />}
+      </Pressable>
+    </View>
   );
 }
 
@@ -171,6 +200,17 @@ export function PostMedia({ items, tallest = 576 }: { items: PostPhoto[]; talles
 }
 
 const styles = StyleSheet.create({
+  mute: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
   play: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', opacity: 0.92 },
   counter: {
     position: 'absolute',

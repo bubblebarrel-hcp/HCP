@@ -36,6 +36,22 @@ import api, { errorMessage } from '@/services/api';
 // It can narrow what their profile allows and never widen it, and the composer
 // says which it is rather than leaving the hasher to guess.
 
+// An unfinished post is kept on the server as it is typed (D70), one per hasher, so
+// a lost tab, a refresh, a dropped connection or a switch from phone to laptop does
+// not cost a long write-up. Words, thread, poll, audience and tagged run only: a
+// file picked from disk cannot be kept, and the composer says so when it brings a
+// draft back.
+interface SavedDraft {
+  body: string;
+  thread: string[];
+  audience: Audience;
+  pollOn: boolean;
+  pollOptions: string[];
+  pollHours: number;
+  runId: string | null;
+}
+
+
 export function Composer() {
   const { user } = useAuth();
   const router = useRouter();
@@ -59,6 +75,12 @@ export function Composer() {
   // The later posts of a thread, in order. Each is words only; the first post
   // carries the photos, the poll, the run and the audience for all of them.
   const [thread, setThread] = useState<string[]>([]);
+
+  // 'saved' shows briefly after each autosave; 'restored' says a draft came back.
+  const [draftState, setDraftState] = useState<'idle' | 'saved' | 'restored'>('idle');
+  const restored = useRef(false);
+  // Whether the saved draft has been fetched yet (autosave waits for it).
+  const loaded = useRef(false);
 
   const filledOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
   const pollReady = !pollOn || (filledOptions.length >= 2 && body.trim().length > 0);
@@ -86,6 +108,61 @@ export function Composer() {
     };
   }, [user, expanded, runs.length]);
 
+  // Bring a draft back once, as soon as we know whose it is.
+  useEffect(() => {
+    if (!user || restored.current) return;
+    restored.current = true;
+    api
+      .get<{ data: { draft: SavedDraft | null } }>('/me/post-draft')
+      .then((res) => {
+        const draft = res.data.data.draft;
+        if (!draft) return;
+        // If typing began before the answer came, what is on screen wins.
+        setBody((current) => current || draft.body);
+        setThread(draft.thread);
+        setAudience(draft.audience);
+        setPollOn(draft.pollOn);
+        setPollOptions(draft.pollOptions);
+        setPollHours(draft.pollHours);
+        setRunId(draft.runId ?? '');
+        setDraftState('restored');
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        loaded.current = true;
+      });
+  }, [user]);
+
+  // Save a moment after the last keystroke. Empty means nothing worth keeping.
+  useEffect(() => {
+    // Not before the saved draft has been fetched, or an empty box would wipe it.
+    if (!user || !loaded.current) return;
+    const worth = body.trim() || thread.some((part) => part.trim()) || (pollOn && filledOptions.length > 0);
+    const timer = window.setTimeout(() => {
+      const draft: SavedDraft = { body, thread, audience, pollOn, pollOptions, pollHours, runId: runId || null };
+      // Nothing worth keeping empties the saved draft; the API treats it the same.
+      api
+        .put('/me/post-draft', draft)
+        .then(() => setDraftState(worth ? 'saved' : 'idle'))
+        .catch(() => undefined);
+    }, 1000);
+    return () => window.clearTimeout(timer);
+    // filledOptions is derived from pollOptions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, body, thread, audience, pollOn, pollOptions, pollHours, runId]);
+
+  const discardDraft = () => {
+    api.delete('/me/post-draft').catch(() => undefined);
+    setBody('');
+    setThread([]);
+    setPhotos([]);
+    setPollOn(false);
+    setPollOptions(['', '']);
+    setRunId('');
+    setDraftState('idle');
+    toast.success('Draft discarded.');
+  };
+
   const addPhotos = (chosen: FileList | null) => {
     if (!chosen) return;
     const merged = mergeMedia(photos, Array.from(chosen));
@@ -111,6 +188,8 @@ export function Composer() {
         },
         (done, total) => setProgress({ done, total }),
       );
+      api.delete('/me/post-draft').catch(() => undefined);
+      setDraftState('idle');
       setBody('');
       setThread([]);
       setPhotos([]);
@@ -350,6 +429,18 @@ export function Composer() {
               />
 
               <span className="ml-auto flex items-center gap-2">
+                {draftState !== 'idle' && !busy && (
+                  <span className="text-xs text-muted-foreground" aria-live="polite" data-testid="composer-draft-state">
+                    {draftState === 'restored'
+                      ? 'Draft restored. Add photos or video again.'
+                      : 'Draft saved to your account'}
+                  </span>
+                )}
+                {draftState !== 'idle' && !busy && (
+                  <Button type="button" variant="ghost" size="sm" onClick={discardDraft} data-testid="composer-discard">
+                    Discard
+                  </Button>
+                )}
                 {progress && (
                   <span className="text-xs text-muted-foreground" aria-live="polite">
                     Uploading {Math.min(progress.done + 1, progress.total)} of {progress.total}…

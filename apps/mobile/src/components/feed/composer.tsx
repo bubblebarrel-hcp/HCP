@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { BookOpen, Footprints, ImagePlus, ListPlus, Play, Video, X } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -30,6 +30,20 @@ const AUDIENCES: { value: Audience; label: string; hint: string }[] = [
   { value: 'FOLLOWERS', label: 'Followers', hint: 'Only people who follow you.' },
   { value: 'ONLY_ME', label: 'Only me', hint: 'Only you.' },
 ];
+
+// An unfinished post is kept on the server as it is written (D70, web
+// components/feed/Composer.tsx), one per hasher, so it follows them from phone to
+// laptop and survives a closed app. Words, thread, poll, audience and tagged run;
+// picked photos and clips cannot be kept and have to be added again.
+interface SavedDraft {
+  body: string;
+  thread: string[];
+  audience: Audience;
+  pollOn: boolean;
+  pollOptions: string[];
+  pollHours: number;
+  runId: string | null;
+}
 
 export function Composer({
   name,
@@ -64,11 +78,68 @@ export function Composer({
   // carries the photos, the poll, the run and the audience for all of them.
   const [thread, setThread] = useState<string[]>([]);
 
+  const [draftState, setDraftState] = useState<'idle' | 'saved' | 'restored'>('idle');
+  // Whether the saved draft has been fetched yet (autosave waits for it, or an
+  // empty box would wipe it).
+  const restored = useRef(false);
+
   const filled = pollOptions.map((o) => o.trim()).filter(Boolean);
   const pollReady = !pollOn || (filled.length >= 2 && body.trim().length > 0);
   // A thread goes up whole, so an empty part holds Post back rather than being dropped.
   const threadReady = thread.every((part) => part.trim().length > 0);
   const ready = (body.trim().length > 0 || photos.length > 0) && pollReady && threadReady;
+
+  // Bring a draft back once, when the feed first shows the box.
+  useEffect(() => {
+    let alive = true;
+    api<{ draft: SavedDraft | null }>('/me/post-draft')
+      .then((data) => {
+        const draft = data.draft;
+        if (!alive || !draft) return;
+        setBody((current) => current || draft.body);
+        setThread(draft.thread);
+        setAudience(draft.audience);
+        setPollOn(draft.pollOn);
+        setPollOptions(draft.pollOptions);
+        setPollHours(draft.pollHours);
+        setRunId(draft.runId);
+        setDraftState('restored');
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        restored.current = true;
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Saved a moment after the last keystroke; nothing worth keeping removes it.
+  useEffect(() => {
+    if (!restored.current) return;
+    const worth = body.trim() || thread.some((part) => part.trim()) || (pollOn && filled.length > 0);
+    const timer = setTimeout(() => {
+      const draft: SavedDraft = { body, thread, audience, pollOn, pollOptions, pollHours, runId };
+      // Nothing worth keeping empties the saved draft; the API treats it the same.
+      api('/me/post-draft', { method: 'PUT', body: draft })
+        .then(() => setDraftState(worth ? 'saved' : 'idle'))
+        .catch(() => undefined);
+    }, 1000);
+    return () => clearTimeout(timer);
+    // filled is derived from pollOptions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [body, thread, audience, pollOn, pollOptions, pollHours, runId]);
+
+  function discardDraft() {
+    api('/me/post-draft', { method: 'DELETE' }).catch(() => undefined);
+    setBody('');
+    setThread([]);
+    setPhotos([]);
+    setPollOn(false);
+    setPollOptions(['', '']);
+    setRunId(null);
+    setDraftState('idle');
+  }
 
   // The runs worth tagging are fetched when the box opens, not for everybody who
   // merely loads the feed.
@@ -131,6 +202,8 @@ export function Composer({
         await api('/posts', { method: 'POST', body: { body: words.trim(), threadRootId: draft.post.id } });
       }
       await api(`/posts/${draft.post.id}/publish`, { method: 'POST' });
+      api('/me/post-draft', { method: 'DELETE' }).catch(() => undefined);
+      setDraftState('idle');
       setBody('');
       setThread([]);
       setPhotos([]);
@@ -215,6 +288,16 @@ export function Composer({
               )}
             </Pressable>
           </View>
+          {draftState !== 'idle' && !busy ? (
+            <View style={styles.draftRow}>
+              <ThemedText themeColor="textSecondary" style={styles.draftText} testID="composer-draft-state">
+                {draftState === 'restored' ? 'Draft restored. Add photos or video again.' : 'Draft saved to your account'}
+              </ThemedText>
+              <Pressable accessibilityRole="button" onPress={discardDraft} testID="composer-discard" hitSlop={8}>
+                <ThemedText type="smallBold" style={{ color: theme.primaryStrong }}>Discard</ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
           <View style={styles.modalBody}>
             <View style={styles.row}>
               <Avatar name={name} src={avatarUrl} position={avatarPosition} />
@@ -443,6 +526,8 @@ export function WelcomeCard({ onLogin }: { onLogin: () => void }) {
 }
 
 const styles = StyleSheet.create({
+  draftRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.three },
+  draftText: { fontSize: 12 },
   // Card with p-3 and border-y: edge to edge on a phone.
   card: { padding: 12, gap: Spacing.two, borderTopWidth: 1, borderBottomWidth: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { PostVideo } from '@/components/feed/PostVideo';
 import { cn } from '@/lib/utils';
 import type { PostPhoto } from '@/lib/types';
 
@@ -75,14 +76,11 @@ export function MediaCarousel({ items, tallest }: { items: PostPhoto[]; tallest:
             className="grid aspect-[4/5] w-full shrink-0 snap-center place-items-center overflow-hidden bg-black"
           >
             {item.kind === 'VIDEO' ? (
-              <video
+              <PostVideo
                 src={item.url}
+                renditions={item.renditions}
                 poster={item.thumbnailUrl ?? undefined}
-                controls
-                playsInline
-                preload="metadata"
                 className="h-full w-full object-contain"
-                data-testid="post-video"
               />
             ) : (
               // Storage is an arbitrary host, so next/image would need every

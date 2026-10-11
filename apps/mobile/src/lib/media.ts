@@ -14,7 +14,7 @@ import type { MediaAsset } from '@/lib/types';
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 // A video on a post may be larger; everything else keeps the cap above. The API
 // holds the same line (MEDIA_MAX_POST_VIDEO_BYTES).
-export const MAX_POST_VIDEO_BYTES = 100 * 1024 * 1024;
+export const MAX_POST_VIDEO_BYTES = 500 * 1024 * 1024;
 
 // The most one file may weigh where it is going.
 function uploadLimit(kind: 'PHOTO' | 'VIDEO', targetType?: string) {

@@ -1482,6 +1482,15 @@ export interface PostPhoto {
   width: number | null;
   height: number | null;
   durationSec: number | null;
+  // A clip's other sizes (D69): 360p and 1080p when they exist. The url above is the 720p default.
+  renditions?: VideoRendition[];
+}
+
+export interface VideoRendition {
+  label: string;
+  url: string;
+  width: number | null;
+  height: number | null;
 }
 
 // Always public once published (D51), so there is no visibility to choose.

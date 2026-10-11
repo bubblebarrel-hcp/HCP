@@ -270,6 +270,9 @@ export function AccountView() {
               <CardHeader style={[styles.cardHeaderTight, styles.detailsHeader]}>
                 <CardTitle>Details</CardTitle>
                 <View style={styles.detailsButtons}>
+                  <Button variant="outline" size="sm" testID="to-settings" onPress={() => router.push('/settings' as never)}>
+                    Settings
+                  </Button>
                   <Button variant="outline" size="sm" testID="to-privacy" onPress={() => router.push('/privacy')}>
                     Privacy
                   </Button>

@@ -49,3 +49,15 @@ export const listPostsQuery = Joi.object({
 export const pollVoteSchema = Joi.object({
   optionId: uuid.required(),
 });
+
+// D70. The unfinished post. Same limits as the real one (5000 words, ten posts
+// in a thread, five poll answers) but nothing is required: it is a draft.
+export const postDraftSchema = Joi.object({
+  body: Joi.string().allow('').max(5000).required(),
+  thread: Joi.array().items(Joi.string().allow('').max(5000)).max(9).required(),
+  audience: visibility.required(),
+  pollOn: Joi.boolean().required(),
+  pollOptions: Joi.array().items(Joi.string().allow('').max(80)).max(5).required(),
+  pollHours: Joi.number().integer().min(1).max(168).required(),
+  runId: uuid.allow(null).required(),
+});

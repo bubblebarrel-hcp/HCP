@@ -1,5 +1,6 @@
 import { ModerationState, Prisma, RunStatus, RunVisibility, SubjectType, UploadState } from '@prisma/client';
 import prisma from '../config/prisma';
+import { renditionSelect, serializeRenditions, type VideoRendition } from './rendition';
 import { type Actor } from './permission.service';
 import { canView, getAccess, publicName, userPublicSelect } from './run.service';
 import * as reports from './report.service';
@@ -32,6 +33,7 @@ export interface FeedPhoto {
   width: number | null;
   height: number | null;
   durationSec: number | null;
+  renditions: VideoRendition[];
 }
 
 export type FeedItem =
@@ -401,6 +403,7 @@ async function recentPosts(actor: Actor | undefined, limit: number): Promise<Fee
           width: true,
           height: true,
           durationSec: true,
+          renditions: renditionSelect,
           uploadState: true,
           moderationState: true,
         },
@@ -424,6 +427,7 @@ async function recentPosts(actor: Actor | undefined, limit: number): Promise<Fee
       width: media.width,
       height: media.height,
       durationSec: media.durationSec,
+      renditions: serializeRenditions(media.renditions),
     });
     photosByPost.set(link.targetId, list);
   }

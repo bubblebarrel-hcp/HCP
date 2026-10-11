@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import { dateOfBirth } from './common';
+import { dateOfBirth, password } from './common';
 
 const text = (max: number) => Joi.string().trim().max(max);
 
@@ -40,6 +40,12 @@ export const confirmPasswordSchema = Joi.object({
 });
 
 // Deleting cannot be undone, so it asks for the password and the word itself.
+// Signed in and knowing the old one; the new one meets the same policy as registering.
+export const changePasswordSchema = Joi.object({
+  currentPassword: Joi.string().min(1).max(200).required(),
+  newPassword: password.required(),
+});
+
 export const deleteAccountSchema = Joi.object({
   password: Joi.string().min(1).max(200).required(),
   confirm: Joi.string().valid('DELETE').required(),

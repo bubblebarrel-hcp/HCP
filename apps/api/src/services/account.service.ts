@@ -84,6 +84,39 @@ async function confirmPassword(userId: string, password: string) {
   return user;
 }
 
+// Signed in, knowing the old one. Every session ends, this one too: the client
+// signs in again with the new password, so a stolen refresh token dies with the
+// old password.
+export async function changePassword(userId: string, currentPassword: string, newPassword: string) {
+  await confirmPassword(userId, currentPassword);
+  if (currentPassword === newPassword) {
+    throw ApiError.badRequest('Pick a password you have not been using.', 'PASSWORD_UNCHANGED');
+  }
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+    await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
+    const event = await recordEvent(tx, {
+      eventType: 'PasswordChanged',
+      aggregateType: 'Identity',
+      aggregateId: userId,
+      actorId: userId,
+      payload: {},
+    });
+    await recordAudit(tx, {
+      actorId: userId,
+      action: 'identity.password.change',
+      resourceType: 'Identity',
+      resourceId: userId,
+      newState: { passwordChanged: true },
+      policyRef: 'self',
+      domainEventId: event.id,
+    });
+  });
+  return { changed: true };
+}
+
 // Deactivating hides the hasher everywhere and ends every session, and signing
 // back in brings it all back (auth.service#login). Nothing is removed.
 export async function deactivate(userId: string, password: string) {
@@ -154,7 +187,7 @@ export async function deleteAccount(userId: string, password: string) {
   const now = new Date();
   const personalMedia = await prisma.mediaAsset.findMany({
     where: { uploaderId: userId, links: { some: { targetType: { in: PERSONAL_MEDIA } } } },
-    select: { id: true, storageKey: true },
+    select: { id: true, storageKey: true, renditions: { select: { storageKey: true } } },
   });
   const kennels = await prisma.membership.findMany({
     where: { userId, status: { notIn: [MembershipStatus.RESIGNED, MembershipStatus.REMOVED, MembershipStatus.REJECTED, MembershipStatus.WITHDRAWN, MembershipStatus.ARCHIVED] } },
@@ -176,6 +209,7 @@ export async function deleteAccount(userId: string, password: string) {
       await tx.notification.deleteMany({ where: { recipientUserId: userId } });
       await tx.notificationPreference.deleteMany({ where: { userId } });
       await tx.pushDevice.deleteMany({ where: { userId } });
+      await tx.postDraft.deleteMany({ where: { userId } });
 
       // What they made and kept for themself. Archived, not erased, like any
       // post or reel its author takes down (Ch.22).
@@ -282,7 +316,9 @@ export async function deleteAccount(userId: string, password: string) {
   // Best effort, after the commit: a file that cannot be removed now is an
   // orphan in a bucket, not a reason to keep the account.
   for (const media of personalMedia) {
-    deleteObject(media.storageKey).catch((err) => logger.warn?.('Could not delete a file for a deleted account', { err }));
+    for (const key of [media.storageKey, ...media.renditions.map((r) => r.storageKey)]) {
+      deleteObject(key).catch((err) => logger.warn?.('Could not delete a file for a deleted account', { err }));
+    }
   }
   return { deleted: true };
 }

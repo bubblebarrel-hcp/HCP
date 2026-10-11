@@ -8,6 +8,7 @@ import {
   UploadState,
 } from '@prisma/client';
 import prisma from '../config/prisma';
+import { renditionSelect, serializeRenditions, type VideoRendition } from './rendition';
 import { ApiError, isUuid, page } from '../utils/http';
 import { activeFollowSet, canSeeAudience, contentVisibleAuthors } from './audience.service';
 import { hiddenFor } from './block.service';
@@ -89,6 +90,8 @@ export interface PostPhoto {
   width: number | null;
   height: number | null;
   durationSec: number | null;
+  // A clip's other sizes (D69); empty for a photo.
+  renditions: VideoRendition[];
 }
 
 // The pictures and clips on a post, in the order they were added — the same rule
@@ -113,6 +116,7 @@ async function photosFor(postIds: string[]) {
           width: true,
           height: true,
           durationSec: true,
+          renditions: renditionSelect,
           uploadState: true,
           moderationState: true,
         },
@@ -138,6 +142,7 @@ async function photosFor(postIds: string[]) {
       width: media.width,
       height: media.height,
       durationSec: media.durationSec,
+      renditions: serializeRenditions(media.renditions),
     });
     byPost.set(link.targetId, list);
   }

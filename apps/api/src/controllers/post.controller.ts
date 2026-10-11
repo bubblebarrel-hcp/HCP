@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import * as posts from '../services/post.service';
 import * as polls from '../services/poll.service';
+import * as drafts from '../services/post-draft.service';
 import { ApiError, ok } from '../utils/http';
 
 // D51. Thin, like every other controller here.
@@ -51,4 +52,17 @@ export async function remove(req: Request, res: Response) {
 // D60. Answering a poll on a post.
 export async function pollVote(req: Request, res: Response) {
   return ok(res, await polls.vote(actor(req), req.params.id, req.body.optionId));
+}
+
+// D70. The post a hasher is still writing.
+export async function getDraft(req: Request, res: Response) {
+  return ok(res, await drafts.getDraft(actor(req).id));
+}
+
+export async function saveDraft(req: Request, res: Response) {
+  return ok(res, await drafts.saveDraft(actor(req).id, req.body));
+}
+
+export async function discardDraft(req: Request, res: Response) {
+  return ok(res, await drafts.discardDraft(actor(req).id));
 }

@@ -112,13 +112,13 @@ export const env = {
     maxUploadBytes: Number(optional('MEDIA_MAX_BYTES', String(25 * 1024 * 1024))),
     // A video on a hasher's post may be larger than anything else: a clip is the
     // point of that post. Reels, photos, flyers and avatars keep the cap above.
-    maxPostVideoBytes: Number(optional('MEDIA_MAX_POST_VIDEO_BYTES', String(100 * 1024 * 1024))),
+    maxPostVideoBytes: Number(optional('MEDIA_MAX_POST_VIDEO_BYTES', String(500 * 1024 * 1024))),
     // D67: videos are re-encoded after upload. On by default; FFMPEG_PATH points at
     // a system ffmpeg instead of the one bundled by ffmpeg-static.
     transcodeEnabled: optional('TRANSCODE_ENABLED', 'true') !== 'false',
     ffmpegPath: process.env.FFMPEG_PATH ?? '',
     // How long one clip may take before it is given up on.
-    transcodeTimeoutMs: Number(optional('TRANSCODE_TIMEOUT_MS', String(5 * 60 * 1000))),
+    transcodeTimeoutMs: Number(optional('TRANSCODE_TIMEOUT_MS', String(20 * 60 * 1000))),
   },
 
   // Expo push (D12). There is no key to obtain: Expo accepts a send from

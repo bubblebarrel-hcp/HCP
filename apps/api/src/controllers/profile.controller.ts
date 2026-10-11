@@ -31,6 +31,11 @@ export async function setPrivacy(req: Request, res: Response) {
   return ok(res, await account.getPrivacy(req.user.id));
 }
 
+export async function changePassword(req: Request, res: Response) {
+  if (!req.user) throw ApiError.unauthorized();
+  return ok(res, await account.changePassword(req.user.id, req.body.currentPassword, req.body.newPassword));
+}
+
 export async function deactivate(req: Request, res: Response) {
   if (!req.user) throw ApiError.unauthorized();
   return ok(res, await account.deactivate(req.user.id, req.body.password));

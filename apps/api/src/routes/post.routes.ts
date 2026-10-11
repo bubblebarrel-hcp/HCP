@@ -5,6 +5,7 @@ import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/async';
 import {
   createPostSchema,
+  postDraftSchema,
   listPostsQuery,
   pollVoteSchema,
   removePostSchema,
@@ -18,6 +19,9 @@ import {
 // steps too; the composer just does them back to back.
 const router = Router();
 
+router.get('/me/post-draft', requireAuth, asyncHandler(controller.getDraft));
+router.put('/me/post-draft', requireAuth, validate(postDraftSchema), asyncHandler(controller.saveDraft));
+router.delete('/me/post-draft', requireAuth, asyncHandler(controller.discardDraft));
 router.get('/posts', optionalAuth, validate(listPostsQuery, 'query'), asyncHandler(controller.list));
 router.post('/posts', requireAuth, validate(createPostSchema), asyncHandler(controller.create));
 router.get('/posts/:id', optionalAuth, asyncHandler(controller.detail));

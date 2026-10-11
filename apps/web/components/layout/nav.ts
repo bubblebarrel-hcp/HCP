@@ -1,4 +1,4 @@
-import { Bookmark, BookOpen, Footprints, Home, IdCard, Users, type LucideIcon } from 'lucide-react';
+import { Bookmark, BookOpen, Footprints, Home, IdCard, Settings, Users, type LucideIcon } from 'lucide-react';
 
 export interface NavItem {
   label: string;
@@ -23,6 +23,7 @@ export const shortcutNav: NavItem[] = [
   { label: 'Hash Passport', icon: IdCard, href: '/passport', match: (p) => p.startsWith('/passport') },
   // What this hasher saved (D50). Private to them.
   { label: 'Saved', icon: Bookmark, href: '/saved', match: (p) => p.startsWith('/saved') },
+  { label: 'Settings', icon: Settings, href: '/settings', match: (p) => p.startsWith('/settings') },
 ];
 
 export function isActive(item: NavItem, pathname: string) {

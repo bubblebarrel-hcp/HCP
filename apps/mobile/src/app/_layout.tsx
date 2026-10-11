@@ -60,6 +60,7 @@ function PushedScreens() {
       <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
       <Stack.Screen name="search" options={{ title: 'Search' }} />
       <Stack.Screen name="saved" options={{ title: 'Saved' }} />
+      <Stack.Screen name="settings/index" options={{ title: "Settings" }} />
       <Stack.Screen name="settings/notifications" options={{ title: 'Notification settings' }} />
       <Stack.Screen name="passport" options={{ title: 'Hash Passport' }} />
       <Stack.Screen name="kennels/[slug]/index" options={{ title: 'Kennel' }} />

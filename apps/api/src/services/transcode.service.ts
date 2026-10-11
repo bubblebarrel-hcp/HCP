@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import ffmpegStatic from 'ffmpeg-static';
-import { TranscodeState } from '@prisma/client';
+import { TranscodeState, UploadState } from '@prisma/client';
 import prisma from '../config/prisma';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
@@ -26,7 +26,7 @@ import { deleteObject, downloadToFile, publicUrlFor, putObject, uploadFile } fro
 
 const MAX_ATTEMPTS = 3;
 // Past this long on a clip, the process that had it is presumed dead.
-const STUCK_AFTER_MINUTES = 15;
+const STUCK_AFTER_MINUTES = 30;
 const KEEP_ORIGINAL_HOURS = 48;
 // The long side of the picture, in pixels.
 const MAX_SIDE = 1280;
@@ -124,6 +124,121 @@ export function transcodeArgs(input: string, output: string, hasAudio: boolean) 
     '-movflags', '+faststart',
     output,
   ];
+}
+
+// D69. Besides the 720p the asset itself points at, a clip gets a 360p for slow or
+// metered connections and, when what was uploaded is bigger than 720p, a 1080p.
+// "360p" is the short side of the picture, as people say it, so a portrait clip is
+// 360 wide. Never upscaled: a rendition is only made when the source is bigger.
+interface RenditionSpec {
+  label: string;
+  short: number;
+  crf: number;
+  maxrate: string;
+  bufsize: string;
+}
+export const RENDITIONS: RenditionSpec[] = [
+  { label: '360p', short: 360, crf: 29, maxrate: '700k', bufsize: '1400k' },
+  { label: '1080p', short: 1080, crf: 24, maxrate: '5000k', bufsize: '10000k' },
+];
+
+const scaleShort = (short: number) => `scale='if(gt(iw,ih),-2,${short})':'if(gt(iw,ih),${short},-2)'`;
+
+export function renditionArgs(input: string, output: string, hasAudio: boolean, spec: RenditionSpec) {
+  return [
+    '-y',
+    '-i', input,
+    '-vf', `${scaleShort(spec.short)},format=yuv420p`,
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', String(spec.crf),
+    '-maxrate', spec.maxrate,
+    '-bufsize', spec.bufsize,
+    '-threads', '2',
+    ...(hasAudio ? ['-c:a', 'aac', '-b:a', spec.short <= 360 ? '64k' : '128k', '-ac', '2'] : ['-an']),
+    '-movflags', '+faststart',
+    output,
+  ];
+}
+
+// Which sizes a clip of this shape should have, given the file each would be made
+// from. Pure, so the rules are testable without ffmpeg.
+export function renditionsWanted(width: number | null, height: number | null, mainShort: number | null, canMake1080: boolean) {
+  const short = Math.min(width ?? 0, height ?? 0);
+  if (!short) return [];
+  return RENDITIONS.filter((spec) => {
+    if (spec.short === 360) return (mainShort ?? short) > 360;
+    return canMake1080 && short >= 1000;
+  });
+}
+
+// Never fails the clip: it plays at its default size without these. Sets
+// renditionsAt either way so a clip that cannot be done is not tried forever.
+async function makeRenditions(opts: {
+  id: string;
+  base: string;
+  dir: string;
+  // The file the 360p comes from (the default size, which is smaller and quicker).
+  small: { file: string; probe: Probe };
+  // The file the 1080p comes from, if what was uploaded is still to hand.
+  large?: { file: string; probe: Probe };
+}) {
+  const { id, base, dir, small, large } = opts;
+  try {
+    const mainShort = Math.min(small.probe.width ?? 0, small.probe.height ?? 0) || null;
+    const jobs: { spec: RenditionSpec; from: { file: string; probe: Probe } }[] = [];
+    for (const spec of renditionsWanted(large?.probe.width ?? small.probe.width, large?.probe.height ?? small.probe.height, mainShort, Boolean(large))) {
+      jobs.push({ spec, from: spec.short === 360 ? small : large! });
+    }
+    for (const { spec, from } of jobs) {
+      const out = path.join(dir, `rendition-${spec.label}.mp4`);
+      await run(renditionArgs(from.file, out, from.probe.hasAudio, spec));
+      const info = await probe(out);
+      const { size } = await stat(out);
+      if (!info.videoCodec || size === 0) throw new FfmpegError(`The ${spec.label} copy has no video`);
+      const key = `${base}-${spec.label}.mp4`;
+      await uploadFile(key, out, 'video/mp4');
+      await prisma.mediaRendition.upsert({
+        where: { assetId_label: { assetId: id, label: spec.label } },
+        create: { assetId: id, label: spec.label, storageKey: key, url: publicUrlFor(key), width: info.width, height: info.height, sizeBytes: BigInt(size) },
+        update: { storageKey: key, url: publicUrlFor(key), width: info.width, height: info.height, sizeBytes: BigInt(size) },
+      });
+      await rm(out, { force: true });
+    }
+  } catch (err) {
+    logger.warn?.('Could not make the other sizes of a clip', { id, message: err instanceof Error ? err.message : String(err) });
+  }
+  await prisma.mediaAsset.update({ where: { id }, data: { renditionsAt: new Date() } });
+}
+
+// Clips that were already done before renditions existed (and any whose first try
+// was cut short), one per call: only what is still stored can be re-encoded, so
+// these get a 360p from their default size and no 1080p.
+async function backfillNext(): Promise<boolean> {
+  const asset = await prisma.mediaAsset.findFirst({
+    where: {
+      kind: 'VIDEO',
+      renditionsAt: null,
+      uploadState: UploadState.AVAILABLE,
+      transcodeState: { in: [TranscodeState.DONE, TranscodeState.SKIPPED] },
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, storageKey: true },
+  });
+  if (!asset) return false;
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'shiggy-renditions-'));
+  try {
+    const file = path.join(dir, `in${path.extname(asset.storageKey) || '.bin'}`);
+    await downloadToFile(asset.storageKey, file);
+    const info = await probe(file);
+    await makeRenditions({ id: asset.id, base: asset.storageKey.replace(/.[^./]+$/, ''), dir, small: { file, probe: info } });
+  } catch (err) {
+    logger.warn?.('Could not catch a clip up on its other sizes', { id: asset.id, message: err instanceof Error ? err.message : String(err) });
+    await prisma.mediaAsset.update({ where: { id: asset.id }, data: { renditionsAt: new Date() } }).catch(() => undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+  return true;
 }
 
 // ─── The queue ───
@@ -233,6 +348,7 @@ export async function processAsset(id: string) {
           ...(poster ? { thumbnailUrl: (poster as { url: string | null }).url } : {}),
         },
       });
+      await makeRenditions({ id, base, dir, small: { file: input, probe: before } });
       return;
     }
 
@@ -292,6 +408,13 @@ export async function processAsset(id: string) {
         },
       });
     });
+    await makeRenditions({
+      id,
+      base,
+      dir,
+      small: { file: output, probe: after },
+      large: { file: input, probe: before },
+    });
   } catch (err) {
     const message = (err instanceof Error ? err.message : String(err)).slice(0, 500);
     const permanent = err instanceof FfmpegError && err.permanent;
@@ -345,6 +468,8 @@ export async function runTranscodeSweep(now = new Date()) {
   // Everything waiting, one at a time: this is CPU work on the machine that also
   // answers requests, so it is never run in parallel.
   while (await processNext(now)) result.processed++;
+  // Only when the queue is empty, so catching up never delays a new upload.
+  if (result.processed === 0) await backfillNext();
   result.originalsDeleted = await sweepOriginals(now);
   return result;
 }

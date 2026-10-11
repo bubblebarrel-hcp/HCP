@@ -122,6 +122,24 @@ function AccountMenu({ user }: { user: SessionUser }) {
             </span>
           </Link>
           <hr className="my-2 border-border" />
+          <Link
+            href="/saved"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block rounded-lg p-2 text-sm font-medium hover:bg-muted"
+          >
+            Saved
+          </Link>
+          <Link
+            href="/settings"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="block rounded-lg p-2 text-sm font-medium hover:bg-muted"
+            data-testid="menu-settings"
+          >
+            Settings
+          </Link>
+          <hr className="my-2 border-border" />
           <div className="p-2">
             <p className="pb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Display</p>
             <ThemeToggle />

@@ -48,7 +48,7 @@ EXPO_ACCESS_TOKEN=
 
 # Optional: maximum accepted upload, bytes (default 25MB)
 MEDIA_MAX_BYTES=26214400
-# Optional: maximum video on a hasher's post, bytes (default 100MB). Reels, photos, flyers
+# Optional: maximum video on a hasher's post, bytes (default 500MB). Reels, photos, flyers
 # and avatars keep the cap above. Web and mobile carry the same number (lib/media.ts).
 MEDIA_MAX_POST_VIDEO_BYTES=104857600
 # Video is re-encoded to H.264 MP4 after upload (D67). On by default, using the ffmpeg that

@@ -9,7 +9,7 @@ export const ACCEPTED_VIDEOS = 'video/mp4,video/quicktime,video/webm';
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 // A video on a post may be larger; everything else keeps the cap above. The API
 // holds the same line (MEDIA_MAX_POST_VIDEO_BYTES).
-export const MAX_POST_VIDEO_BYTES = 100 * 1024 * 1024;
+export const MAX_POST_VIDEO_BYTES = 500 * 1024 * 1024;
 
 interface UploadTarget {
   url: string;

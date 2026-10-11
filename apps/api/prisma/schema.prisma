@@ -797,6 +797,7 @@ model User {
   photoTagsOfMe                 PhotoTag[]                     @relation("PhotoTagged")
   photoTagsMade                 PhotoTag[]                     @relation("PhotoTagger")
   reportsFiled                  ContentReport[]                @relation("ReportReporter")
+  postDraft                     PostDraft?
 
   @@index([hashHandle])
   @@index([homeKennelId])
@@ -2159,6 +2160,37 @@ model AiSuggestion {
 // What became of a video after it was uploaded (D67). A clip is re-encoded to
 // H.264 MP4 at 720p so it plays on every phone and stays small; the original
 // plays in the meantime.
+// D69. The other sizes of a video: the asset's own file is the 720p default, and
+// these are the smaller (360p) and larger (1080p) ones a viewer may choose.
+model MediaRendition {
+  id         String   @id @default(uuid()) @db.Uuid
+  assetId    String   @db.Uuid
+  // "360p", "1080p": the short side, as people say it.
+  label      String
+  storageKey String
+  url        String?
+  width      Int?
+  height     Int?
+  sizeBytes  BigInt
+  createdAt  DateTime @default(now())
+
+  asset MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, label])
+}
+
+// D70. The post a hasher is still writing, kept on the server so it follows them
+// from phone to laptop. One per hasher: this is a scratchpad, not a Post, so it
+// is in no feed, has no state machine and is simply replaced as they type. Photos
+// and clips are not kept; a file has to be added again on the next device.
+model PostDraft {
+  userId    String   @id @db.Uuid
+  payload   Json
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 enum TranscodeState {
   NONE
   PENDING
@@ -2196,6 +2228,9 @@ model MediaAsset {
   transcodeAttempts  Int             @default(0)
   transcodeError     String?
   transcodedAt       DateTime?
+  // Set once the lower and higher renditions have been made (D69), so a clip is
+  // never worked on twice and old clips can be caught up.
+  renditionsAt       DateTime?
   uploadState        UploadState     @default(QUEUED)
   moderationState    ModerationState @default(PENDING)
   moderatedById      String?         @db.Uuid
@@ -2210,6 +2245,7 @@ model MediaAsset {
   reels         Reel[]
   supplementals SupplementalArtifact[]
   evidence      EvidenceRecord[]
+  renditions    MediaRendition[]
 
   @@index([uploaderId])
   @@index([uploadState, moderationState])
