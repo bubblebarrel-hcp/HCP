@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "278565403966",
+    "project_id": "shiggy-trails",
+    "storage_bucket": "shiggy-trails.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:278565403966:android:a15a921543d02d6340c06f",
+        "android_client_info": {
+          "package_name": "com.shiggytrails.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9bsb9P8vkji-YIUvd6GBc5MjJcsVvC7I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

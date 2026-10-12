@@ -21,6 +21,8 @@ import type { Page, Reel } from '@/lib/types';
 
 const TILE = 96;
 const INSET = 6;
+// A mid grey that reads on both the light and the dark card.
+const SEEN_RING = '#9A9A9A';
 
 function CountRing({ count, color }: { count: number; color: string }) {
   const r = 47;
@@ -68,7 +70,8 @@ function Tile({ reel, onOpen }: { reel: Reel; onOpen: () => void }) {
       onPress={onOpen}
       style={styles.tileWrap}>
       <View style={styles.tile}>
-        <CountRing count={reel.itemCount} color={theme.primary} />
+        {/* Orange until you have opened it, grey after (as Instagram does). */}
+        <CountRing count={reel.itemCount} color={reel.viewed ? SEEN_RING : theme.primary} />
         {/* On a profile, the reels the hasher pinned (D58) say so. */}
         {reel.pinned && (
           <View style={[styles.pinned, { backgroundColor: theme.primary, borderColor: theme.card }]}>
@@ -138,7 +141,16 @@ export function ReelStrip({ refreshKey = 0, authorId }: { refreshKey?: number; a
           </Pressable>
         )}
         {reels.map((reel) => (
-          <Tile key={reel.id} reel={reel} onOpen={() => router.push(`/reels/${reel.id}`)} />
+          <Tile
+            key={reel.id}
+            reel={reel}
+            onOpen={() => {
+              // Opening it is what marks it seen; grey the ring now rather than
+              // waiting for the rail to reload.
+              setReels((all) => all.map((r) => (r.id === reel.id ? { ...r, viewed: true } : r)));
+              router.push(`/reels/${reel.id}`);
+            }}
+          />
         ))}
         {reels.length === 0 && (
           <ThemedText type="small" themeColor="textSecondary" style={styles.empty}>

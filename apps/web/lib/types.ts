@@ -999,6 +999,8 @@ export interface Reel {
   // A reel lasts 24 hours unless it is pinned (D58). Pinned reels sit on their
   // author's profile only and never expire, so `expiresAt` is null for them.
   pinned: boolean;
+  // The signed-in viewer has opened it: the rail ring turns grey.
+  viewed?: boolean;
   expiresAt: string | null;
   // Unique signed-in viewers plus anonymous opens (D50).
   viewCount: number;

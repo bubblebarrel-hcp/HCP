@@ -307,6 +307,8 @@ export interface Reel {
   pinned: boolean;
   expiresAt: string | null;
   viewCount: number;
+  // The signed-in viewer has opened it: the rail ring turns grey.
+  viewed: boolean;
   engagement: Engagement;
   author: { id: string; name: string; avatarUrl: string | null };
   kennel: { id: string; slug: string; shortName: string; primaryColor: string | null } | null;

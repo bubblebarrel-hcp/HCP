@@ -59,11 +59,14 @@ async function ensureAndroidChannel() {
   if (Platform.OS !== 'android' || !Notifications) return;
   // Android decides how loudly to interrupt from the channel, not the message,
   // so the channel has to exist before the first notification lands.
+  // HIGH is what makes Android pop the notification over whatever is on screen
+  // and show it on the lock screen; DEFAULT only drops it into the shade.
   await Notifications.setNotificationChannelAsync('default', {
     name: 'Runs and trails',
-    importance: Notifications.AndroidImportance.DEFAULT,
+    importance: Notifications.AndroidImportance.HIGH,
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#F4511E',
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
   });
 }
 

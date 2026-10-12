@@ -69,7 +69,7 @@ function PushedScreens() {
       <Stack.Screen name="comments/[segment]/[id]" options={{ title: 'Comments' }} />
       <Stack.Screen name="hashers/[id]" options={{ title: 'Hasher' }} />
       <Stack.Screen name="posts/[id]" options={{ title: 'Post' }} />
-      <Stack.Screen name="reels/[id]" options={{ title: 'Reel' }} />
+      <Stack.Screen name="reels/[id]" options={{ title: 'Reel', animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="privacy" options={{ title: 'Privacy' }} />
       <Stack.Screen name="follow-requests" options={{ title: 'Follow requests' }} />
       <Stack.Screen name="tags/[tag]" options={{ title: 'Tag' }} />

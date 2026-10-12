@@ -83,7 +83,7 @@ function Tile({ reel, onOpen }: { reel: Reel; onOpen: () => void }) {
       aria-label={`${reel.author.name}, ${where}, ${reel.itemCount} ${reel.itemCount === 1 ? 'item' : 'items'}`}
     >
       <span
-        className="relative block h-24 w-24 text-primary sm:h-28 sm:w-28"
+        className={`relative block h-24 w-24 sm:h-28 sm:w-28 ${reel.viewed ? 'text-muted-foreground/60' : 'text-primary'}`}
         data-testid="reel-tile-ring"
         data-item-count={reel.itemCount}
       >

@@ -186,6 +186,7 @@ function serialize(
   viewerId?: string,
   items: ReelItem[] = [],
   engagement: stats.Engagement = stats.EMPTY,
+  viewed = false,
 ) {
   return {
     id: reel.id,
@@ -219,6 +220,9 @@ function serialize(
     items,
     itemCount: items.length,
     isMine: viewerId ? reel.author.id === viewerId : false,
+    // Whether this signed-in viewer has opened it (ContentView, D50): the rail
+    // greys the ring once true. Signed out there is no one to remember.
+    viewed,
   };
 }
 
@@ -226,12 +230,22 @@ export type SerializedReel = ReturnType<typeof serialize>;
 
 // One reel, with its items and its numbers. Every single-reel return goes
 // through here so the two extra reads are in one place rather than ten.
+async function viewedSet(viewerId: string | undefined, reelIds: string[]) {
+  if (!viewerId || reelIds.length === 0) return new Set<string>();
+  const rows = await prisma.contentView.findMany({
+    where: { viewerId, subjectType: SubjectType.REEL, subjectId: { in: reelIds } },
+    select: { subjectId: true },
+  });
+  return new Set(rows.map((r) => r.subjectId));
+}
+
 async function serializeOne(reel: ReelRow & { authorId: string }, viewerId?: string) {
-  const [items, engagement] = await Promise.all([
+  const [items, engagement, seen] = await Promise.all([
     itemsFor([reel.id]),
     stats.engagementOne(viewerId, SubjectType.REEL, reel.id),
+    viewedSet(viewerId, [reel.id]),
   ]);
-  return serialize(reel, viewerId, items.get(reel.id) ?? [], engagement);
+  return serialize(reel, viewerId, items.get(reel.id) ?? [], engagement, seen.has(reel.id));
 }
 
 // ─── Who may see a reel ───
@@ -638,12 +652,16 @@ export async function listPublished(
     take: opts.limit,
   });
 
-  const [items, engagement] = await Promise.all([
+  const [items, engagement, seen] = await Promise.all([
     itemsFor(rows.map((r) => r.id)),
     // One read for the whole rail's numbers, not one per reel.
     stats.engagementFor(
       actor?.id,
       rows.map((r) => ({ type: SubjectType.REEL, id: r.id })),
+    ),
+    viewedSet(
+      actor?.id,
+      rows.map((r) => r.id),
     ),
   ]);
   const visible: SerializedReel[] = [];
@@ -658,10 +676,13 @@ export async function listPublished(
     if (own.length === 0) continue;
     if (await canSeeWith(actor, row, profile, followed)) {
       visible.push(
-        serialize(row, actor?.id, own, engagement.get(stats.subjectKey(SubjectType.REEL, row.id)) ?? stats.EMPTY),
+        serialize(row, actor?.id, own, engagement.get(stats.subjectKey(SubjectType.REEL, row.id)) ?? stats.EMPTY, seen.has(row.id)),
       );
     }
   }
+  // The rail puts what you have not seen first, as Instagram does; the sort is
+  // stable, so newest-first holds inside each group.
+  if (isRail) visible.sort((a, b) => Number(a.viewed) - Number(b.viewed));
   const total = await prisma.reel.count({ where });
   return page(visible, total, opts.page, opts.limit);
 }
