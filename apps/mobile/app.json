@@ -51,6 +51,14 @@
       ],
       "expo-video",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Shiggy Trails uses the camera to take a picture or a video to send in a message.",
+          "microphonePermission": "Shiggy Trails records sound with a video you take.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
         "expo-image-picker",
         {
           "photosPermission": "Shiggy Trails reads the photos and videos you choose to post, in a post, a reel, a flyer or your profile.",

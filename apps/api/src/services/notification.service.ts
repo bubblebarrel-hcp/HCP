@@ -66,6 +66,9 @@ interface NotificationSpec {
     key: string;
     // The title once more than one person is behind it.
     title: (who: string[], others: number) => string;
+    // Every event still sends its own push, though the in-app list shows one notice
+    // (a chat: one line in the list, but a buzz for each message).
+    pushEach?: boolean;
   };
 }
 
@@ -76,6 +79,10 @@ interface GuestRecipient {
 }
 
 type Payload = Record<string, unknown>;
+
+// What a message notice says it is (D73): the kind, never the words.
+const sentLine = (kind: string | null) =>
+  kind === 'MEDIA' ? 'sent you a photo or video' : kind === 'STICKER' ? 'sent you a sticker' : kind === 'VOICE' ? 'sent you a voice message' : 'sent you a message';
 
 const str = (payload: Payload, key: string) => (typeof payload[key] === 'string' ? (payload[key] as string) : null);
 
@@ -258,7 +265,7 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
       return {
         category: C.MESSAGE,
         priority: P.NORMAL,
-        title: requested ? `${sender} wants to message you` : `${sender} sent you a message`,
+        title: requested ? `${sender} wants to message you` : `${sender} ${sentLine(str(payload, 'kind'))}`,
         body: requested ? 'Open your message requests to read it and decide.' : 'Open the conversation to read it.',
         contextType: 'DirectConversation',
         contextId: event.aggregateId,
@@ -270,6 +277,8 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         group: {
           key: `dm:${event.aggregateId}`,
           title: (who, others) => `${nameList(who, others)} sent you messages`,
+          // A message is something you want to hear every time while you are away.
+          pushEach: true,
         },
       };
     }
@@ -1256,7 +1265,7 @@ async function foldIntoGroup(
     orderBy: { createdAt: 'desc' },
     select: { id: true },
   });
-  if (!open) return false;
+  if (!open) return null;
 
   await prisma.notificationGroupMember.create({
     data: { notificationId: open.id, domainEventId: event.id, actorId: event.actorId },
@@ -1279,10 +1288,10 @@ async function foldIntoGroup(
       groupCount: members.length,
       // It rises to the top again: something new happened on it.
       createdAt: now,
-      evaluationReason: `Grouped with ${members.length - 1} earlier notice${members.length === 2 ? '' : 's'} on the same thing; this one updated it quietly and sent nothing new (FR-NOT-005).`,
+      evaluationReason: `Grouped with ${members.length - 1} earlier notice${members.length === 2 ? '' : 's'} on the same thing; this one updated it${group.pushEach ? ' and still sent its own push' : ' quietly and sent nothing new'} (FR-NOT-005).`,
     },
   });
-  return true;
+  return open.id;
 }
 
 export async function fanOut(event: DomainEvent) {
@@ -1356,7 +1365,18 @@ export async function fanOut(event: DomainEvent) {
     // FR-NOT-005: if this folds into a notice they have not read yet, it only
     // updates that one. Nothing new is sent: they were told already, and a
     // second buzz for the twelfth like is the thing grouping is for.
-    if (inApp && spec.group && (await foldIntoGroup(recipientUserId, spec.group, event, now))) {
+    const foldedInto = inApp && spec.group ? await foldIntoGroup(recipientUserId, spec.group, event, now) : null;
+    if (foldedInto) {
+      // A chat is the exception (pushEach): the list shows one notice, but the
+      // phone is still told about every message, by the same rules as the first
+      // (a channel they turned off, a quiet hour, no device, all still hold).
+      if (spec.group?.pushEach && pushOn && pushable.has(recipientUserId)) {
+        const wants = await channelEnabled(recipientUserId, spec.category, DeliveryChannel.PUSH, spec.kennelId, spec.pushByDefault ?? PUSH_BY_DEFAULT.has(spec.category));
+        if (wants) {
+          const quiet = await evaluateQuietHours(recipientUserId, spec.priority, zones.get(recipientUserId), now);
+          if (!quiet.suppressed) await deliverPush(foldedInto, recipientUserId, spec);
+        }
+      }
       created++;
       continue;
     }

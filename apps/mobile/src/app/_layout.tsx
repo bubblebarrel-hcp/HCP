@@ -1,10 +1,11 @@
 import { useEffect } from 'react';
 import { Platform, View } from 'react-native';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, usePathname, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import { Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold } from '@expo-google-fonts/geist';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
@@ -95,15 +96,24 @@ function Frame() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const pathname = usePathname();
+  // A reel being watched owns the whole screen (D58), and so no header or bar.
+  const immersive = /^\/reels\/[^/]+$/.test(pathname);
+  // A conversation has its own header, and its message box has to sit directly on
+  // the keyboard: a bottom bar under it is a strip the keyboard would cover and the
+  // box would have to float above.
+  const conversation = /^\/messages\/(?!new$|compose$)[^/]+$/.test(pathname);
   return (
     <View style={{ flex: 1, backgroundColor: theme.canvas }}>
-      <View style={{ backgroundColor: theme.card, paddingTop: insets.top }}>
-        <AppHeader onSearch={() => router.push('/search' as never)} />
-      </View>
+      {!immersive && (
+        <View style={{ backgroundColor: theme.card, paddingTop: insets.top }}>
+          <AppHeader onSearch={() => router.push('/search' as never)} />
+        </View>
+      )}
       <View style={{ flex: 1 }}>
         <PushedScreens />
       </View>
-      <BottomNav />
+      {!immersive && !conversation && <BottomNav />}
     </View>
   );
 }
@@ -130,11 +140,15 @@ export default function TabLayout() {
   // Gesture Handler needs a root view above every GestureDetector.
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ThemePreferenceProvider>
-          <Shell />
-        </ThemePreferenceProvider>
-      </SafeAreaProvider>
+      {/* Android draws edge to edge, where React Native's own keyboard avoidance no
+          longer works; this is what lets a screen follow the keyboard (messages). */}
+      <KeyboardProvider statusBarTranslucent navigationBarTranslucent>
+        <SafeAreaProvider>
+          <ThemePreferenceProvider>
+            <Shell />
+          </ThemePreferenceProvider>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

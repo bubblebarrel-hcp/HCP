@@ -107,6 +107,7 @@ async function main() {
     await prisma.directMessage.deleteMany({ where: { conversationId: { in: convIds } } });
     await prisma.directParticipant.deleteMany({ where: { conversationId: { in: convIds } } });
     await prisma.directConversation.deleteMany({ where: { id: { in: convIds } } });
+    await prisma.pushDevice.deleteMany({ where: { pushToken: { startsWith: 'ExponentPushToken[dmcheck-fake' } } });
     await prisma.stickerFavorite.deleteMany({ where: { userId: { in: ids } } });
     await prisma.sticker.deleteMany({ where: { ownerId: { in: ids } } });
     for (const id of convIds) await rm(path.join(process.cwd(), 'uploads', 'dm', id), { recursive: true, force: true });
@@ -313,10 +314,22 @@ async function main() {
   // ── Mute: conversation stays, notification stops ──
   r = await call('PUT', `/conversations/${akId}/mute`, k.token, { muted: true });
   check('mute a conversation', r.status === 200 && r.data.muted === true, r);
-  const before = (await call('GET', '/me/notifications?limit=50', k.token)).data.items.filter((n: any) => n.contextId === akId).length;
+  const count = async () => (await call('GET', '/me/notifications?limit=50', k.token)).data.items.filter((n: any) => n.contextId === akId).length;
+  // Earlier messages may still be in the queue: wait until the count stops moving.
+  const stable = async () => {
+    let last = -1;
+    let still = 0;
+    for (let i = 0; i < 20 && still < 3; i++) {
+      const n = await count();
+      still = n === last ? still + 1 : 0;
+      last = n;
+      await wait(4000);
+    }
+    return last;
+  };
+  const before = await stable();
   await call('POST', `/conversations/${akId}/messages`, a.token, { body: 'are you there' });
-  await wait(7000);
-  const afterN = (await call('GET', '/me/notifications?limit=50', k.token)).data.items.filter((n: any) => n.contextId === akId).length;
+  const afterN = await stable();
   check('muted conversation sends no new notification', afterN === before, { before, afterN });
   inbox = (await call('GET', '/me/conversations', k.token)).data.items as any[];
   check('…but still arrives and counts unread', inbox.some((c) => c.id === akId && c.muted === true && c.unreadCount === 2), inbox);
@@ -330,6 +343,40 @@ async function main() {
   await call('POST', `/conversations/${akId}/messages`, a.token, { body: 'ping' });
   inbox = (await call('GET', '/me/conversations', k.token)).data.items as any[];
   check('a new message brings it back', inbox.some((c) => c.id === akId));
+
+  // ── Every message is pushed, though the list shows one notice (D73) ──
+  const FAKE = 'ExponentPushToken[dmcheck-fake-0000000000]';
+  await call('PUT', `/conversations/${akId}/mute`, k.token, { muted: false });
+  r = await call('POST', '/me/devices', k.token, { pushToken: FAKE, platform: 'ANDROID' });
+  check('a phone is registered for the check', r.status === 201 || r.status === 200, r);
+  const pushes = () => prisma.notificationDelivery.count({ where: { channel: 'PUSH', notification: { recipientUserId: k.id, contextId: akId } } });
+  // The queue drains in batches: wait until the count stops moving, then count.
+  const settled = async () => {
+    let last = -1;
+    let still = 0;
+    for (let i = 0; i < 40 && still < 3; i++) {
+      const n = await pushes();
+      still = n === last ? still + 1 : 0;
+      last = n;
+      await wait(4000);
+    }
+    return last;
+  };
+  const baseline = await settled();
+  for (const word of ['one', 'two', 'three']) {
+    // Expo retires a token it cannot find after the first failed send, so each
+    // message gets a live device: what is being checked is that every message after
+    // the first (which are folded into the unread notice) still tries to push.
+    await call('POST', '/me/devices', k.token, { pushToken: FAKE, platform: 'ANDROID' });
+    const was = await pushes();
+    await call('POST', `/conversations/${akId}/messages`, a.token, { body: word });
+    for (let i = 0; i < 20 && (await pushes()) === was; i++) await wait(3000);
+  }
+  const afterPush = await settled();
+  check('each of three messages in a row sent its own push', afterPush - baseline === 3, { baseline, afterPush });
+  const grouped = await prisma.notification.count({ where: { recipientUserId: k.id, contextId: akId, groupKey: { not: null }, readAt: null } });
+  check('…while the list still holds them as one notice', grouped === 1, grouped);
+  await prisma.pushDevice.deleteMany({ where: { pushToken: FAKE } });
 
   // ── Pictures, voice and stickers (D73) ──
   const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');

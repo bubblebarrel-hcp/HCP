@@ -258,6 +258,7 @@ Still open from this pass:
   - [ ] **Voice on iOS Safari.** A voice note recorded in Chrome or Firefox is WebM/Opus, which iOS Safari cannot play. The app and Android play it; a transcode to AAC (the transcoder already has ffmpeg, D67) would make every note universal.
   - [ ] Abandoned uploads: a file that was uploaded and never sent stays in storage (PENDING rows and objects are never swept). Add a sweep for `DirectAttachment`/`Sticker` rows with `confirmedAt` null or never claimed, older than a day.
   - [ ] Animated stickers, sticker packs, reactions, replying to a message, forwarding, "delete for me", and a "seen by" detail. None was asked for.
+  - [ ] The reel recorder (`components/feed/reel-composer.tsx`) and any other `launchCameraAsync` still open the phone's own camera app, which on some handsets has no way back (found in messages 2026-10-12, where it was replaced by `components/camera-capture.tsx`, an in-app camera with a close button at every step). Move them to it.
   - [ ] Mobile is typechecked, linted and bundled, not run on a device: record, play, pick, camera, sticker make, and the receipts need a real phone pass.
   - [ ] `PUT /media/local/*` (the local-disk driver's receiving end) is unauthenticated and registered in every environment. It is never used with R2 configured, but it should be removed or gated when `storageDriver` is `r2`.
 

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
@@ -64,6 +66,9 @@ export default function ConversationScreen() {
   const [now, setNow] = useState(() => Date.now());
   const scroller = useRef<ScrollView>(null);
   const first = useRef(true);
+  const insets = useSafeAreaInsets();
+  // With the keyboard up it is the bottom edge; closed, the system bar is.
+  const keyboardUp = useKeyboardState((s) => s.isVisible);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/account');
@@ -207,10 +212,10 @@ export default function ConversationScreen() {
 
   return (
     <ThemedView type="canvas" style={styles.screen}>
-      {/* Padding on Android as well as iOS: with edge-to-edge drawing the window no
-          longer resizes for the keyboard, so without it the keyboard sat on top of the
-          box being typed in. Here the message box is pinned to the bottom, which is
-          why this screen needs it and a scrolling form does not. */}
+      {/* keyboard-controller's, not React Native's: with edge-to-edge drawing the
+          window does not resize for the keyboard and the built-in one measured wrongly,
+          so the keyboard sat on top of the box being typed in. This one follows the
+          keyboard frame by frame, so the box rides up with it. */}
       <KeyboardAvoidingView style={styles.screen} behavior="padding">
         <View testID="conversation" style={[styles.header, { borderBottomColor: theme.border }]}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back to messages" onPress={() => router.back()}>
@@ -247,6 +252,10 @@ export default function ConversationScreen() {
           testID="message-list"
           contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
+          // Scrolling the conversation lowers the keyboard, as in every chat.
+          keyboardDismissMode="on-drag"
+          // The newest message stays in view as the keyboard changes the height.
+          onLayout={() => scroller.current?.scrollToEnd({ animated: false })}
           onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}>
           {hasMore && (
             <Button variant="ghost" size="sm" onPress={() => void older()}>
@@ -279,6 +288,7 @@ export default function ConversationScreen() {
             </View>
           </View>
         ) : detail.canReply ? (
+          <View style={{ paddingBottom: keyboardUp ? 0 : insets.bottom, backgroundColor: theme.canvas }}>
           <Composer
             conversationId={id}
             canShareFiles={detail.canShareFiles}
@@ -291,6 +301,7 @@ export default function ConversationScreen() {
             }}
             onEdited={(message) => setMessages((current) => merge(current, [message]))}
           />
+          </View>
         ) : (
           <View style={[styles.footer, { borderTopColor: theme.border }]}>
             <ThemedText themeColor="textSecondary" style={styles.sm} testID="cannot-reply">

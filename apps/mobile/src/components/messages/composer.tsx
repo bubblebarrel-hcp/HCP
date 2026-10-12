@@ -3,6 +3,7 @@ import { ActivityIndicator, Alert, Image, Keyboard, Pressable, ScrollView, Style
 import * as ImagePicker from 'expo-image-picker';
 import { Bold, Camera, Check, Code, Image as ImageIcon, Italic, Mic, Send, Smile, Strikethrough, Sticker as StickerIcon, X } from 'lucide-react-native';
 
+import { CameraCapture } from '@/components/camera-capture';
 import { EmojiPanel } from '@/components/messages/emoji-panel';
 import { StickerPanel } from '@/components/messages/sticker-panel';
 import { VoiceRecorder } from '@/components/messages/voice-recorder';
@@ -55,6 +56,7 @@ export function Composer({
   const [staged, setStaged] = useState<Picked[]>([]);
   const [progress, setProgress] = useState(0);
   const [recording, setRecording] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const key = useRef(clientKey());
   const input = useRef<TextInput>(null);
@@ -114,14 +116,11 @@ export function Composer({
     if (!result.canceled) stage(result.assets);
   }
 
-  async function fromCamera() {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert('Camera is off', 'Allow the camera for Shiggy Trails in your settings to take a picture.');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images', 'videos'], quality: 0.85, videoMaxDuration: 120, ...VIDEO_PICK_OPTIONS });
-    if (!result.canceled) stage(result.assets);
+  // Our own camera, not the phone's: that one has no way back on some handsets.
+  function fromCamera() {
+    Keyboard.dismiss();
+    setPanel(null);
+    setCameraOpen(true);
   }
 
   async function post(body: SendInput) {
@@ -246,6 +245,7 @@ export function Composer({
 
   return (
     <View testID="composer" style={{ borderTopColor: theme.border, borderTopWidth: 1 }}>
+      <CameraCapture visible={cameraOpen} onClose={() => setCameraOpen(false)} onCapture={(asset) => stage([asset])} />
       {panel === 'emoji' && <EmojiPanel onPick={insert} />}
       {panel === 'sticker' && <StickerPanel sending={busy} onSend={(s) => void sendSticker(s)} />}
 
@@ -308,7 +308,7 @@ export function Composer({
           <>
             {tool(<StickerIcon size={21} color={ink} />, 'Stickers', () => toggle('sticker'), { testID: 'open-stickers', active: panel === 'sticker' })}
             {tool(<ImageIcon size={21} color={ink} />, 'Attach photos or videos', () => void fromLibrary(), { testID: 'attach' })}
-            {tool(<Camera size={21} color={ink} />, 'Take a photo or video', () => void fromCamera(), { testID: 'camera' })}
+            {tool(<Camera size={21} color={ink} />, 'Take a photo or video', () => fromCamera(), { testID: 'camera' })}
           </>
         )}
       </View>
