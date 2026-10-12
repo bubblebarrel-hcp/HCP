@@ -97,6 +97,9 @@ async function main() {
     const convs = await prisma.directConversation.findMany({ where: { OR: [{ userLowId: { in: ids } }, { userHighId: { in: ids } }] }, select: { id: true } });
     const convIds = convs.map((c) => c.id);
     await prisma.notification.deleteMany({ where: { contextType: 'DirectConversation', contextId: { in: convIds } } });
+    const msgIds = (await prisma.directMessage.findMany({ where: { conversationId: { in: convIds } }, select: { id: true } })).map((m) => m.id);
+    await prisma.directMessageEdit.deleteMany({ where: { messageId: { in: msgIds } } });
+    await prisma.user.updateMany({ where: { id: { in: ids } }, data: { readReceipts: true } });
     await prisma.directMessage.deleteMany({ where: { conversationId: { in: convIds } } });
     await prisma.directParticipant.deleteMany({ where: { conversationId: { in: convIds } } });
     await prisma.directConversation.deleteMany({ where: { id: { in: convIds } } });
@@ -160,19 +163,38 @@ async function main() {
   await call('POST', `/conversations/${ab}/read`, b.token);
   await wait(500);
   check('the reader’s devices hear the read', sb.of('dm:read').length === 1);
-  check('the other person gets no read receipt', sa.events.filter((e) => e.event !== 'dm:unread').length === 0, sa.events);
+  check('a request that is not accepted reveals no receipt to the asker', sa.events.filter((e) => e.event !== 'dm:unread').length === 0, sa.events);
 
   // Accepting reaches both.
   await call('POST', `/conversations/${ab}/accept`, b.token);
   await wait(500);
   check('the asker hears the accept', sa.of('dm:conversation').some((x) => x.status === 'ACTIVE' && x.conversationId === ab), sa.events);
+  check('…and learns it was delivered and seen (D73)', sa.of('dm:receipt').some((x) => x.conversationId === ab && x.deliveredAt && x.seenAt), sa.of('dm:receipt'));
 
-  // Unsend reaches both, without the words.
-  await call('DELETE', `/messages/${msgId}`, a.token);
+  // An edit reaches both, live (D73).
+  r = await call('PATCH', `/messages/${msgId}`, a.token, { body: 'live words, fixed' });
   await wait(500);
   const upB = sb.of('dm:message-updated')[0];
-  check('an unsend is pushed to the other side without its words', upB?.message.status === 'DELETED' && upB.message.body === null, upB);
-  check('and to the sender’s other device', sa2.of('dm:message-updated')[0]?.message.body === null);
+  check('an edit is pushed to the other side', upB?.message.body === 'live words, fixed' && upB.message.editedAt !== null && upB.message.mine === false, upB);
+  check('and to the sender’s other device', sa2.of('dm:message-updated')[0]?.message.body === 'live words, fixed');
+
+  // Reading an accepted conversation now tells the sender (D73).
+  sa.events.length = 0;
+  await call('POST', `/conversations/${ab}/messages`, a.token, { body: 'are you there' });
+  await wait(400);
+  sa.events.length = 0;
+  await call('POST', `/conversations/${ab}/read`, b.token);
+  await wait(500);
+  check('the sender hears "seen" once the other side reads', sa.of('dm:receipt').some((x) => x.seenAt), sa.events);
+  await call('PATCH', '/me/privacy', b.token, { readReceipts: false });
+  sa.events.length = 0;
+  await call('POST', `/conversations/${ab}/messages`, a.token, { body: 'and now?' });
+  await wait(300);
+  sa.events.length = 0;
+  await call('POST', `/conversations/${ab}/read`, b.token);
+  await wait(500);
+  check('with receipts off, no "seen" is pushed', sa.of('dm:receipt').every((x) => x.seenAt === null), sa.events);
+  await call('PATCH', '/me/privacy', b.token, { readReceipts: true });
 
   // A silent decline: a -> d.
   r = await call('POST', '/conversations', a.token, { userId: d.id, body: 'hello d' });

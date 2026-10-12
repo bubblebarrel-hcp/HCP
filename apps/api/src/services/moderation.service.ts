@@ -22,6 +22,7 @@ import { publicName, userPublicSelect } from './run.service';
 import { resolveSubject } from './subject.service';
 import * as engagement from './engagement.service';
 import * as directMessages from './direct-message.service';
+import * as enforcement from './enforcement.service';
 
 // Reports and moderation (D61).
 //
@@ -253,6 +254,9 @@ export async function file(actor: Actor, input: ReportInput) {
     });
     return created;
   });
+  // Enough different hashers reporting the same person acts before a moderator
+  // can (D74). After the report is safely written, and never able to fail it.
+  void enforcement.evaluate(info.targetUserId);
   return { id: row.id, status: row.status, createdAt: row.createdAt };
 }
 
@@ -320,6 +324,34 @@ async function loadFor(actor: Actor, reportId: string, kennelSlug?: string) {
   });
   if (!report) throw ApiError.notFound('Report not found');
   return { report, scope };
+}
+
+// One file out of a reported direct message (D73), for platform staff only and
+// only a file the report itself captured. The address works for five minutes,
+// and each look is written to the audit log: a private picture was opened.
+export async function reportedFile(actor: Actor, reportId: string, fileId: string) {
+  const { report, scope } = await loadFor(actor, reportId);
+  if (!scope.platform || report.targetType !== ReportTargetType.DIRECT_MESSAGE) throw ApiError.notFound('File not found');
+  const snap = (report.snapshot ?? {}) as { messages?: { attachments?: { id: string }[]; stickerId?: string | null }[] };
+  const files = (snap.messages ?? []).flatMap((m) => (m.attachments ?? []).map((a) => a.id));
+  const stickers = (snap.messages ?? []).map((m) => m.stickerId).filter((s): s is string => Boolean(s));
+  const found = files.includes(fileId)
+    ? await directMessages.reportedAttachmentUrl(fileId, files)
+    : await directMessages.reportedStickerUrl(fileId, stickers);
+  await prisma.$transaction(async (tx) => {
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: 'report.dm.file.view',
+      resourceType: 'ContentReport',
+      resourceId: report.id,
+      kennelId: null,
+      previousState: {},
+      newState: { fileId },
+      reason: 'Reviewing a reported direct message',
+      policyRef: 'D73',
+    });
+  });
+  return found;
 }
 
 // ─── The queue ───
@@ -508,6 +540,8 @@ export async function detail(actor: Actor, reportId: string, kennelSlug?: string
     // one beside them, so the two can be compared.
     target: targetNow,
     answerable: answerable ? { id: answerable.id, name: answerable.name } : null,
+    // What the platform has already done on its own about this hasher (D74).
+    enforcement: scope.platform ? await enforcement.latestFor(report.targetUserId) : null,
     impersonated,
     sameHandle,
     siblings: siblings.map((s) => ({
@@ -696,6 +730,8 @@ export async function act(actor: Actor, reportId: string, input: ActionInput, ke
     }
   });
 
+  // A report staff upheld counts double towards an automatic action (D74).
+  void enforcement.evaluate(report.targetUserId);
   return detail(actor, reportId, kennelSlug);
 }
 

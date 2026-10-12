@@ -227,7 +227,7 @@ Every MediaAsset must link to at least one of: Run, Trail (or Trail Segment/Wayp
 
 # Part G — Communication & Notification Domain
 
-Source: Annex 08O, Annex 08P. **Direct/one-to-one conversations from 08O are in scope as of D71 (2026-10-11), modeled below as DirectConversation; group DMs and DM media remain out of scope.**
+Source: Annex 08O, Annex 08P. **Direct/one-to-one conversations from 08O are in scope as of D71 (2026-10-11), modeled below as DirectConversation, and carry words, pictures, clips, stickers and voice as of D73 (2026-10-12); group DMs remain out of scope.**
 
 ## Announcement
 Attributes: kennel, author, pinned flag, schedule, category.
@@ -238,7 +238,18 @@ Attributes: the two participants (stored in id order, unique pair), initiator, s
 - Identity (1) — (0..*) DirectParticipant — (1) DirectConversation
 - DirectConversation (1) — (0..*) DirectMessage
 - A DirectMessage can be the target of a ContentReport; the report keeps a snapshot of it and the few messages before it. Nothing else lets staff read a conversation.
+- A DirectMessage has a kind (Text, Media, Sticker, Voice). A Media or Voice message owns one or more DirectAttachments (a private file, tied to the conversation it was uploaded for and to the hasher who uploaded it); a Sticker message points at one Sticker. A DirectMessage may have DirectMessageEdits: what its words said before each edit, kept because history is append-only. (D73)
+- A Sticker belongs to the Identity that made it and may be a StickerFavourite of any Identity that has been sent it. (D73)
+- A DirectParticipant records when that side last read (`lastReadAt`) and when a device of theirs last received the conversation (`deliveredAt`); the sender's ticks are derived from them. An Identity may switch read receipts off, which hides "seen" in both directions. (D73)
 - A DirectConversation is not a Channel: it never has more than two participants and no kennel, event, committee or run.
+
+## AutoEnforcement (D74)
+
+- Identity (1) — (0..*) AutoEnforcement. A row records the platform's own warning or hold: its level (Warn, Hold, Review hold), the score, the number of distinct reporters, the reasons and the ids of the ContentReports that counted, the window they were counted from, when a Hold lifts by itself, and whether staff lifted or confirmed it.
+- It is not a ModerationAction: a ModerationAction is always a person's (it has an actor). It is also not an AiSuggestion. The event and audit entry for it have no actor.
+- A ContentReport counts towards it only through its `targetUserId`, and only while it is not Dismissed.
+- AutoEnforcement (1) — (0..1) EnforcementAppeal. The held hasher's one answer back, with what they wrote, who decided it, when, and the note they were shown. (D75)
+- Identity (1) — (0..*) CoordinationFlag, as the hasher being reported. A flag keeps the reporters in each suspected group, the signals that linked them, the score counted separately and the score counted as groups, and what staff decided. A Confirmed flag makes its reporters stop counting for six months for every hasher. (D75)
 
 ## Channel (Kennel/Event/Committee/Run-scoped group channels only; one-to-one conversations are DirectConversation above)
 Attributes: type (Organization Channel, Event Channel, Committee Workspace, Governance Discussion), participants.

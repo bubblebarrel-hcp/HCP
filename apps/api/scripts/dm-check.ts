@@ -8,6 +8,8 @@
 // is left behind.
 
 import 'dotenv/config';
+import { rm } from 'node:fs/promises';
+import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
@@ -73,7 +75,18 @@ async function main() {
     }
   }
   if (!cast) throw new Error('could not find a hasher with three strangers and a kennel-mate in the seed');
-  const ids = [cast.a.id, cast.b.id, cast.d.id, cast.e.id, cast.k.id];
+  // One more stranger, for the "no pictures until accepted" rule.
+  const aKennels = await kennelsOf(cast.a.id);
+  let x: typeof members[0] | undefined;
+  for (const m of members) {
+    if ([cast.a.id, cast.b.id, cast.d.id, cast.e.id, cast.k.id].includes(m.id)) continue;
+    if (![...(await kennelsOf(m.id))].some((kid) => aKennels.has(kid))) {
+      x = m;
+      break;
+    }
+  }
+  if (!x) throw new Error('could not find a fourth stranger');
+  const ids = [cast.a.id, cast.b.id, cast.d.id, cast.e.id, cast.k.id, x.id];
 
   const cleanup = async () => {
     const convs = await prisma.directConversation.findMany({
@@ -82,6 +95,9 @@ async function main() {
     });
     const convIds = convs.map((c) => c.id);
     const msgs = await prisma.directMessage.findMany({ where: { conversationId: { in: convIds } }, select: { id: true } });
+    // Files and stickers (D73): the rows, then what the local driver wrote to disk.
+    await prisma.directAttachment.deleteMany({ where: { conversationId: { in: convIds } } });
+    await prisma.directMessageEdit.deleteMany({ where: { messageId: { in: msgs.map((m) => m.id) } } });
     const reports = await prisma.contentReport.findMany({
       where: { targetType: 'DIRECT_MESSAGE', targetId: { in: msgs.map((m) => m.id) } },
       select: { id: true },
@@ -91,7 +107,11 @@ async function main() {
     await prisma.directMessage.deleteMany({ where: { conversationId: { in: convIds } } });
     await prisma.directParticipant.deleteMany({ where: { conversationId: { in: convIds } } });
     await prisma.directConversation.deleteMany({ where: { id: { in: convIds } } });
-    await prisma.user.updateMany({ where: { id: { in: ids } }, data: { dmPolicy: 'EVERYONE' } });
+    await prisma.stickerFavorite.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.sticker.deleteMany({ where: { ownerId: { in: ids } } });
+    for (const id of convIds) await rm(path.join(process.cwd(), 'uploads', 'dm', id), { recursive: true, force: true });
+    for (const id of ids) await rm(path.join(process.cwd(), 'uploads', 'stickers', id), { recursive: true, force: true });
+    await prisma.user.updateMany({ where: { id: { in: ids } }, data: { dmPolicy: 'EVERYONE', readReceipts: true } });
     await prisma.userBlock.deleteMany({ where: { OR: [{ blockerId: { in: ids }, blockedId: { in: ids } }] } });
     await prisma.follow.deleteMany({ where: { followerId: { in: ids }, targetType: 'USER', targetId: { in: ids } } });
   };
@@ -185,14 +205,49 @@ async function main() {
   const after = (await call('GET', `/conversations/${abId}/messages?after=${firstMsg}`, a.token)).data;
   check('after= returns only newer, oldest first', after.items.length === 2 && after.items[0].body === 'now we can talk', after);
 
-  // ── Unsend ──
-  r = await call('DELETE', `/messages/${bReplyId}`, a.token);
-  check('cannot unsend somebody else’s message', r.status === 404, r);
+  // ── Unsend is gone (D73) ──
   r = await call('DELETE', `/messages/${bReplyId}`, b.token);
-  check('sender unsends', r.status === 200 && r.data.status === 'DELETED', r);
-  const seen = (await call('GET', `/conversations/${abId}/messages`, a.token)).data.items as any[];
-  check('unsent message keeps its place, loses its words', seen[0].id === bReplyId && seen[0].body === null && seen[0].status === 'DELETED', seen[0]);
-  check('the row stays', (await prisma.directMessage.count({ where: { id: bReplyId } })) === 1);
+  check('there is no unsend', r.status === 404, r);
+
+  // ── Edit, for two minutes (D73) ──
+  r = await call('PATCH', `/messages/${bReplyId}`, a.token, { body: 'not mine to edit' });
+  check('cannot edit somebody else’s message', r.status === 404, r);
+  r = await call('PATCH', `/messages/${bReplyId}`, b.token, { body: '   ' });
+  check('an edit cannot be blank', r.status === 400, r);
+  r = await call('PATCH', `/messages/${bReplyId}`, b.token, { body: 'hello again' });
+  check('sender edits inside the window', r.status === 200 && r.data.message.body === 'hello again' && r.data.message.editedAt !== null, r);
+  const edited = (await call('GET', `/conversations/${abId}/messages`, a.token)).data.items.find((m: any) => m.id === bReplyId);
+  check('the other side sees the new words and "edited"', edited.body === 'hello again' && edited.editedAt !== null && edited.mine === false, edited);
+  check('the first words are kept', (await prisma.directMessageEdit.count({ where: { messageId: bReplyId } })) === 1);
+  const editedRow = await prisma.directMessage.findUniqueOrThrow({ where: { id: bReplyId } });
+  check('edited body is encrypted too', editedRow.body.startsWith('v1:') && !editedRow.body.includes('hello again'));
+  await prisma.directMessage.update({ where: { id: bReplyId }, data: { createdAt: new Date(Date.now() - 3 * 60 * 1000) } });
+  r = await call('PATCH', `/messages/${bReplyId}`, b.token, { body: 'too late' });
+  check('after two minutes it is final', r.status === 409 && r.code === 'DM_EDIT_WINDOW_CLOSED', r);
+  const late = (await call('GET', `/conversations/${abId}/messages`, b.token)).data.items.find((m: any) => m.id === bReplyId);
+  check('…and no longer offers an edit', late.editableUntil === null, late);
+
+  // ── Receipts (D73) ──
+  // a sent "now we can talk"; b has not opened the thread since.
+  const mineList = async (token: string, id: string) => (await call('GET', `/conversations/${abId}/messages`, token)).data.items.find((m: any) => m.id === id);
+  const sentByA = (await call('GET', `/conversations/${abId}/messages`, a.token)).data.items.find((m: any) => m.body === 'now we can talk');
+  await wait(300);
+  // b's earlier calls to the thread count as delivery; the message is at least delivered.
+  const viaB = await mineList(a.token, sentByA.id);
+  check('a sent message shows a receipt', ['SENT', 'DELIVERED', 'SEEN'].includes(viaB.receipt), viaB);
+  r = await call('POST', `/conversations/${abId}/read`, b.token);
+  const seenByB = await mineList(a.token, sentByA.id);
+  check('seen once the other side reads', seenByB.receipt === 'SEEN', seenByB);
+  check('somebody else’s message has no receipt', (await mineList(a.token, bReplyId)).receipt === null);
+  await call('PATCH', '/me/privacy', b.token, { readReceipts: false });
+  const hidden = await mineList(a.token, sentByA.id);
+  check('with receipts off, "seen" is hidden both ways', hidden.receipt === 'DELIVERED', hidden);
+  await call('PATCH', '/me/privacy', b.token, { readReceipts: true });
+  r = await call('PATCH', '/me/privacy', a.token, { readReceipts: false });
+  check('readReceipts is a privacy setting', r.status === 200 && r.data.readReceipts === false, r);
+  const hiddenFromB = await mineList(b.token, bReplyId);
+  check('…and a reader with receipts off sees none either', hiddenFromB.receipt === 'DELIVERED', hiddenFromB);
+  await call('PATCH', '/me/privacy', a.token, { readReceipts: true });
 
   // ── Report: only the reporter shows staff; staff see context, not the thread ──
   const reported = (await call('GET', `/conversations/${abId}/messages`, b.token)).data.items.find((m: any) => m.body === 'now we can talk');
@@ -205,7 +260,7 @@ async function main() {
   check('an outsider cannot report it', r.status === 404, r);
   const detail = await call('GET', `/admin/reports/${reportId}`, admin.token);
   const snap = detail.data?.report?.snapshot;
-  check('staff see the message in context', detail.status === 200 && snap?.kind === 'DIRECT_MESSAGE' && snap.messages.some((m: any) => m.reported && m.body === 'now we can talk') && snap.messages.length === 2, detail);
+  check('staff see the message in context', detail.status === 200 && snap?.kind === 'DIRECT_MESSAGE' && snap.messages.some((m: any) => m.reported && m.body === 'now we can talk') && snap.messages.length === 3 && snap.messages.some((m: any) => m.editedFrom?.[0] === 'hello back'), detail);
   r = await call('POST', `/admin/reports/${reportId}/actions`, admin.token, { kind: 'REMOVE_CONTENT', note: 'Check removal' });
   check('staff remove the message', r.status === 200, r);
   const removed = await prisma.directMessage.findUniqueOrThrow({ where: { id: reported.id } });
@@ -275,6 +330,120 @@ async function main() {
   await call('POST', `/conversations/${akId}/messages`, a.token, { body: 'ping' });
   inbox = (await call('GET', '/me/conversations', k.token)).data.items as any[];
   check('a new message brings it back', inbox.some((c) => c.id === akId));
+
+  // ── Pictures, voice and stickers (D73) ──
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+  const put = async (url: string, bytes: Buffer, mime: string) =>
+    (await fetch(url, { method: 'PUT', headers: { 'content-type': mime }, body: new Uint8Array(bytes) })).status;
+  // Ask, PUT the bytes, confirm: what a client does.
+  const uploadFile = async (token: string, convId: string, spec: Record<string, unknown>, bytes: Buffer, confirm: Record<string, unknown> = {}) => {
+    const asked = await call('POST', `/conversations/${convId}/uploads`, token, { ...spec, sizeBytes: bytes.length });
+    if (asked.status !== 201) return { asked };
+    const status = await put(asked.data.upload.url, bytes, String(spec.mimeType).split(';')[0]);
+    const confirmed = await call('POST', `/dm-uploads/${asked.data.attachment.id}/confirm`, token, confirm);
+    return { asked, putStatus: status, confirmed, id: asked.data.attachment.id as string };
+  };
+
+  // Strangers get words only until the conversation is accepted.
+  const xu = await login(x.email);
+  r = await call('POST', '/conversations', a.token, { userId: xu.id, body: 'hello stranger' });
+  const axId = r.data.conversationId as string;
+  r = await call('POST', `/conversations/${axId}/uploads`, a.token, { kind: 'PHOTO', mimeType: 'image/png', sizeBytes: PNG.length });
+  check('no pictures to a request that is not accepted', r.status === 403 && r.code === 'DM_MEDIA_NEEDS_ACCEPT', r);
+  r = await call('POST', `/conversations/${axId}/messages`, a.token, { kind: 'STICKER', stickerId: '00000000-0000-4000-8000-000000000000' });
+  check('…nor stickers', r.status === 403 && r.code === 'DM_MEDIA_NEEDS_ACCEPT', r);
+
+  // Photos.
+  const up = await uploadFile(a.token, akId, { kind: 'PHOTO', mimeType: 'image/png', width: 1, height: 1 }, PNG, { width: 1, height: 1 });
+  check('photo upload is requested, stored and confirmed', up.asked.status === 201 && up.putStatus === 200 && up.confirmed?.status === 200, up);
+  check('confirmed photo has a readable address', typeof up.confirmed?.data?.attachment?.url === 'string' && up.confirmed.data.attachment.kind === 'PHOTO', up.confirmed);
+  r = await call('POST', `/conversations/${akId}/messages`, a.token, { kind: 'MEDIA', attachmentIds: [up.id], body: 'my caption', clientKey: 'media1' });
+  const mediaMsg = r.data?.message;
+  check('a picture message is sent with a caption', r.status === 201 && mediaMsg.kind === 'MEDIA' && mediaMsg.body === 'my caption' && mediaMsg.attachments.length === 1 && typeof mediaMsg.attachments[0].url === 'string', r);
+  r = await call('POST', `/conversations/${akId}/messages`, a.token, { kind: 'MEDIA', attachmentIds: [up.id] });
+  check('a file can be sent only once', r.status === 400 && r.code === 'ATTACHMENTS_INVALID', r);
+  const forK = (await call('GET', `/conversations/${akId}/messages`, k.token)).data.items.find((m: any) => m.id === mediaMsg.id);
+  check('the other side gets the picture and its caption', forK && forK.kind === 'MEDIA' && forK.attachments.length === 1 && forK.body === 'my caption', forK);
+  r = await call('PATCH', `/messages/${mediaMsg.id}`, a.token, { body: 'better caption' });
+  check('a caption can be edited in the window', r.status === 200 && r.data.message.body === 'better caption', r);
+  const stolen = await uploadFile(a.token, akId, { kind: 'PHOTO', mimeType: 'image/png' }, PNG);
+  r = await call('POST', `/conversations/${akId}/messages`, k.token, { kind: 'MEDIA', attachmentIds: [stolen.id] });
+  check('somebody else’s upload cannot be sent', r.status === 400 && r.code === 'ATTACHMENTS_INVALID', r);
+  r = await call('POST', `/conversations/${akId}/uploads`, d.token, { kind: 'PHOTO', mimeType: 'image/png', sizeBytes: 100 });
+  check('an outsider cannot upload into the conversation', r.status === 404, r);
+  r = await call('POST', `/conversations/${akId}/uploads`, a.token, { kind: 'PHOTO', mimeType: 'application/pdf', sizeBytes: 100 });
+  check('a document is refused', r.status === 400 && r.code === 'UNSUPPORTED_MEDIA_TYPE', r);
+  r = await call('POST', `/conversations/${akId}/uploads`, a.token, { kind: 'PHOTO', mimeType: 'image/png', sizeBytes: 11 * 1024 * 1024 });
+  check('an oversize picture is refused', r.status === 400 && r.code === 'FILE_TOO_LARGE', r);
+  const never = await call('POST', `/conversations/${akId}/uploads`, a.token, { kind: 'PHOTO', mimeType: 'image/png', sizeBytes: 100 });
+  r = await call('POST', `/dm-uploads/${never.data.attachment.id}/confirm`, a.token, {});
+  check('confirming an upload that never arrived is refused', r.status === 400 && r.code === 'UPLOAD_MISSING', r);
+
+  // Voice notes.
+  const voice = await uploadFile(a.token, akId, { kind: 'AUDIO', mimeType: 'audio/webm;codecs=opus', durationSec: 3.2 }, Buffer.from('not really opus but bytes'), { durationSec: 3.2 });
+  check('a voice note is uploaded', voice.asked.status === 201 && voice.confirmed?.status === 200 && voice.confirmed.data.attachment.durationSec === 3.2, voice);
+  r = await call('POST', `/conversations/${akId}/messages`, a.token, { kind: 'VOICE', attachmentIds: [voice.id] });
+  check('a voice message is sent', r.status === 201 && r.data.message.kind === 'VOICE' && r.data.message.attachments[0].kind === 'AUDIO', r);
+  r = await call('PATCH', `/messages/${r.data.message.id}`, a.token, { body: 'edit voice' });
+  check('a voice message has no words to edit', r.status === 400 && r.code === 'DM_NOT_EDITABLE', r);
+  const blank = await uploadFile(a.token, akId, { kind: 'AUDIO', mimeType: 'audio/mp4', durationSec: 0.1 }, Buffer.from('x'), { durationSec: 0.1 });
+  check('an empty recording is refused', blank.confirmed?.status === 400 && blank.confirmed.code === 'AUDIO_EMPTY', blank.confirmed);
+  r = await call('POST', `/conversations/${akId}/uploads`, a.token, { kind: 'AUDIO', mimeType: 'audio/mp4', sizeBytes: 100, durationSec: 400 });
+  check('a recording over five minutes is refused', r.status === 400 && r.code === 'FILE_TOO_LONG', r);
+
+  // Stickers.
+  const mk = await call('POST', '/me/stickers', a.token, { mimeType: 'image/png', sizeBytes: PNG.length, width: 1, height: 1 });
+  check('a sticker upload is requested', mk.status === 201, mk);
+  await put(mk.data.upload.url, PNG, 'image/png');
+  r = await call('POST', `/me/stickers/${mk.data.sticker.id}/confirm`, a.token);
+  check('a sticker is confirmed', r.status === 200 && r.data.sticker.mine === true, r);
+  const stickerId = mk.data.sticker.id as string;
+  let tray = (await call('GET', '/me/stickers', a.token)).data;
+  check('my sticker is in my tray', tray.mine.some((s: any) => s.id === stickerId && typeof s.url === 'string'), tray);
+  r = await call('POST', '/me/stickers', a.token, { mimeType: 'image/gif', sizeBytes: 100 });
+  check('a GIF is not a sticker', r.status === 400 && r.code === 'UNSUPPORTED_MEDIA_TYPE', r);
+  r = await call('POST', `/conversations/${akId}/messages`, a.token, { kind: 'STICKER', stickerId });
+  check('a sticker is sent', r.status === 201 && r.data.message.kind === 'STICKER' && typeof r.data.message.sticker.url === 'string', r);
+  const stickerMsg = r.data.message.id as string;
+  r = await call('PUT', `/me/stickers/${stickerId}/favorite`, d.token);
+  check('a sticker you were never sent cannot be starred', r.status === 404, r);
+  r = await call('PUT', `/me/stickers/${stickerId}/favorite`, k.token);
+  check('a sticker you were sent can be starred', r.status === 200 && r.data.favorite === true, r);
+  tray = (await call('GET', '/me/stickers', k.token)).data;
+  check('…and is in favourites', tray.favorites.some((s: any) => s.id === stickerId && s.favorite === true && s.mine === false), tray);
+  r = await call('POST', `/conversations/${akId}/messages`, k.token, { kind: 'STICKER', stickerId });
+  check('…and can be sent back', r.status === 201, r);
+  tray = (await call('GET', '/me/stickers', a.token)).data;
+  check('recent shows what I sent', tray.recent.some((s: any) => s.id === stickerId), tray.recent);
+  r = await call('DELETE', `/me/stickers/${stickerId}/favorite`, k.token);
+  check('unstarring', r.status === 200 && r.data.favorite === false, r);
+  const listed = (await call('GET', '/me/conversations', k.token)).data.items.find((c: any) => c.id === akId);
+  check('the inbox previews a sticker as a label', listed.lastMessage.preview === 'Sticker' && listed.lastMessage.body === null, listed.lastMessage);
+  r = await call('DELETE', `/me/stickers/${stickerId}`, a.token);
+  check('a sticker is deleted from my tray', r.status === 200, r);
+  r = await call('POST', `/conversations/${akId}/messages`, a.token, { kind: 'STICKER', stickerId });
+  check('…and cannot be sent again by its maker', r.status === 404, r);
+  const stillThere = (await call('GET', `/conversations/${akId}/messages`, k.token)).data.items.find((m: any) => m.id === stickerMsg);
+  check('…but the message that carried it still shows it', stillThere.sticker && typeof stillThere.sticker.url === 'string', stillThere);
+
+  // Reporting a picture: staff get a way to look at exactly that file.
+  r = await call('POST', '/reports', k.token, { targetType: 'DIRECT_MESSAGE', targetId: mediaMsg.id, reason: 'HARASSMENT' });
+  check('a picture can be reported', r.status === 201, r);
+  const mediaReport = r.data.id as string;
+  const mdetail = await call('GET', `/admin/reports/${mediaReport}`, admin.token);
+  const msnap = mdetail.data?.report?.snapshot;
+  const reportedFileId = msnap?.messages?.find((m: any) => m.reported)?.attachments?.[0]?.id as string;
+  check('the snapshot names the file, not an address', Boolean(reportedFileId) && !JSON.stringify(msnap).includes('http'), msnap);
+  check('an edited caption keeps the first words', msnap.messages.find((m: any) => m.reported).editedFrom[0] === 'my caption', msnap);
+  r = await call('GET', `/admin/reports/${mediaReport}/files/${reportedFileId}`, admin.token);
+  check('staff get a short-lived address for it', r.status === 200 && typeof r.data.url === 'string', r);
+  r = await call('GET', `/admin/reports/${mediaReport}/files/${up.id.replace(/.$/, '0')}`, admin.token);
+  check('…and only for a file the report captured', r.status === 404, r);
+  r = await call('GET', `/admin/reports/${mediaReport}/files/${reportedFileId}`, k.token);
+  check('a hasher cannot open that route', r.status === 403 || r.status === 404, r);
+  r = await call('POST', `/admin/reports/${mediaReport}/actions`, admin.token, { kind: 'REMOVE_CONTENT', note: 'Check removal' });
+  const gone = (await call('GET', `/conversations/${akId}/messages`, k.token)).data.items.find((m: any) => m.id === mediaMsg.id);
+  check('removing it takes the picture away too', gone.status === 'REMOVED' && gone.attachments.length === 0 && gone.body === null, gone);
 
   // ── dmPolicy: NOBODY closes new conversations only ──
   r = await call('PATCH', '/me/privacy', e.token, { dmPolicy: 'NOBODY' });

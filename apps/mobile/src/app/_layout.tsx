@@ -82,6 +82,7 @@ function PushedScreens() {
       <Stack.Screen name="auth/register" options={{ title: 'Create account' }} />
       <Stack.Screen name="auth/verify" options={{ title: 'Confirm email' }} />
       <Stack.Screen name="auth/forgot-password" options={{ title: 'Forgot password' }} />
+      <Stack.Screen name="auth/appeal" options={{ title: 'Appeal a hold' }} />
       <Stack.Screen name="auth/reset-password" options={{ title: 'Reset password' }} />
     </Stack>
   );

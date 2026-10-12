@@ -188,6 +188,17 @@ export interface ReportDetail {
   target: ReportHasher | null;
   // Who answers for it: the hasher themself, or the author of the content.
   answerable: { id: string; name: string } | null;
+  // What the platform has already done on its own about this hasher (D74).
+  enforcement: {
+    id: string;
+    level: 'WARN' | 'HOLD' | 'REVIEW_HOLD';
+    score: number;
+    reporterCount: number;
+    endsAt: string | null;
+    liftedAt: string | null;
+    confirmedAt: string | null;
+    createdAt: string;
+  } | null;
   impersonated: ReportHasher | null;
   sameHandle: boolean;
   siblings: { id: string; reason: ReportReason; reasonLabel: string; status: ReportStatus; details: string | null; createdAt: string }[];
@@ -326,4 +337,38 @@ export interface ReelRow {
   author: HasherRef;
   kennel: KennelRef | null;
   media: { thumbnailUrl: string | null; kind: string } | null;
+}
+
+// --- automatic actions on reports (D74: GET /admin/enforcements) ---
+
+export interface EnforcementRow {
+  id: string;
+  state: 'WARNED' | 'ON_HOLD' | 'UNDER_REVIEW' | 'LIFTED' | 'CONFIRMED';
+  level: 'WARN' | 'HOLD' | 'REVIEW_HOLD';
+  score: number;
+  reporterCount: number;
+  reasons: Record<string, number>;
+  reportIds: string[];
+  windowStart: string;
+  endsAt: string | null;
+  liftedAt: string | null;
+  confirmedAt: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+  // The hasher's answer back, if they gave one (D75).
+  appeal: { id: string; status: 'OPEN' | 'GRANTED' | 'DENIED' | 'MOOT'; message: string; decisionNote: string | null; createdAt: string; decidedAt: string | null } | null;
+  user: { id: string; name: string; username: string | null; status: string; avatarUrl: string | null };
+}
+
+// Reporters who look like one, waiting for a person to say which it was (D75).
+export interface CoordinationRow {
+  id: string;
+  outcome: 'PENDING' | 'CLEARED' | 'CONFIRMED';
+  rawScore: number;
+  effectiveScore: number;
+  createdAt: string;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  target: { id: string; name: string; username: string | null; status: string };
+  groups: { signals: string[]; reporters: { id: string; name: string; username: string | null; joined: string | null }[] }[];
 }

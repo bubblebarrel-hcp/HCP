@@ -183,7 +183,7 @@ export default function SettingsScreen() {
           <CardTitle>Change password</CardTitle>
           <CardDescription>Every device is signed out afterwards, this one included.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent style={styles.form}>
           <Field label="Current password">
             <Input testID="pw-current" secureTextEntry autoComplete="current-password" value={current} onChangeText={setCurrent} />
           </Field>
@@ -213,5 +213,8 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, fontWeight: '500' },
   hint: { fontSize: 13, lineHeight: 18 },
   quality: { gap: 8, paddingVertical: 8 },
+  // CardContent adds no space between its children: the three fields, the message
+  // and the button would otherwise sit flush against each other.
+  form: { gap: 16 },
   link: { paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth },
 });

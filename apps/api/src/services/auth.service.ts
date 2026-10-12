@@ -8,6 +8,7 @@ import { serializeSessionUser, sessionUserSelect } from '../serializers/user';
 import { encryptField } from '../utils/field-crypto';
 import { allocateUsername } from './entity.service';
 import { recordAudit, recordEvent } from './record.service';
+import { holdFor } from './enforcement.service';
 import { issueVerification } from './verification.service';
 
 const BCRYPT_ROUNDS = 12;
@@ -143,6 +144,17 @@ export async function register(input: RegisterInput) {
   };
 }
 
+// Who is asking, for the few things a person who cannot sign in may still do
+// (an appeal, D75). The same answer for an unknown address and a wrong password.
+export async function verifyCredentials(emailInput: string, passwordInput: string) {
+  const user = await prisma.user.findUnique({ where: { email: emailInput } });
+  const matches = await bcrypt.compare(passwordInput, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !matches || user.deletedAt) {
+    throw ApiError.unauthorized('Invalid email or password', 'INVALID_CREDENTIALS');
+  }
+  return user;
+}
+
 export async function login(emailInput: string, passwordInput: string) {
   const user = await prisma.user.findUnique({ where: { email: emailInput } });
 
@@ -158,6 +170,24 @@ export async function login(emailInput: string, passwordInput: string) {
   // A suspension is the platform's decision. A deactivation is the hasher's own,
   // and signing back in is how they undo it, below.
   if (user.status === AccountStatus.SUSPENDED) {
+    // An automatic hold (D74) says so, and when it ends: a reason is owed to
+    // somebody who has just been locked out by arithmetic.
+    const hold = await holdFor(user.id);
+    if (hold) {
+      // ACCOUNT_ON_HOLD (D75) is what tells a client to offer the appeal.
+      const appeal = hold.appeal;
+      const message =
+        appeal?.status === 'OPEN'
+          ? 'Your account is on hold. Your appeal has reached a moderator, and you will be told what they decide.'
+          : appeal?.status === 'DENIED'
+            ? `A moderator reviewed your appeal and the hold stands.${appeal.decisionNote ? ` They said: ${appeal.decisionNote}` : ''}`
+            : hold.confirmedAt
+              ? 'Your account is suspended. A moderator reviewed the reports and the suspension stands.'
+              : hold.endsAt
+                ? `Your account is on hold while moderators review reports about it. It will be restored on ${hold.endsAt.toUTCString()} unless a moderator decides otherwise.`
+                : 'Your account is on hold until a moderator has reviewed reports about it.';
+      throw ApiError.forbidden(message, 'ACCOUNT_ON_HOLD');
+    }
     throw ApiError.forbidden('This account is not active.', 'ACCOUNT_INACTIVE');
   }
 

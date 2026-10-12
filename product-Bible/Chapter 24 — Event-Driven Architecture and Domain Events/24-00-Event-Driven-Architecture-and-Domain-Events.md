@@ -92,7 +92,10 @@ Organized by Chapter 23 domain. "Consumers" lists which cross-cutting systems ca
 | `AnnouncementPublished` | Kennel officer publishes | Communication Service | Notification, Search Index |
 | `DirectMessageSent` | D71. A hasher sends a direct message. The payload names the message, the recipient and whether it is a request, never the words | Communication Service | Notification |
 | `DirectMessageRequestAccepted` / `DirectMessageRequestDeclined` | D71. Requested → Active, or → Declined. Accepted also fires when the recipient replies to a request | Communication Service | Audit |
-| `DirectMessageDeleted` / `DirectMessageRemoved` | D71. The sender unsent it, or platform staff removed it after a report | Communication Service | Audit |
+| `DirectMessageDeleted` / `DirectMessageRemoved` | D71. The sender unsent it (no longer possible after D73; kept for rows already written), or platform staff removed it after a report | Communication Service | Audit |
+| `DirectMessageEdited` | D73. The sender changed the words within two minutes. The payload names the message, never the words | Communication Service | Audit |
+| `StickerCreated` / `StickerDeleted` | D73. A hasher made a sticker, or took one from their tray | Communication Service | Audit |
+| `DirectMessageReceiptsChanged` | D73. A hasher turned read receipts on or off | Identity Service | Audit |
 | `DirectMessagePolicyChanged` | D71. A hasher opens or closes their messages to new conversations | Identity Service | Audit |
 | `CommitteeCreated` / `CommitteeDissolved` | Governance action | Governance Service | Notification, Audit |
 | `MotionSubmitted` / `VoteCast` / `MotionResolved` | 08L-02/03 governance workflow | Governance Service | Notification, Audit, Evidence |
@@ -223,6 +226,11 @@ D41 reels, D50 follows and engagement, D51 posts. A reel and a post belong to th
 | `ReportFiled` | D61: a hasher reports a person, post, reel, comment or photo; urgent ones notify platform staff | Moderation Service | Notification |
 | `ReportResolved` | D61: a report is closed, Actioned or Dismissed; tells the reporter in one line | Moderation Service | Notification |
 | `ModerationActionTaken` | D61: a moderator does anything about a report, including notes and handing it up | Moderation Service | Audit |
+| `AutoEnforcementApplied` | D74. Enough different hashers reported one person, and the platform warned them or held the account. **No actor** (a SYSTEM event). The payload names the enforcement, its level and when a hold ends, never who reported | Moderation Service | Notification, Audit |
+| `AutoEnforcementLifted` / `AutoEnforcementConfirmed` | D74. A hold ended by itself or was lifted by staff (account restored), or staff decided it stands | Moderation Service | Notification, Audit |
+| `EnforcementAppealFiled` | D75. A held hasher appealed. The payload names the appeal and the hold, never what they wrote | Moderation Service | Notification (staff), Audit |
+| `EnforcementAppealDecided` | D75. Staff turned an appeal down. The payload carries the note the hasher is shown. (A granted appeal arrives as `AutoEnforcementLifted`) | Moderation Service | Notification, Audit |
+| `CoordinatedReportingSuspected` / `CoordinatedReportingReviewed` | D75. Reporters look like one and the platform held off, then staff decided which it was. The first has no actor (SYSTEM) | Moderation Service | Notification (staff), Audit |
 | `ModerationWarningIssued` | D61: a moderator warns a hasher, or resets their identity, in words the hasher reads | Moderation Service | Notification |
 | `PollVoted` | D60: a hasher answers, or changes their answer to, a poll on a post | Social Service | None yet |
 

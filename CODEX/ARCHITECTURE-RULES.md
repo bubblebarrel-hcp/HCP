@@ -75,7 +75,7 @@ This architecture is target direction only. No runnable implementation was found
 
 # Initial Scope Boundaries
 
-Direct messaging exists, one-to-one and text only, under the limits in D71 (supersedes D8): request-gated for strangers, block-aware, encrypted at rest, reportable, never readable by staff except what a reporter files.
+Direct messaging exists, one-to-one, under the limits in D71 (supersedes D8) as widened by D73: words, pictures, clips, stickers and voice, with pictures, stickers and voice held back until a request is accepted; request-gated for strangers, block-aware, encrypted at rest, files private and served by signed addresses, edit for two minutes and no unsend, delivered and seen ticks (seen only when both have receipts on), reportable, never readable by staff except what a reporter files.
 
 Allowed initial communication:
 

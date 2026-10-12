@@ -39,6 +39,7 @@ import { startOutbox, stopOutbox } from './services/outbox.service';
 import { closeRealtime, initRealtime } from './services/realtime.service';
 import { startDigestSweeper, stopDigestSweeper } from './services/digest.service';
 import { startTranscodeWorker, stopTranscodeWorker } from './services/transcode.service';
+import { startEnforcementSweeper, stopEnforcementSweeper } from './services/enforcement.service';
 import { startEscalationSweeper, stopEscalationSweeper } from './services/escalation.service';
 import { startReminders, startTrailReleaseSweeper, stopReminders, stopTrailReleaseSweeper } from './services/reminder.service';
 
@@ -179,6 +180,8 @@ const server = app.listen(env.port, () => {
   startEscalationSweeper();
   // Re-encodes uploaded video to H.264 MP4 (D67).
   startTranscodeWorker();
+  // Restores accounts whose automatic hold has run its course (D74).
+  startEnforcementSweeper();
 });
 
 async function shutdown(signal: string) {
@@ -189,6 +192,7 @@ async function shutdown(signal: string) {
   stopDigestSweeper();
   stopEscalationSweeper();
   stopTranscodeWorker();
+  stopEnforcementSweeper();
   closeRealtime();
   server.close(() => {
     prisma.$disconnect().finally(() => process.exit(0));

@@ -4,6 +4,8 @@ import { validate } from '../middleware/validate';
 import { requireAuth } from '../middleware/auth';
 import { asyncHandler } from '../utils/async';
 import {
+  appealSchema,
+  holdStateSchema,
   loginSchema,
   logoutSchema,
   refreshSchema,
@@ -18,6 +20,9 @@ const router = Router();
 
 router.post('/register', validate(registerSchema), asyncHandler(controller.register));
 router.post('/login', validate(loginSchema), asyncHandler(controller.login));
+// A held hasher's appeal (D75). Anonymous: they cannot sign in.
+router.post('/hold', validate(holdStateSchema), asyncHandler(controller.holdState));
+router.post('/appeal', validate(appealSchema), asyncHandler(controller.fileAppeal));
 router.post('/refresh', validate(refreshSchema), asyncHandler(controller.refresh));
 router.post('/logout', validate(logoutSchema), asyncHandler(controller.logout));
 router.get('/me', requireAuth, asyncHandler(controller.me));

@@ -1,9 +1,9 @@
 'use client';
 import api from '@/services/api';
 
-// Direct messages from the browser (D71). Same-origin proxy, so no client here
-// holds a token. The words of a message come back only to the two people in the
-// conversation; a notice about one never carries them.
+// Direct messages from the browser (D71, widened by D73). Same-origin proxy, so
+// no client here holds a token. The words and files of a message come back only
+// to the two people in the conversation; a notice about one never carries them.
 
 interface Envelope<T> {
   data: T;
@@ -11,6 +11,13 @@ interface Envelope<T> {
 const unwrap = <T,>(res: { data: Envelope<T> }): T => res.data.data;
 
 export const MAX_MESSAGE = 2000;
+export const MAX_CAPTION = 1000;
+export const MAX_ATTACHMENTS = 10;
+// The API holds the same numbers (services/direct-media.service.ts).
+export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+export const MAX_VOICE_SECONDS = 300;
+export const ACCEPTED_ATTACHMENTS = 'image/jpeg,image/png,image/webp,image/heic,video/mp4,video/quicktime,video/webm';
 
 // Fired when something changes the unread count, so the header badge follows
 // without waiting for its poll.
@@ -30,15 +37,56 @@ export interface MessagePerson {
 
 export type ConversationStatus = 'REQUESTED' | 'ACTIVE' | 'DECLINED';
 export type MessageStatus = 'SENT' | 'DELETED' | 'REMOVED';
+export type MessageKind = 'TEXT' | 'MEDIA' | 'STICKER' | 'VOICE';
+// SENT is one tick, DELIVERED two, SEEN two in the brand colour (D73).
+export type Receipt = 'SENT' | 'DELIVERED' | 'SEEN';
+
+export interface MessageAttachment {
+  id: string;
+  kind: 'PHOTO' | 'VIDEO' | 'AUDIO';
+  mimeType: string;
+  // A short-lived signed address: never stored, re-read with the message.
+  url: string | null;
+  width: number | null;
+  height: number | null;
+  durationSec: number | null;
+  sizeBytes: number;
+}
+
+export interface MessageSticker {
+  id: string;
+  url: string | null;
+  width: number | null;
+  height: number | null;
+}
 
 export interface DirectMessage {
   id: string;
   conversationId: string;
   senderId: string;
   mine: boolean;
-  // Null once unsent or removed: the message keeps its place and loses its words.
+  kind: MessageKind;
+  // Null once removed by staff: the message keeps its place and loses its words.
   body: string | null;
   status: MessageStatus;
+  createdAt: string;
+  editedAt: string | null;
+  // While this is in the future the sender may still edit the words.
+  editableUntil: string | null;
+  attachments: MessageAttachment[];
+  sticker: MessageSticker | null;
+  // Only on my own messages.
+  receipt: Receipt | null;
+}
+
+export interface LastMessage {
+  id: string;
+  mine: boolean;
+  kind: MessageKind;
+  status: MessageStatus;
+  // The words for a text message, a label ("Photo", "Sticker") for the rest.
+  preview: string;
+  body: string | null;
   createdAt: string;
 }
 
@@ -48,7 +96,7 @@ export interface ConversationSummary {
   // I am the one being asked.
   isRequest: boolean;
   other: MessagePerson | null;
-  lastMessage: DirectMessage | null;
+  lastMessage: LastMessage | null;
   unreadCount: number;
   muted: boolean;
   lastMessageAt: string;
@@ -61,6 +109,9 @@ export interface ConversationDetail {
   other: MessagePerson | null;
   muted: boolean;
   canReply: boolean;
+  // Pictures, stickers and voice wait for the conversation to be accepted.
+  canShareFiles: boolean;
+  editWindowMs: number;
   createdAt: string;
 }
 
@@ -110,13 +161,24 @@ export async function startConversation(userId: string, body: string, clientKey:
   );
 }
 
-export async function sendMessage(id: string, body: string, clientKey: string) {
+export type SendInput =
+  | { kind: 'TEXT'; body: string }
+  | { kind: 'MEDIA'; attachmentIds: string[]; body?: string }
+  | { kind: 'VOICE'; attachmentIds: string[] }
+  | { kind: 'STICKER'; stickerId: string };
+
+export async function sendMessage(id: string, input: SendInput, clientKey: string) {
   return unwrap(
     await api.post<Envelope<{ message: DirectMessage; conversationId: string; status: ConversationStatus }>>(
       `/conversations/${id}/messages`,
-      { body, clientKey },
+      { ...input, clientKey },
     ),
   );
+}
+
+// Two minutes after sending, no longer (D73). There is no unsend.
+export async function editMessage(id: string, body: string) {
+  return unwrap(await api.patch<Envelope<{ message: DirectMessage }>>(`/messages/${id}`, { body }));
 }
 
 export const markConversationRead = (id: string) => api.post(`/conversations/${id}/read`);
@@ -124,7 +186,149 @@ export const acceptRequest = (id: string) => api.post(`/conversations/${id}/acce
 export const declineRequest = (id: string) => api.post(`/conversations/${id}/decline`);
 export const setConversationMuted = (id: string, muted: boolean) => api.put(`/conversations/${id}/mute`, { muted });
 export const archiveConversation = (id: string) => api.post(`/conversations/${id}/archive`);
-export const unsendMessage = (id: string) => api.delete(`/messages/${id}`);
+
+// ─── Files ───
+
+interface UploadTarget {
+  url: string;
+  method: 'PUT';
+  headers: Record<string, string>;
+}
+
+export interface UploadedAttachment {
+  id: string;
+  kind: 'PHOTO' | 'VIDEO' | 'AUDIO';
+  mimeType: string;
+  url: string | null;
+  width: number | null;
+  height: number | null;
+  durationSec: number | null;
+  sizeBytes: number;
+}
+
+// XMLHttpRequest rather than fetch, so a clip on a slow connection can say how far
+// it has got.
+function put(url: string, headers: Record<string, string>, body: Blob, onProgress?: (fraction: number) => void) {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) onProgress?.(e.loaded / e.total);
+    };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? (onProgress?.(1), resolve()) : reject(new Error(`Storage rejected the upload (${xhr.status})`)));
+    xhr.onerror = () => reject(new Error('The upload could not reach storage. Check your connection and try again.'));
+    xhr.ontimeout = () => reject(new Error('The upload timed out. Try again on a better connection.'));
+    xhr.send(body);
+  });
+}
+
+// "audio/webm;codecs=opus" is a recorder's way of saying audio/webm.
+const bare = (mime: string) => mime.split(';')[0].trim().toLowerCase();
+
+/** Photo, clip or recording: ask for a target, PUT the bytes, confirm. */
+export async function uploadAttachment(
+  conversationId: string,
+  file: Blob,
+  info: { kind: 'PHOTO' | 'VIDEO' | 'AUDIO'; width?: number | null; height?: number | null; durationSec?: number | null },
+  onProgress?: (fraction: number) => void,
+) {
+  const mimeType = bare(file.type);
+  const asked = unwrap(
+    await api.post<Envelope<{ attachment: { id: string }; upload: UploadTarget }>>(`/conversations/${conversationId}/uploads`, {
+      kind: info.kind,
+      mimeType,
+      sizeBytes: file.size,
+      ...(info.width ? { width: info.width } : {}),
+      ...(info.height ? { height: info.height } : {}),
+      ...(info.durationSec ? { durationSec: Math.round(info.durationSec * 10) / 10 } : {}),
+    }),
+  );
+  await put(asked.upload.url, { 'Content-Type': mimeType }, file, onProgress);
+  const confirmed = unwrap(
+    await api.post<Envelope<{ attachment: UploadedAttachment }>>(`/dm-uploads/${asked.attachment.id}/confirm`, {
+      ...(info.width ? { width: info.width } : {}),
+      ...(info.height ? { height: info.height } : {}),
+      ...(info.durationSec ? { durationSec: Math.round(info.durationSec * 10) / 10 } : {}),
+    }),
+  );
+  return confirmed.attachment;
+}
+
+/** Width and height of a picture, measured in the browser; a failure is not worth failing an upload over. */
+export async function pictureSize(file: Blob): Promise<{ width: number | null; height: number | null }> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const size = { width: bitmap.width, height: bitmap.height };
+    bitmap.close();
+    return size;
+  } catch {
+    return { width: null, height: null };
+  }
+}
+
+/** Length and size of a clip, read by the browser from the file itself. */
+export function mediaLength(file: Blob, kind: 'video' | 'audio'): Promise<{ durationSec: number | null; width: number | null; height: number | null }> {
+  return new Promise((resolve) => {
+    const el = document.createElement(kind);
+    const url = URL.createObjectURL(file);
+    const done = (value: { durationSec: number | null; width: number | null; height: number | null }) => {
+      URL.revokeObjectURL(url);
+      resolve(value);
+    };
+    el.preload = 'metadata';
+    el.onloadedmetadata = () =>
+      done({
+        durationSec: Number.isFinite(el.duration) ? el.duration : null,
+        width: kind === 'video' ? (el as HTMLVideoElement).videoWidth || null : null,
+        height: kind === 'video' ? (el as HTMLVideoElement).videoHeight || null : null,
+      });
+    el.onerror = () => done({ durationSec: null, width: null, height: null });
+    el.src = url;
+  });
+}
+
+// ─── Stickers ───
+
+export interface Sticker {
+  id: string;
+  url: string | null;
+  width: number | null;
+  height: number | null;
+  mine: boolean;
+  favorite: boolean;
+}
+
+export interface StickerTray {
+  mine: Sticker[];
+  favorites: Sticker[];
+  recent: Sticker[];
+}
+
+export async function getStickers() {
+  return unwrap(await api.get<Envelope<StickerTray>>('/me/stickers'));
+}
+
+/** A finished sticker (a square PNG or WebP, up to 512KB) becomes one in my tray. */
+export async function createSticker(image: Blob, size: { width: number; height: number }) {
+  const mimeType = bare(image.type);
+  const asked = unwrap(
+    await api.post<Envelope<{ sticker: { id: string }; upload: UploadTarget }>>('/me/stickers', {
+      mimeType,
+      sizeBytes: image.size,
+      width: size.width,
+      height: size.height,
+    }),
+  );
+  await put(asked.upload.url, { 'Content-Type': mimeType }, image);
+  return unwrap(await api.post<Envelope<{ sticker: Sticker }>>(`/me/stickers/${asked.sticker.id}/confirm`)).sticker;
+}
+
+export const deleteSticker = (id: string) => api.delete(`/me/stickers/${id}`);
+export const setStickerFavorite = (id: string, favorite: boolean) =>
+  favorite ? api.put(`/me/stickers/${id}/favorite`) : api.delete(`/me/stickers/${id}/favorite`);
+
+// ─── Small helpers ───
 
 export function clientKey() {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -138,4 +342,10 @@ export function shortTime(iso: string) {
   if (diff < 86_400_000) return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   if (diff < 7 * 86_400_000) return d.toLocaleDateString('en-GB', { weekday: 'short' });
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+/** 0:07, 1:32. */
+export function clockTime(seconds: number) {
+  const s = Math.max(0, Math.round(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }

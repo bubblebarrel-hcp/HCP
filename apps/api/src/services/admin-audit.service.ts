@@ -133,6 +133,13 @@ const SETTING_DESCRIPTIONS: Record<keyof typeof SETTING_DEFAULTS, string> = {
   'escalation.membership.escalatedDays': 'FR-NOT-016: days before a waiting request is raised with kennel leadership',
   'escalation.report.overdueDays': 'FR-NOT-013: days a trail report is overdue before the first reminder',
   'escalation.report.escalatedDays': 'FR-NOT-016: days before an overdue report is raised with kennel leadership',
+  'moderation.auto.enabled': 'D74: automatic warnings and holds from reports (1 on, 0 off)',
+  'moderation.auto.windowDays': 'D74: days a report counts towards an automatic action',
+  'moderation.auto.warnScore': 'D74: report score that sends an automatic warning',
+  'moderation.auto.holdScore': 'D74: report score that holds an account for a while',
+  'moderation.auto.reviewScore': 'D74: report score that holds an account until staff decide',
+  'moderation.auto.holdHours': 'D74: hours an automatic hold lasts before it lifts by itself',
+  'moderation.auto.minReporterAgeDays': 'D74: days old a reporter account must be for the report to count',
 };
 
 type SettingKey = keyof typeof SETTING_DEFAULTS;
@@ -164,6 +171,21 @@ export async function updateSetting(actorId: string, key: string, value: number,
   if (!isSettingKey(key)) throw ApiError.notFound('Unknown setting');
   if (key === 'kennel.verification.minMismanagement' && value < 1) {
     throw ApiError.badRequest('Kennel verification needs at least one mismanagement member', 'INVALID_SETTING');
+  }
+  // D74: bounds on what automatic enforcement may be tuned to, so a typo cannot
+  // suspend everyone who has been reported once, or turn the window into nothing.
+  const bounds: Partial<Record<SettingKey, [number, number]>> = {
+    'moderation.auto.enabled': [0, 1],
+    'moderation.auto.windowDays': [1, 365],
+    'moderation.auto.warnScore': [2, 100],
+    'moderation.auto.holdScore': [3, 100],
+    'moderation.auto.reviewScore': [4, 100],
+    'moderation.auto.holdHours': [1, 336],
+    'moderation.auto.minReporterAgeDays': [0, 365],
+  };
+  const range = bounds[key];
+  if (range && (!Number.isFinite(value) || value < range[0] || value > range[1])) {
+    throw ApiError.badRequest(`That must be between ${range[0]} and ${range[1]}`, 'INVALID_SETTING');
   }
   const before = await prisma.platformSetting.findUnique({ where: { key } });
   const previous = typeof before?.value === 'number' ? before.value : SETTING_DEFAULTS[key];

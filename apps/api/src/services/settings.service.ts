@@ -22,6 +22,20 @@ export const SETTING_DEFAULTS = {
   'escalation.membership.escalatedDays': 7,
   'escalation.report.overdueDays': 5,
   'escalation.report.escalatedDays': 12,
+  // D74: automatic action when enough different hashers report the same person.
+  // 1 is on, 0 is off. Everything below is read each time, so a change applies at
+  // once and to no past decision.
+  'moderation.auto.enabled': 1,
+  // Reports older than this stop counting.
+  'moderation.auto.windowDays': 30,
+  // The score at which a hasher is warned, held for a while, and held for review.
+  'moderation.auto.warnScore': 3,
+  'moderation.auto.holdScore': 5,
+  'moderation.auto.reviewScore': 8,
+  // How long a hold lasts before it lifts by itself.
+  'moderation.auto.holdHours': 72,
+  // A reporter's account must be at least this old for a report to count.
+  'moderation.auto.minReporterAgeDays': 7,
 } as const;
 
 type SettingKey = keyof typeof SETTING_DEFAULTS;

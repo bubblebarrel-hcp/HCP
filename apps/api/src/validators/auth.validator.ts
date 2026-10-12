@@ -45,6 +45,18 @@ export const loginSchema = Joi.object({
   password: Joi.string().required(),
 });
 
+// D75: the held hasher cannot sign in, so they prove who they are with the password.
+export const holdStateSchema = Joi.object({
+  email: email.required(),
+  password: Joi.string().required(),
+});
+
+export const appealSchema = Joi.object({
+  email: email.required(),
+  password: Joi.string().required(),
+  message: Joi.string().trim().min(1).max(2000).required(),
+});
+
 export const refreshSchema = Joi.object({
   refreshToken: Joi.string().required(),
 });

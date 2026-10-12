@@ -7,7 +7,15 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/async';
 import { createKennelSchema, listKennelsQuery, updateKennelSchema } from '../validators/kennel.validator';
-import { actionSchema, queueQuery } from '../validators/moderation.validator';
+import {
+  actionSchema,
+  appealDecisionSchema,
+  coordinationQuery,
+  coordinationReviewSchema,
+  enforcementDecisionSchema,
+  enforcementQuery,
+  queueQuery,
+} from '../validators/moderation.validator';
 import {
   auditQuery,
   contentQuery,
@@ -50,7 +58,20 @@ router.patch('/users/:id/status', validate(updateUserStatusSchema), asyncHandler
 router.get('/reports', validate(queueQuery, 'query'), asyncHandler(moderationController.queue));
 router.get('/reports/counts', asyncHandler(moderationController.counts));
 router.get('/reports/:id', asyncHandler(moderationController.detail));
+router.get('/reports/:id/files/:fileId', asyncHandler(moderationController.reportedFile));
 router.post('/reports/:id/actions', validate(actionSchema), asyncHandler(moderationController.act));
+
+// What the platform did by itself when enough different hashers reported one
+// person (D74). Staff lift a hold, or confirm it so it stays.
+router.get('/enforcements', validate(enforcementQuery, 'query'), asyncHandler(moderationController.enforcements));
+router.post('/enforcements/:id/lift', validate(enforcementDecisionSchema), asyncHandler(moderationController.liftEnforcement));
+router.post('/enforcements/:id/confirm', validate(enforcementDecisionSchema), asyncHandler(moderationController.confirmEnforcement));
+router.get('/enforcements/counts', asyncHandler(moderationController.enforcementCounts));
+// A held hasher's appeal, answered (D75): grant lifts the hold, deny keeps it and says why.
+router.post('/appeals/:id/decide', validate(appealDecisionSchema), asyncHandler(moderationController.decideAppeal));
+// Reporters who look like one, waiting for a person to say which it was (D75).
+router.get('/coordination', validate(coordinationQuery, 'query'), asyncHandler(moderationController.coordination));
+router.post('/coordination/:id/review', validate(coordinationReviewSchema), asyncHandler(moderationController.reviewCoordination));
 
 // Governance record and event stream (append-only; read here, never edited).
 router.get('/audit', validate(auditQuery, 'query'), asyncHandler(adminController.listAudit));

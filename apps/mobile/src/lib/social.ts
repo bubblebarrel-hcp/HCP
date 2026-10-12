@@ -99,7 +99,7 @@ export async function hasherPhotos(id: string, page = 1, limit = 24) {
 
 // Who sees what I make, stepping away, and leaving (D57).
 export async function getPrivacy() {
-  return api<{ profileVisibility: Audience; pendingRequests: number; shareMilestones: boolean; dmPolicy: 'EVERYONE' | 'NOBODY' }>('/me/privacy');
+  return api<{ profileVisibility: Audience; pendingRequests: number; shareMilestones: boolean; dmPolicy: 'EVERYONE' | 'NOBODY'; readReceipts: boolean }>('/me/privacy');
 }
 
 // Whether a milestone may appear in the feed as a card (D60).
@@ -110,6 +110,11 @@ export async function setMilestoneSharing(shareMilestones: boolean) {
 // Who may start a direct message with me (D71).
 export async function setDmPolicy(dmPolicy: 'EVERYONE' | 'NOBODY') {
   return api('/me/privacy', { method: 'PATCH', body: { dmPolicy } });
+}
+
+// Whether people can see I read their message, and I theirs (D73).
+export async function setReadReceipts(readReceipts: boolean) {
+  return api('/me/privacy', { method: 'PATCH', body: { readReceipts } });
 }
 
 export async function setPrivacy(profileVisibility: Audience) {

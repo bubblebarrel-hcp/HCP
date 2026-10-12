@@ -10,7 +10,7 @@ import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Segm
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { errorMessage } from '@/lib/api';
-import { deactivateAccount, deleteAccount, getPrivacy, setDmPolicy as saveDmPolicy, setMilestoneSharing, setPrivacy } from '@/lib/social';
+import { deactivateAccount, deleteAccount, getPrivacy, setDmPolicy as saveDmPolicy, setMilestoneSharing, setPrivacy, setReadReceipts as saveReadReceipts } from '@/lib/social';
 import type { Audience } from '@/lib/types';
 
 // Privacy and account (D57), as the web lays it out (app/account/privacy/page.tsx):
@@ -27,6 +27,8 @@ export default function PrivacyScreen() {
   const [milestones, setMilestones] = useState(true);
   // Who may start a direct message with me (D71).
   const [dmPolicy, setDmPolicy] = useState<'EVERYONE' | 'NOBODY'>('EVERYONE');
+  // Whether people can see I read their message, and I theirs (D73).
+  const [readReceipts, setReadReceipts] = useState(true);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/account');
@@ -40,6 +42,7 @@ export default function PrivacyScreen() {
         if (!alive) return;
         setMilestones(data.shareMilestones);
         setDmPolicy(data.dmPolicy);
+        setReadReceipts(data.readReceipts);
         setLevel(data.profileVisibility);
         setPending(data.pendingRequests);
       })
@@ -73,6 +76,16 @@ export default function PrivacyScreen() {
       Alert.alert('Could not change your privacy', errorMessage(err, 'Could not change your privacy'));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function changeReadReceipts(next: boolean) {
+    setReadReceipts(next);
+    try {
+      await saveReadReceipts(next);
+    } catch (err) {
+      setReadReceipts(!next);
+      Alert.alert('Could not save that', errorMessage(err, 'Could not save that'));
     }
   }
 
@@ -159,6 +172,22 @@ export default function PrivacyScreen() {
                 { value: 'NOBODY', label: 'No new conversations' },
               ]}
             />
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: readReceipts }}
+              testID="read-receipts-toggle"
+              onPress={() => void changeReadReceipts(!readReceipts)}
+              style={[styles.checkRow, { marginTop: 16 }]}>
+              <View style={[styles.box, { borderColor: readReceipts ? theme.primary : theme.border, backgroundColor: readReceipts ? theme.primary : 'transparent' }]}>
+                {readReceipts && <Check size={12} color={theme.onPrimary} />}
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={[styles.sm, { fontWeight: '600' }]}>Read receipts</ThemedText>
+                <ThemedText themeColor="textSecondary" style={styles.sm}>
+                  Let people see when you have read their message, and see it of them. Turn it off and neither works, for anyone. Delivery ticks stay either way.
+                </ThemedText>
+              </View>
+            </Pressable>
           </CardContent>
         </View>
       </Card>

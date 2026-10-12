@@ -7,6 +7,7 @@ import { SquarePen, Search } from 'lucide-react';
 import { Avatar } from '@/components/Avatar';
 import { NewMessageDialog } from '@/components/messages/NewMessageDialog';
 import { useAuth } from '@/context/AuthContext';
+import { plainText } from '@/lib/chat-format';
 import {
   listConversations,
   MESSAGES_CHANGED,
@@ -32,8 +33,9 @@ const POLL_MS = 15_000;
 function preview(c: ConversationSummary) {
   const m = c.lastMessage;
   if (!m) return 'No messages yet';
-  const words = m.status === 'SENT' ? m.body : m.status === 'DELETED' ? 'Message deleted' : 'Removed by moderators';
-  return `${m.mine ? 'You: ' : ''}${words ?? ''}`;
+  // The server builds the line: the words for text, a label for the rest ("Photo", "Sticker").
+  const words = m.status === 'SENT' ? plainText(m.preview) : m.preview;
+  return `${m.mine ? 'You: ' : ''}${words}`;
 }
 
 export default function MessagesLayout({ children }: { children: React.ReactNode }) {

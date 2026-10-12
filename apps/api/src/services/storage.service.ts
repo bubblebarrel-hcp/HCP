@@ -4,7 +4,7 @@ import { copyFile, mkdir, stat, writeFile, rm } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import type { Readable } from 'node:stream';
 import path from 'node:path';
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
@@ -47,6 +47,9 @@ const EXTENSIONS: Record<string, string> = {
   'audio/mpeg': '.mp3',
   'audio/mp4': '.m4a',
   'audio/webm': '.weba',
+  'audio/ogg': '.ogg',
+  'audio/aac': '.aac',
+  'audio/x-m4a': '.m4a',
   'application/pdf': '.pdf',
 };
 
@@ -171,4 +174,34 @@ export async function uploadFile(storageKey: string, filePath: string, mimeType:
   const destination = localPath(storageKey);
   await mkdir(path.dirname(destination), { recursive: true });
   await copyFile(filePath, destination);
+}
+
+// ─── Private objects (D73) ───
+//
+// Direct-message media is not public. It sits under keys nobody lists, and is
+// read through addresses that stop working after a few minutes, handed out only
+// to the two people in the conversation.
+
+const READ_URL_TTL_SECONDS = 15 * 60;
+
+/** A short-lived address for one private object. */
+export async function signedReadUrl(storageKey: string, expiresInSeconds = READ_URL_TTL_SECONDS): Promise<string | null> {
+  if (client) {
+    return getSignedUrl(client, new GetObjectCommand({ Bucket: env.r2.bucket, Key: storageKey }), { expiresIn: expiresInSeconds });
+  }
+  // Local development has no signing: the API serves the folder itself.
+  return publicUrlFor(storageKey);
+}
+
+/** The stored size of an object, or null when nothing was uploaded. */
+export async function objectSize(storageKey: string): Promise<number | null> {
+  try {
+    if (client) {
+      const head = await client.send(new HeadObjectCommand({ Bucket: env.r2.bucket, Key: storageKey }));
+      return head.ContentLength ?? null;
+    }
+    return (await stat(localPath(storageKey))).size;
+  } catch {
+    return null;
+  }
 }

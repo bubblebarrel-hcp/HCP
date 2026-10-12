@@ -27,6 +27,8 @@ export default function PrivacyPage() {
   const [milestones, setMilestones] = useState(true);
   // Who may start a direct message with me (D71).
   const [dmPolicy, setDmPolicy] = useState<'EVERYONE' | 'NOBODY'>('EVERYONE');
+  // Whether people can see I read their message, and I theirs (D73).
+  const [readReceipts, setReadReceipts] = useState(true);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/auth/login');
@@ -38,11 +40,12 @@ export default function PrivacyPage() {
     if (!user) return;
     let alive = true;
     api
-      .get<{ data: { profileVisibility: Audience; pendingRequests: number; shareMilestones: boolean; dmPolicy: 'EVERYONE' | 'NOBODY' } }>('/me/privacy')
+      .get<{ data: { profileVisibility: Audience; pendingRequests: number; shareMilestones: boolean; dmPolicy: 'EVERYONE' | 'NOBODY'; readReceipts: boolean } }>('/me/privacy')
       .then((res) => {
         if (!alive) return;
         setMilestones(res.data.data.shareMilestones);
         setDmPolicy(res.data.data.dmPolicy);
+        setReadReceipts(res.data.data.readReceipts);
         setLevel(res.data.data.profileVisibility);
         setPending(res.data.data.pendingRequests);
       })
@@ -97,6 +100,18 @@ export default function PrivacyPage() {
       toast.success(next === 'EVERYONE' ? 'Anyone can message you. Strangers arrive as requests.' : 'No new conversations. Ones already open stay open.');
     } catch (err) {
       setDmPolicy(before);
+      toast.error(errorMessage(err, 'Could not save that'));
+    }
+  }
+
+  async function changeReadReceipts(next: boolean) {
+    const before = readReceipts;
+    setReadReceipts(next);
+    try {
+      await api.patch('/me/privacy', { readReceipts: next });
+      toast.success(next ? 'Read receipts are on.' : 'Read receipts are off. You will not see them either.');
+    } catch (err) {
+      setReadReceipts(before);
       toast.error(errorMessage(err, 'Could not save that'));
     }
   }
@@ -183,6 +198,22 @@ export default function PrivacyPage() {
             <option value="EVERYONE">Anyone can send me a message or a request</option>
             <option value="NOBODY">No new conversations</option>
           </Select>
+          <label className="mt-4 flex items-start gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={readReceipts}
+              onChange={(event) => void changeReadReceipts(event.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-[var(--color-primary)]"
+              data-testid="read-receipts-toggle"
+            />
+            <span>
+              <span className="font-medium">Read receipts</span>
+              <span className="block text-muted-foreground">
+                Let people see when you have read their message, and see it of them. Turn it off and neither works, for
+                anyone. Delivery ticks stay either way, and a request never shows either until you accept.
+              </span>
+            </span>
+          </label>
         </CardContent>
       </Card>
 

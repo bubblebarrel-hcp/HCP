@@ -8,12 +8,12 @@ export const metadata: Metadata = {
 
 // The page Google Play's "Child safety standards" declaration points at. Every
 // claim here matches what the product does: registration refuses under-18s
-// (api/src/validators/common.ts), direct messages are adults-only, text-only, request-gated for strangers, blockable and reportable (D71), and a report
+// (api/src/validators/common.ts), direct messages are adults-only, request-gated for strangers (who can send words only until accepted), blockable and reportable (D71, D73), and a report
 // goes to the moderation queue (services/moderation.service.ts). Keep it that way:
 // change the product and this page together.
 export default function ChildSafetyPage() {
   return (
-    <LegalPage title="Child Safety Standards" updated="11 October 2026">
+    <LegalPage title="Child Safety Standards" updated="12 October 2026">
       <p>
         Shiggy Trails, operated by {LEGAL_ENTITY}, is a community app for adult Hash House Harriers. We have zero tolerance for child sexual abuse and exploitation (CSAE), including child
         sexual abuse material (CSAM), grooming, sextortion and trafficking. This page sets out our standards and what we do about them.
@@ -36,7 +36,7 @@ export default function ChildSafetyPage() {
 
       <h2>How the app limits the risk</h2>
       <ul>
-        <li>Direct messages are text only: no photos or video can be sent through them, and every account holder has confirmed they are 18 or older.</li>
+        <li>Direct messages are between two people. A stranger can send one message of words only: pictures, video, stickers and voice messages are not possible until the other person accepts. Every account holder has confirmed they are 18 or older.</li>
         <li>Someone you do not follow and share no kennel with can only send a request, with a single message, that you can accept or decline. A decline does not tell them. You can close your messages to new conversations altogether.</li>
         <li>You can report any message, which sends it and the few before it to our moderators, and block anyone, which ends the conversation for both of you.</li>
         <li>You choose who sees your posts, photos and reels: everyone, followers only, or only you. A locked profile means people must ask to follow you.</li>

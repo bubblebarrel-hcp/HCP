@@ -65,7 +65,8 @@
         {
           "locationWhenInUsePermission": "Shiggy Trails uses your location to drop a pin where your kennel hashes."
         }
-      ]
+      ],
+      ["expo-audio", { "microphonePermission": "Shiggy Trails uses the microphone to record a voice message or a reel." }]
     ],
     "experiments": {
       "typedRoutes": true,

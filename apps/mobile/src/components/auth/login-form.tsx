@@ -25,6 +25,8 @@ export function LoginForm() {
   // shrug at. Hold the address so we can offer to send the link again.
   const [unverified, setUnverified] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
+  // D75: an account on hold is told why, and offered the way to answer back.
+  const [held, setHeld] = useState<string | null>(null);
 
   async function submit() {
     const next: { email?: string; password?: string } = {};
@@ -37,12 +39,15 @@ export function LoginForm() {
 
     setBusy(true);
     setUnverified(null);
+    setHeld(null);
     try {
       await login(trimmed, password);
       router.replace('/account');
     } catch (err) {
       if (err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED') {
         setUnverified(trimmed);
+      } else if (err instanceof ApiError && err.code === 'ACCOUNT_ON_HOLD') {
+        setHeld(errorMessage(err, 'Your account is on hold.'));
       } else {
         Alert.alert('Could not log in', errorMessage(err, 'Could not log in'));
       }
@@ -86,6 +91,17 @@ export function LoginForm() {
               </ThemedText>
               <Button variant="outline" size="sm" disabled={resending} testID="login-resend" style={styles.resend} onPress={() => void resend()}>
                 {resending ? 'Sending…' : 'Send the link again'}
+              </Button>
+            </View>
+          ) : null}
+          {held ? (
+            <View accessibilityRole="alert" testID="login-held" style={[styles.notice, { borderColor: theme.danger + '55', backgroundColor: theme.danger + '12' }]}>
+              <ThemedText style={styles.noticeTitle}>Your account is on hold</ThemedText>
+              <ThemedText themeColor="textSecondary" style={styles.noticeText}>
+                {held}
+              </ThemedText>
+              <Button variant="outline" size="sm" testID="login-appeal" style={styles.resend} onPress={() => router.push('/auth/appeal')}>
+                Appeal this
               </Button>
             </View>
           ) : null}

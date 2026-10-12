@@ -1,5 +1,7 @@
 import { ModerationActionKind, ReportReason, ReportTargetType } from '@prisma/client';
 import { Request, Response } from 'express';
+import * as appeals from '../services/appeal.service';
+import * as enforcement from '../services/enforcement.service';
 import * as moderation from '../services/moderation.service';
 import { ApiError, ok } from '../utils/http';
 
@@ -42,6 +44,9 @@ export const queue = async (req: Request, res: Response) => {
 export const counts = async (req: Request, res: Response) => ok(res, await moderation.counts(actor(req), slug(req)));
 export const detail = async (req: Request, res: Response) =>
   ok(res, { report: await moderation.detail(actor(req), req.params.id, slug(req)) });
+// A file out of a reported direct message (D73): platform staff, five minutes, audited.
+export const reportedFile = async (req: Request, res: Response) =>
+  ok(res, await moderation.reportedFile(actor(req), req.params.id, req.params.fileId));
 export const act = async (req: Request, res: Response) =>
   ok(
     res,
@@ -54,3 +59,21 @@ export const act = async (req: Request, res: Response) =>
       ),
     },
   );
+
+// Automatic holds and warnings (D74). Platform staff only: the router applies the
+// admin gate once, at its top.
+export const enforcements = async (req: Request, res: Response) =>
+  ok(res, await enforcement.list(req.query as unknown as { filter: 'active' | 'appeals' | 'all'; page: number; limit: number }));
+export const liftEnforcement = async (req: Request, res: Response) =>
+  ok(res, { enforcement: await enforcement.lift(req.params.id, { id: actor(req).id }, req.body.note) });
+export const confirmEnforcement = async (req: Request, res: Response) =>
+  ok(res, { enforcement: await enforcement.confirm(req.params.id, { id: actor(req).id }, req.body.note) });
+
+export const decideAppeal = async (req: Request, res: Response) =>
+  ok(res, { appeal: await appeals.decide(req.params.id, { id: actor(req).id }, req.body.outcome, req.body.note) });
+export const coordination = async (req: Request, res: Response) =>
+  ok(res, await enforcement.listFlags(req.query as unknown as { filter: 'pending' | 'all'; page: number; limit: number }));
+export const reviewCoordination = async (req: Request, res: Response) =>
+  ok(res, { flag: await enforcement.reviewFlag(req.params.id, { id: actor(req).id }, req.body.outcome, req.body.note) });
+export const enforcementCounts = async (_req: Request, res: Response) =>
+  ok(res, { appeals: await enforcement.openAppealCount(), coordination: await enforcement.pendingFlagCount(), holds: await enforcement.activeCount() });

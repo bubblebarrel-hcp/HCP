@@ -7,6 +7,7 @@ import { Avatar } from '@/components/feed/avatar';
 import { ThemedText } from '@/components/themed-text';
 import { Skeleton, Subpage } from '@/components/ui/web-ui';
 import { useAuth } from '@/context/auth';
+import { plainText } from '@/lib/chat-format';
 import { useTheme } from '@/hooks/use-theme';
 import { listConversations, shortTime, unreadCounts, type Box, type ConversationSummary } from '@/lib/messages';
 import { isRealtimeConnected, useRealtimeConnection, useRealtimeEvent } from '@/lib/realtime';
@@ -22,8 +23,9 @@ const POLL_MS = 15_000;
 function preview(c: ConversationSummary) {
   const m = c.lastMessage;
   if (!m) return 'No messages yet';
-  const words = m.status === 'SENT' ? m.body : m.status === 'DELETED' ? 'Message deleted' : 'Removed by moderators';
-  return `${m.mine ? 'You: ' : ''}${words ?? ''}`;
+  // The server builds the line: the words for text, a label for the rest ("Photo", "Sticker").
+  const words = m.status === 'SENT' ? plainText(m.preview) : m.preview;
+  return `${m.mine ? 'You: ' : ''}${words}`;
 }
 
 export default function MessagesScreen() {

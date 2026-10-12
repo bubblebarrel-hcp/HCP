@@ -6,6 +6,7 @@ import {
   Image as ImageIcon,
   LayoutDashboard,
   Settings,
+  ShieldAlert,
   UserCheck,
   Users,
   type LucideIcon,
@@ -39,6 +40,7 @@ export const NAV: NavGroup[] = [
     label: 'Moderation',
     items: [
       { href: '/reports', label: 'Reports', icon: Flag, badge: 'reports' },
+      { href: '/enforcement', label: 'Automatic actions', icon: ShieldAlert },
       { href: '/content', label: 'Content', icon: ImageIcon },
     ],
   },

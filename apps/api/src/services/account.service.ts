@@ -26,10 +26,12 @@ import { deleteObject } from './storage.service';
 export async function getPrivacy(userId: string) {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { profileVisibility: true, shareMilestones: true, dmPolicy: true },
+    select: { profileVisibility: true, shareMilestones: true, dmPolicy: true, readReceipts: true },
   });
   return {
     profileVisibility: user.profileVisibility,
+    // Whether people I message can see that I read it, and I can see it of them (D73).
+    readReceipts: user.readReceipts,
     // Whether a milestone may appear in the feed as a card (D60).
     shareMilestones: user.shareMilestones,
     // Who may start a direct message with me (D71).
@@ -324,6 +326,24 @@ export async function deleteAccount(userId: string, password: string) {
     }
   }
   return { deleted: true };
+}
+
+// D73. Off hides "seen" in both directions, as WhatsApp does: you do not get to
+// watch others read while you read in private. Delivery ticks are not affected.
+export async function setReadReceipts(userId: string, enabled: boolean) {
+  const current = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { readReceipts: true } });
+  if (current.readReceipts === enabled) return getPrivacy(userId);
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: userId }, data: { readReceipts: enabled } });
+    await recordEvent(tx, {
+      eventType: 'DirectMessageReceiptsChanged',
+      aggregateType: 'Identity',
+      aggregateId: userId,
+      actorId: userId,
+      payload: { from: current.readReceipts, to: enabled },
+    });
+  });
+  return getPrivacy(userId);
 }
 
 // D71. NOBODY closes the door to new conversations; ones already open stay open,

@@ -3,37 +3,33 @@
 import { use, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, BellOff, Bell, Flag, Send, Undo2 } from 'lucide-react';
+import { ArrowLeft, BellOff, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/Avatar';
-import { ReportDialog } from '@/components/social/ReportDialog';
+import { Composer } from '@/components/messages/Composer';
+import { MessageBubble } from '@/components/messages/MessageBubble';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/input';
 import { ActionDialog } from '@/components/membership/ActionDialog';
 import { useAuth } from '@/context/AuthContext';
 import {
   acceptRequest,
   announceMessagesChanged,
   archiveConversation,
-  clientKey,
   declineRequest,
   getConversation,
   getMessages,
   markConversationRead,
-  MAX_MESSAGE,
-  sendMessage,
   setConversationMuted,
-  unsendMessage,
   type ConversationDetail,
   type DirectMessage,
+  type Receipt,
 } from '@/lib/messages';
 import { isRealtimeConnected, useRealtimeEvent } from '@/lib/realtime';
-import { cn } from '@/lib/utils';
 import { errorMessage } from '@/services/api';
 
-// One conversation (D71). Refreshed every few seconds while it is open: there is
-// no socket, so the newest page is re-read and merged by id, which also picks up
-// a message the other person unsent.
+// One conversation (D71, D73). The socket delivers what happens in it (D72); this
+// page re-reads the newest page every few seconds as the net, merging by id, which
+// also picks up an edit, a removal and the ticks on what I sent.
 
 const POLL_MS = 4_000;
 
@@ -45,8 +41,16 @@ function merge(current: DirectMessage[], incoming: DirectMessage[]) {
   return [...map.values()].sort(byTime);
 }
 
-function clock(iso: string) {
-  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+// A receipt only ever moves forward: a late, stale answer cannot take a "seen" back.
+const RANK: Record<Receipt, number> = { SENT: 0, DELIVERED: 1, SEEN: 2 };
+
+function applyReceipt(messages: DirectMessage[], at: { deliveredAt: string | null; seenAt: string | null }) {
+  return messages.map((m) => {
+    if (!m.mine || !m.receipt || m.status !== 'SENT') return m;
+    const next: Receipt =
+      at.seenAt && m.createdAt <= at.seenAt ? 'SEEN' : at.deliveredAt && m.createdAt <= at.deliveredAt ? 'DELIVERED' : m.receipt;
+    return RANK[next] > RANK[m.receipt] ? { ...m, receipt: next } : m;
+  });
 }
 
 export default function ConversationPage({ params }: { params: Promise<{ id: string }> }) {
@@ -57,9 +61,8 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const [missing, setMissing] = useState(false);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [draft, setDraft] = useState('');
-  const [sending, setSending] = useState(false);
-  const key = useRef(clientKey());
+  const [editing, setEditing] = useState<DirectMessage | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const endRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const lastCount = useRef(0);
@@ -83,20 +86,29 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     }
   }, [id]);
 
+  const markRead = useCallback(() => {
+    markConversationRead(id)
+      .then(() => announceMessagesChanged())
+      .catch(() => undefined);
+  }, [id]);
+
   // Pushed by the socket (D72). A message for this conversation is merged and,
   // if it is theirs and the tab is in view, read. Anything else about it, or a
   // reconnect, re-reads the conversation.
   useRealtimeEvent(['dm:message'], (e: { conversationId: string; message: DirectMessage }) => {
     if (e.conversationId !== id) return;
     setMessages((current) => merge(current, [e.message]));
-    if (!e.message.mine && document.visibilityState === 'visible') {
-      markConversationRead(id)
-        .then(() => announceMessagesChanged())
-        .catch(() => undefined);
-    }
+    if (!e.message.mine && document.visibilityState === 'visible') markRead();
   });
   useRealtimeEvent(['dm:message-updated'], (e: { conversationId: string; message: DirectMessage }) => {
-    if (e.conversationId === id) setMessages((current) => merge(current, [e.message]));
+    if (e.conversationId !== id) return;
+    setMessages((current) => merge(current, [e.message]));
+    // Someone removed the message I was editing.
+    setEditing((open) => (open?.id === e.message.id && e.message.status !== 'SENT' ? null : open));
+  });
+  // The other person's device received, or read, what I sent (D73).
+  useRealtimeEvent(['dm:receipt'], (e: { conversationId: string; deliveredAt: string | null; seenAt: string | null }) => {
+    if (e.conversationId === id) setMessages((current) => applyReceipt(current, e));
   });
   useRealtimeEvent(['dm:conversation', 'dm:refresh', 'resync'], (e?: { conversationId?: string }) => {
     if (!e?.conversationId || e.conversationId === id) void refresh();
@@ -109,11 +121,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       if (!alive || document.visibilityState !== 'visible') return;
       const items = await refresh();
       // Anything from them that I have now seen is read.
-      if (alive && items?.some((m) => !m.mine)) {
-        markConversationRead(id)
-          .then(() => announceMessagesChanged())
-          .catch(() => undefined);
-      }
+      if (alive && items?.some((m) => !m.mine)) markRead();
     };
     void tick();
     // The socket delivers; this is the net, quick only while it is down.
@@ -125,7 +133,24 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       alive = false;
       clearInterval(timer);
     };
-  }, [user, id, refresh]);
+  }, [user, id, refresh, markRead]);
+
+  // The edit window shuts by itself: a clock ticks only while a message of mine
+  // can still be edited, so a quiet page does no work.
+  const anyEditable = messages.some((m) => m.editableUntil && new Date(m.editableUntil).getTime() > now);
+  useEffect(() => {
+    if (!anyEditable) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [anyEditable]);
+  // An edit that ran out while open stops being an edit.
+  useEffect(() => {
+    if (editing?.editableUntil && new Date(editing.editableUntil).getTime() <= now) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditing(null);
+      toast.message('The two minutes for editing that message are up.');
+    }
+  }, [now, editing]);
 
   // Stay at the bottom as new words arrive, unless they scrolled up to read.
   useLayoutEffect(() => {
@@ -142,26 +167,6 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       setHasMore(page.hasMore);
     } catch (err) {
       toast.error(errorMessage(err, 'Could not load earlier messages'));
-    }
-  }
-
-  async function send() {
-    const text = draft.trim();
-    if (!text || sending) return;
-    setSending(true);
-    try {
-      const sent = await sendMessage(id, text, key.current);
-      key.current = clientKey();
-      stick.current = true;
-      setDraft('');
-      setMessages((current) => merge(current, [sent.message]));
-      setDetail((d) => (d ? { ...d, status: sent.status, isRequest: false } : d));
-      announceMessagesChanged();
-      void refresh();
-    } catch (err) {
-      toast.error(errorMessage(err, 'Could not send that'));
-    } finally {
-      setSending(false);
     }
   }
 
@@ -201,15 +206,6 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       router.push('/messages');
     } catch (err) {
       toast.error(errorMessage(err, 'That did not work'));
-    }
-  }
-
-  async function unsend(message: DirectMessage) {
-    try {
-      await unsendMessage(message.id);
-      setMessages((current) => current.map((m) => (m.id === message.id ? { ...m, body: null, status: 'DELETED' } : m)));
-    } catch (err) {
-      toast.error(errorMessage(err, 'Could not unsend that'));
     }
   }
 
@@ -288,48 +284,7 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
           </div>
         )}
         {messages.map((m) => (
-          <div key={m.id} className={cn('flex flex-col', m.mine ? 'items-end' : 'items-start')} data-testid="message">
-            <div
-              className={cn(
-                'max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-sm',
-                m.status !== 'SENT'
-                  ? 'border border-dashed border-border italic text-muted-foreground'
-                  : m.mine
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted',
-              )}
-            >
-              {m.status === 'SENT' ? m.body : m.status === 'DELETED' ? (m.mine ? 'You unsent this message' : 'This message was unsent') : 'Removed by moderators'}
-            </div>
-            <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-              <time dateTime={m.createdAt}>{clock(m.createdAt)}</time>
-              {m.status === 'SENT' && m.mine && (
-                <ActionDialog
-                  title="Unsend this message?"
-                  description="It disappears for both of you. They may already have read it."
-                  confirmLabel="Unsend"
-                  destructive
-                  onConfirm={() => unsend(m)}
-                  trigger={
-                    <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" data-testid="message-unsend">
-                      <Undo2 className="h-3 w-3" aria-hidden /> Unsend
-                    </button>
-                  }
-                />
-              )}
-              {m.status === 'SENT' && !m.mine && (
-                <ReportDialog
-                  targetType="DIRECT_MESSAGE"
-                  targetId={m.id}
-                  trigger={
-                    <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" data-testid="message-report">
-                      <Flag className="h-3 w-3" aria-hidden /> Report
-                    </button>
-                  }
-                />
-              )}
-            </div>
-          </div>
+          <MessageBubble key={m.id} message={m} now={now} onEdit={setEditing} />
         ))}
         <div ref={endRef} />
       </div>
@@ -355,27 +310,20 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
       ) : detail.canReply ? (
-        <div className="flex items-end gap-2 border-t border-border pt-3">
-          <Textarea
-            value={draft}
-            maxLength={MAX_MESSAGE}
-            rows={1}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            placeholder="Write a message"
-            aria-label="Message"
-            className="max-h-32 min-h-10 flex-1 resize-none"
-            data-testid="message-input"
-          />
-          <Button type="button" onClick={() => void send()} disabled={!draft.trim() || sending} aria-label="Send" data-testid="message-send">
-            <Send className="h-4 w-4" aria-hidden />
-          </Button>
-        </div>
+        <Composer
+          conversationId={id}
+          canShareFiles={detail.canShareFiles}
+          editing={editing}
+          onCancelEdit={() => setEditing(null)}
+          onSent={({ message, status }) => {
+            stick.current = true;
+            setMessages((current) => merge(current, [message]));
+            setDetail((d) => (d ? { ...d, status, isRequest: false } : d));
+            announceMessagesChanged();
+            void refresh();
+          }}
+          onEdited={(message) => setMessages((current) => merge(current, [message]))}
+        />
       ) : (
         <p className="border-t border-border pt-3 text-sm text-muted-foreground" data-testid="cannot-reply">
           {detail.status === 'REQUESTED'

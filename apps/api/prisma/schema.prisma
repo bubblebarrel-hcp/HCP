@@ -723,6 +723,9 @@ model User {
   // a request. NOBODY closes the door to new conversations; ones already open
   // stay open.
   dmPolicy          DmPolicy      @default(EVERYONE)
+  // D73: whether the people they message may see that they read it, and whether
+  // they may see it of others (the same trade WhatsApp makes: off both ways).
+  readReceipts      Boolean       @default(true)
   // Whether a milestone (100th run) may appear in the feed as a card (D60).
   shareMilestones   Boolean       @default(true)
   homeKennelId      String?       @db.Uuid
@@ -787,6 +790,12 @@ model User {
   messages                      Message[]
   directParticipations          DirectParticipant[]
   directMessagesSent            DirectMessage[]
+  directAttachments             DirectAttachment[]
+  autoEnforcements              AutoEnforcement[]
+  enforcementAppeals            EnforcementAppeal[]
+  coordinationFlags             CoordinationFlag[]             @relation("CoordinationTarget")
+  stickers                      Sticker[]
+  stickerFavorites              StickerFavorite[]
   notifications                 Notification[]
   notificationPreferences       NotificationPreference[]
   notificationDigestPreferences NotificationDigestPreference[]
@@ -2428,12 +2437,32 @@ enum ConversationStatus {
   DECLINED
 }
 
-// SENT, then DELETED (the sender unsent it) or REMOVED (platform staff, after a
-// report). The row never leaves; only what it says changes.
+// SENT, then REMOVED (platform staff, after a report). DELETED is what an unsend
+// used to write (D71); unsending was withdrawn in D73, and the value stays so the
+// rows already written keep their meaning. The row never leaves; only what it
+// says changes.
 enum DirectMessageStatus {
   SENT
   DELETED
   REMOVED
+}
+
+// What a message carries (D73). TEXT is words, with the light formatting marks
+// (*bold* _italic_ ~strike~ `mono`). MEDIA is one to ten photos or clips with an
+// optional caption in the body. STICKER is one sticker. VOICE is one recording.
+enum DirectMessageKind {
+  TEXT
+  MEDIA
+  STICKER
+  VOICE
+}
+
+// A file for a direct message is first PENDING (a target was handed out), then
+// READY once the sender confirmed the upload. Only READY files can be sent, and
+// only by the person who uploaded them.
+enum DirectAttachmentState {
+  PENDING
+  READY
 }
 
 // Exactly two hashers. The pair is stored in id order (userLowId < userHighId)
@@ -2465,6 +2494,9 @@ model DirectParticipant {
   conversationId String    @db.Uuid
   userId         String    @db.Uuid
   lastReadAt     DateTime?
+  // D73: the last time a device of theirs received the conversation. Everything
+  // sent before this has been delivered to them.
+  deliveredAt    DateTime?
   mutedAt        DateTime?
   // Hidden from this hasher's inbox until something new arrives. Not deletion:
   // the other side keeps their copy, and so does the record.
@@ -2485,20 +2517,105 @@ model DirectMessage {
   // AES-256-GCM at the application layer (utils/field-crypto), like biodata.
   // Never in a notification, a domain event payload or a log.
   body           String
+  kind           DirectMessageKind   @default(TEXT)
+  // A STICKER message points at the sticker it shows.
+  stickerId      String?             @db.Uuid
   status         DirectMessageStatus @default(SENT)
   // Lets a phone retry a send without writing it twice.
   clientKey      String?
   createdAt      DateTime            @default(now())
+  // D73: set when the sender edited the words inside the two-minute window.
+  // What it said before is kept in DirectMessageEdit.
+  editedAt       DateTime?
   deletedAt      DateTime?
   removedAt      DateTime?
   removedReason  String?
 
-  conversation DirectConversation @relation(fields: [conversationId], references: [id])
-  sender       User               @relation(fields: [senderId], references: [id])
+  conversation DirectConversation  @relation(fields: [conversationId], references: [id])
+  sender       User                @relation(fields: [senderId], references: [id])
+  sticker      Sticker?            @relation(fields: [stickerId], references: [id])
+  attachments  DirectAttachment[]
+  edits        DirectMessageEdit[]
 
   @@unique([conversationId, senderId, clientKey])
   @@index([conversationId, createdAt])
   @@index([senderId, createdAt])
+}
+
+// What a message said before an edit (D73). Edits are allowed for two minutes
+// after sending; the earlier words stay, encrypted like the body, so a report
+// shows what was originally sent and not only the tidied version.
+model DirectMessageEdit {
+  id           String   @id @default(uuid()) @db.Uuid
+  messageId    String   @db.Uuid
+  previousBody String
+  editedAt     DateTime @default(now())
+
+  message DirectMessage @relation(fields: [messageId], references: [id])
+
+  @@index([messageId, editedAt])
+}
+
+// A photo, clip or recording in a direct message (D73). Private: served only
+// through short-lived signed addresses to the two people in the conversation,
+// never listed by a public URL.
+model DirectAttachment {
+  id             String                @id @default(uuid()) @db.Uuid
+  uploaderId     String                @db.Uuid
+  // The conversation it was uploaded for; it cannot be sent into another.
+  conversationId String                @db.Uuid
+  messageId      String?               @db.Uuid
+  kind           MediaKind
+  storageKey     String
+  mimeType       String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  durationSec    Float?
+  position       Int                   @default(0)
+  state          DirectAttachmentState @default(PENDING)
+  createdAt      DateTime              @default(now())
+  confirmedAt    DateTime?
+
+  uploader User           @relation(fields: [uploaderId], references: [id])
+  message  DirectMessage? @relation(fields: [messageId], references: [id])
+
+  @@index([messageId, position])
+  @@index([uploaderId, state, createdAt])
+}
+
+// A sticker a hasher made from a picture (D73): a square image up to 512 px.
+// Stickers belong to their maker and can be sent to anyone they can message;
+// whoever receives one can favourite it without it ever being theirs to edit.
+model Sticker {
+  id          String    @id @default(uuid()) @db.Uuid
+  ownerId     String    @db.Uuid
+  storageKey  String
+  mimeType    String
+  sizeBytes   Int
+  width       Int?
+  height      Int?
+  createdAt   DateTime  @default(now())
+  confirmedAt DateTime?
+  deletedAt   DateTime?
+
+  owner     User              @relation(fields: [ownerId], references: [id])
+  favorites StickerFavorite[]
+  messages  DirectMessage[]
+
+  @@index([ownerId, deletedAt])
+}
+
+model StickerFavorite {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  stickerId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  sticker Sticker @relation(fields: [stickerId], references: [id])
+
+  @@unique([userId, stickerId])
 }
 
 // Ch.22 A.11 — immutable once delivered (FR-NOT-001). Guests are reachable by
@@ -3246,6 +3363,111 @@ model ContentReport {
   @@index([kennelId, status])
   @@index([reporterId, createdAt])
   @@index([targetUserId])
+}
+
+// What the platform did on its own when enough different hashers reported the
+// same person (D74). Never a person's decision, and never final: a warning is
+// information, a hold ends by itself or when staff decide, and nothing here ends
+// an account. Append-only; lifting or confirming writes onto the row, it does not
+// remove it.
+enum EnforcementLevel {
+  // Told them, took nothing away.
+  WARN
+  // Suspended for a set time (24-72 hours by default), then restored by itself.
+  HOLD
+  // Suspended until staff decide. For a worse score, or a second hold.
+  REVIEW_HOLD
+}
+
+model AutoEnforcement {
+  id            String           @id @default(uuid()) @db.Uuid
+  userId        String           @db.Uuid
+  level         EnforcementLevel
+  // The credible, distinct reporters' weights added up; see enforcement.service.
+  score         Float
+  reporterCount Int
+  // The reports that counted, and how many of each reason: what staff review.
+  reportIds     Json
+  reasons       Json
+  // Reports filed before this did not count (a window, or the last clearance).
+  windowStart   DateTime
+  // A HOLD restores itself at this time unless staff confirm it first.
+  endsAt        DateTime?
+  liftedAt      DateTime?
+  liftedById    String?          @db.Uuid
+  confirmedAt   DateTime?
+  confirmedById String?          @db.Uuid
+  reviewNote    String?
+  createdAt     DateTime         @default(now())
+
+  user   User               @relation(fields: [userId], references: [id])
+  appeal EnforcementAppeal?
+
+  @@index([userId, createdAt])
+  @@index([endsAt, liftedAt])
+}
+
+// A held hasher's one answer back (D75). They cannot sign in, so it is filed with
+// their email and password and no session. Granting it lifts the hold; denying it
+// confirms the hold and tells them why. Append-only: it is decided once.
+enum AppealStatus {
+  OPEN
+  GRANTED
+  DENIED
+  // The hold ended by itself before anyone decided.
+  MOOT
+}
+
+model EnforcementAppeal {
+  id            String       @id @default(uuid()) @db.Uuid
+  // One appeal per hold: a new hold is a new chance to appeal.
+  enforcementId String       @unique @db.Uuid
+  userId        String       @db.Uuid
+  message       String
+  status        AppealStatus @default(OPEN)
+  decidedById   String?      @db.Uuid
+  decidedAt     DateTime?
+  // What the hasher reads when it is decided.
+  decisionNote  String?
+  createdAt     DateTime     @default(now())
+
+  enforcement AutoEnforcement @relation(fields: [enforcementId], references: [id])
+  user        User            @relation(fields: [userId], references: [id])
+
+  @@index([status, createdAt])
+}
+
+// Several reporters who look like one (D75). Raised when counting them as one
+// changes what the platform would have done, and left for staff: nothing happens
+// to anybody until a person says which it was.
+enum CoordinationOutcome {
+  PENDING
+  // Staff looked and they are independent: they count separately again.
+  CLEARED
+  // Staff agree it was a campaign: those reporters stop counting for six months.
+  CONFIRMED
+}
+
+model CoordinationFlag {
+  id             String              @id @default(uuid()) @db.Uuid
+  // The hasher being reported.
+  targetUserId   String              @db.Uuid
+  // Everyone in a suspected group, and why each group was linked.
+  reporterIds    Json
+  clusters       Json
+  rawScore       Float
+  effectiveScore Float
+  windowStart    DateTime
+  outcome        CoordinationOutcome @default(PENDING)
+  reviewedAt     DateTime?
+  reviewedById   String?             @db.Uuid
+  reviewNote     String?
+  createdAt      DateTime            @default(now())
+
+  target User @relation("CoordinationTarget", fields: [targetUserId], references: [id])
+
+  @@index([targetUserId, createdAt])
+  @@index([outcome, createdAt])
 }
 
 // Append-only: what a moderator did about a report, and when. The history a

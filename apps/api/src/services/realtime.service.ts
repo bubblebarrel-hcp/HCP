@@ -117,11 +117,14 @@ export function closeRealtime() {
 
 // Tell one hasher, on every device they are connected from. Never throws: a
 // failed push must not undo or fail the change it describes (the client's
-// fallback poll catches up).
+// fallback poll catches up). Returns how many devices were connected to hear it,
+// which is what a delivery receipt is built on (D73).
 export function emitToUser(userId: string, event: string, payload: unknown) {
   try {
     io?.to(room(userId)).emit(event, payload);
+    return io?.sockets.adapter.rooms.get(room(userId))?.size ?? 0;
   } catch (error) {
     logger.warn(`realtime emit ${event} failed: ${(error as Error).message}`);
+    return 0;
   }
 }

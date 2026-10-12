@@ -34,6 +34,7 @@ export const privacySchema = Joi.object({
   profileVisibility: Joi.string().valid('PUBLIC', 'FOLLOWERS', 'ONLY_ME'),
   // Who may start a direct message with me (D71).
   dmPolicy: Joi.string().valid('EVERYONE', 'NOBODY'),
+  readReceipts: Joi.boolean(),
   shareMilestones: Joi.boolean(),
 }).min(1);
 

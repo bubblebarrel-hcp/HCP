@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import * as authService from '../services/auth.service';
+import * as appealService from '../services/appeal.service';
 import * as verification from '../services/verification.service';
 import * as passwordReset from '../services/password-reset.service';
 import { ApiError, ok } from '../utils/http';
@@ -50,4 +51,13 @@ export async function requestPasswordReset(req: Request, res: Response) {
 export async function resetPassword(req: Request, res: Response) {
   await passwordReset.resetPassword(req.body.token, req.body.password);
   return ok(res, { reset: true });
+}
+
+// A held hasher's way back (D75). Anonymous, and proved with the password.
+export async function holdState(req: Request, res: Response) {
+  return ok(res, await appealService.stateFor(req.body.email, req.body.password));
+}
+
+export async function fileAppeal(req: Request, res: Response) {
+  return ok(res, await appealService.file(req.body.email, req.body.password, req.body.message), 201);
 }

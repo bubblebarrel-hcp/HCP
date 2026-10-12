@@ -28,6 +28,8 @@ export default function LoginPage() {
   // D31: an unconfirmed address is a specific, fixable state, not a failure to
   // shrug at. Hold the address so we can offer to send the link again.
   const [unverified, setUnverified] = useState<string | null>(null);
+  // D75: an account on hold is told why, and offered the way to answer back.
+  const [held, setHeld] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
 
   // Already signed in: there is nothing to do on this page, so go to the account.
@@ -38,11 +40,16 @@ export default function LoginPage() {
   const onSubmit = handleSubmit(async (values) => {
     try {
       setUnverified(null);
+      setHeld(null);
       await login(values.email, values.password);
       router.push('/account');
     } catch (err) {
       if (errorCode(err) === 'EMAIL_NOT_VERIFIED') {
         setUnverified(values.email);
+        return;
+      }
+      if (errorCode(err) === 'ACCOUNT_ON_HOLD') {
+        setHeld(errorMessage(err, 'Your account is on hold.'));
         return;
       }
       toast.error(errorMessage(err, 'Could not log in'));
@@ -91,6 +98,15 @@ export default function LoginPage() {
                 data-testid="login-resend"
               >
                 {resending ? 'Sending…' : 'Send the link again'}
+              </Button>
+            </div>
+          )}
+          {held && (
+            <div role="status" className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm" data-testid="login-held">
+              <p className="font-semibold">Your account is on hold</p>
+              <p className="mt-1 text-muted-foreground">{held}</p>
+              <Button asChild variant="outline" size="sm" className="mt-3">
+                <Link href="/auth/appeal" data-testid="login-appeal">Appeal this</Link>
               </Button>
             </div>
           )}

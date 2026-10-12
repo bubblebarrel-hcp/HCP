@@ -208,7 +208,25 @@ Exactly two hashers. The pair is stored once, in id order.
 | Active | Both can write. Starts here when the recipient follows the sender or they share an active kennel | Start (known), Requested (accepted, or the recipient replies), Declined (the decliner replies) |
 | Declined | The recipient said no. Silent: the asker still sees Requested and cannot send more. Reversible by the decliner replying | Requested |
 
-A Direct Message is Sent, then Deleted (the sender unsent it) or Removed (platform staff, after a report). The row stays; only what is served changes. Blocking either way makes the conversation a 404 for both. Archiving and muting are each side's own and change nothing for the other.
+A Direct Message is Sent, then Removed (platform staff, after a report). Deleted is what an unsend used to write (D71); unsending was withdrawn in D73, so no new row reaches it, and the value stays for the rows that did. The row stays; only what is served changes. A Sent message can be **edited** by its sender for two minutes (D73): that is a change of its words, not of its state, and the earlier words are kept. Each Sent message the sender wrote also has a **receipt**, derived and not stored: Sent, then Delivered (a device of the recipient received it), then Seen (the recipient read it, when both have receipts on); a Requested or Declined conversation shows Sent only. A message carries a kind: Text, Media (one to ten photos or clips), Sticker or Voice (D73); pictures, stickers and voice cannot be sent into a conversation that is still Requested by the asker. A file belonging to a message is Pending until its upload is confirmed, then Ready, and is sent once. Blocking either way makes the conversation a 404 for both. Archiving and muting are each side's own and change nothing for the other.
+
+## A.8c-2 Automatic Enforcement (D74)
+
+What the platform did by itself when enough different hashers reported one person. Append-only; one row per rung climbed.
+
+| State | Meaning | Enters from |
+|---|---|---|
+| Warned | A notice went to the hasher; nothing was taken away. Score reached the warn threshold | (none) |
+| On hold | The account is Suspended for a set time and every session ended. Lifts by itself at `endsAt` | (none), or a second hold within 90 days becomes Under review |
+| Under review | The account is Suspended until staff decide. Score reached the review threshold, or a second hold | (none) |
+| Lifted | The hold ended by itself, or staff lifted it (account restored), or a warning was dismissed. Reports filed before this moment stop counting | Warned, On hold, Under review, Confirmed |
+| Confirmed | Staff decided the hold stands. It no longer lifts by itself and belongs to staff | On hold, Under review |
+
+**Appeal (D75).** A hold may have one Appeal: Open, then Granted (staff lifted the hold), Denied (staff kept it, with words the hasher is shown) or Moot (the hold ended by itself first). Only a Hold or Held-for-review can be appealed.
+
+**Coordination flag (D75).** Raised when counting linked reporters as one lowers what the platform would have done: Pending, then Cleared (staff say they were independent; they count separately again for that hasher) or Confirmed (staff say it was a campaign; those reporters stop counting for six months). Nothing is done to the reported hasher by a pending flag beyond the lower rung.
+
+A person changing the account's status by hand takes over from any open automatic hold (Confirmed on a suspension, Lifted on a reinstatement). Nothing automatic deactivates or removes an account. Platform staff are never acted on.
 
 ## A.8d Photo Tag (D60)
 

@@ -960,6 +960,112 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
       };
     }
     // A moderator has something to say to a hasher. The words are theirs.
+    // The platform acted by itself because enough different hashers reported this
+    // one (D74). Says what happened and when it ends; never who reported, and
+    // never what they said.
+    case 'AutoEnforcementApplied': {
+      const userId = event.aggregateId;
+      const level = str(payload, 'level');
+      const endsAt = str(payload, 'endsAt');
+      const until = endsAt ? new Date(endsAt).toUTCString() : null;
+      const copy =
+        level === 'WARN'
+          ? {
+              title: 'A reminder about the community rules',
+              body: 'Several members have reported your recent activity. Nothing has been taken away, and a moderator may take a look. Please read the community rules.',
+            }
+          : level === 'HOLD'
+            ? {
+                title: 'Your account is on hold',
+                body: `Several members reported your activity, so your account is paused while moderators review it${until ? `. It will be restored on ${until}` : ''} unless a moderator decides otherwise.`,
+              }
+            : {
+                title: 'Your account is under review',
+                body: 'Several members reported your activity, so your account is paused until a moderator has reviewed it. You will hear from us.',
+              };
+      return {
+        category: C.SYSTEM,
+        priority: P.HIGH,
+        title: copy.title,
+        body: copy.body,
+        contextType: 'Moderation',
+        contextId: null,
+        kennelId: null,
+        recipients: [userId],
+        pushByDefault: true,
+        emailByDefault: true,
+      };
+    }
+    case 'AutoEnforcementLifted': {
+      // Only a hold ending is news to the hasher; a warning dismissed is not.
+      if (str(payload, 'level') === 'WARN' || payload.restored !== true) return null;
+      return {
+        category: C.SYSTEM,
+        priority: P.HIGH,
+        title: 'Your account is active again',
+        body:
+          str(payload, 'by') === 'STAFF'
+            ? payload.appealed === true
+              ? 'A moderator reviewed your appeal and restored your account. You can sign in again.'
+              : 'A moderator reviewed the reports and restored your account. You can sign in again.'
+            : 'The hold on your account has ended. You can sign in again.',
+        contextType: 'Moderation',
+        contextId: null,
+        kennelId: null,
+        recipients: [event.aggregateId],
+        pushByDefault: true,
+        emailByDefault: true,
+      };
+    }
+    // A held hasher appealed (D75). Staff are told there is one and nothing of what
+    // it says: that is for whoever opens it.
+    case 'EnforcementAppealFiled': {
+      const staff = await platformAdminIds();
+      return {
+        category: C.SYSTEM,
+        priority: P.HIGH,
+        title: 'A held hasher has appealed',
+        body: 'Open Automatic actions to read it and decide.',
+        contextType: 'Moderation',
+        contextId: null,
+        kennelId: null,
+        recipients: staff,
+        pushByDefault: true,
+      };
+    }
+    // The answer, when it is no. A yes arrives as the account being restored.
+    case 'EnforcementAppealDecided': {
+      if (str(payload, 'outcome') !== 'DENIED') return null;
+      const note = str(payload, 'note');
+      return {
+        category: C.SYSTEM,
+        priority: P.HIGH,
+        title: 'A moderator reviewed your appeal',
+        body: `The hold on your account stands.${note ? ` They said: ${note}` : ''}`,
+        contextType: 'Moderation',
+        contextId: null,
+        kennelId: null,
+        recipients: [event.aggregateId],
+        pushByDefault: true,
+        emailByDefault: true,
+      };
+    }
+    // Several reporters look like one (D75): the platform held off, and a person
+    // is asked which it was.
+    case 'CoordinatedReportingSuspected': {
+      const staff = await platformAdminIds();
+      return {
+        category: C.SYSTEM,
+        priority: P.HIGH,
+        title: 'Reports may be coordinated',
+        body: 'Several reports about one hasher come from accounts that look linked, so the platform counted them as one. Open Automatic actions to say which it was.',
+        contextType: 'Moderation',
+        contextId: null,
+        kennelId: null,
+        recipients: staff,
+        pushByDefault: true,
+      };
+    }
     case 'ModerationWarningIssued': {
       const targetUserId = str(payload, 'targetUserId');
       if (!targetUserId) return null;

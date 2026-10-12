@@ -97,7 +97,7 @@ Preserve these product decisions unless the Product Bible is explicitly updated:
 - Trail release can be hidden, timed, or permission-gated.
 - A hasher has an individual identity that can hold memberships in one or more kennels.
 - Kennels maintain local identity, roles, governance, policies, run customs, and settings.
-- One-to-one direct messaging is in scope as of D71 (text only, request-gated; supersedes D8).
+- One-to-one direct messaging is in scope as of D71 (request-gated; supersedes D8) and carries words, pictures, clips, stickers and voice as of D73, with receipts, a two-minute edit window and no unsend.
 - Communication should begin with announcements, notifications, channels, run updates, and governance/workflow communication.
 - Trail planning, live participation, media upload, scribe/trail report, run capsule, and historical archive workflows are core product workflows.
 - Governance should be configurable by kennel instead of hard-coded to a single committee model.

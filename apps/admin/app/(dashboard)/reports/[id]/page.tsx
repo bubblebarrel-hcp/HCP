@@ -54,13 +54,56 @@ function HasherCard({ title, hasher, tone }: { title: string; hasher: ReportHash
   );
 }
 
+// A picture, clip, recording or sticker in a reported message (D73). Never loaded
+// until staff ask: each look fetches a five-minute address and is written to the
+// audit log, because a private file was opened.
+function ReportedFile({ reportId, fileId, kind, label }: { reportId: string; fileId: string; kind: string; label: string }) {
+  const [shown, setShown] = useState<{ url: string; mimeType: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function show() {
+    setBusy(true);
+    try {
+      const res = await api.get<{ data: { url: string; mimeType: string } }>(`/admin/reports/${reportId}/files/${fileId}`);
+      setShown(res.data.data);
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not open that file'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!shown) {
+    return (
+      <Button type="button" variant="outline" size="sm" onClick={() => void show()} disabled={busy} data-testid="report-file-show">
+        {busy ? 'Opening…' : `Show ${label}`}
+      </Button>
+    );
+  }
+  if (kind === 'VIDEO') return <video src={shown.url} controls className="max-h-64 rounded-md bg-black" />;
+  if (kind === 'AUDIO') return <audio src={shown.url} controls />;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={shown.url} alt={label} className="max-h-64 rounded-md" referrerPolicy="no-referrer" />;
+}
+
 function Evidence({ report }: { report: ReportDetail }) {
   const s = report.snapshot as Record<string, string | null | undefined>;
   if (report.targetType === 'USER') return null;
   // A direct message (D71): staff see only what the reporter showed them, the
   // message and the few before it. Never the rest of the conversation.
   if (report.targetType === 'DIRECT_MESSAGE') {
-    const messages = (report.snapshot.messages ?? []) as { id: string; senderId: string; body: string; createdAt: string; reported: boolean }[];
+    const messages = (report.snapshot.messages ?? []) as {
+      id: string;
+      senderId: string;
+      kind?: string;
+      body: string;
+      // What it said before it was edited, oldest first (D73).
+      editedFrom?: string[];
+      attachments?: { id: string; kind: string; mimeType: string; durationSec: number | null }[];
+      stickerId?: string | null;
+      createdAt: string;
+      reported: boolean;
+    }[];
     const reportedSender = report.answerable?.id;
     return (
       <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm" data-testid="report-evidence">
@@ -74,7 +117,21 @@ function Evidence({ report }: { report: ReportDetail }) {
                 {m.senderId === reportedSender ? 'Reported hasher' : 'Reporter'} · {formatDate(m.createdAt)}
                 {m.reported ? ' · reported' : ''}
               </p>
-              <p className="whitespace-pre-line">{m.body}</p>
+              {m.body && <p className="whitespace-pre-line">{m.body}</p>}
+              {m.editedFrom && m.editedFrom.length > 0 && (
+                <p className="mt-1 text-xs text-muted-foreground" data-testid="report-edited-from">
+                  Edited. First said: <span className="whitespace-pre-line text-foreground">{m.editedFrom[0]}</span>
+                </p>
+              )}
+              {(m.attachments?.length || m.stickerId) && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {m.attachments?.map((a) => (
+                    <ReportedFile key={a.id} reportId={report.id} fileId={a.id} kind={a.kind} label={a.kind === 'AUDIO' ? 'voice message' : a.kind === 'VIDEO' ? 'video' : 'picture'} />
+                  ))}
+                  {m.stickerId && <ReportedFile reportId={report.id} fileId={m.stickerId} kind="STICKER" label="sticker" />}
+                </div>
+              )}
+              {!m.body && !m.attachments?.length && !m.stickerId && <p className="text-muted-foreground">(no words)</p>}
             </li>
           ))}
         </ul>
@@ -177,6 +234,23 @@ export default function ReportPage({ params }: { params: Promise<{ id: string }>
               {report.details && <CardDescription className="whitespace-pre-line">&ldquo;{report.details}&rdquo;</CardDescription>}
             </CardHeader>
             <CardContent className="space-y-4">
+              {report.enforcement && !report.enforcement.liftedAt && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm" data-testid="report-enforcement">
+                  <p className="font-medium">
+                    {report.enforcement.level === 'WARN'
+                      ? 'The platform has already warned this hasher.'
+                      : report.enforcement.confirmedAt
+                        ? 'A moderator confirmed an automatic hold on this hasher.'
+                        : 'The platform has put this hasher on hold.'}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {report.enforcement.reporterCount} different hashers reported them (score {report.enforcement.score}).{' '}
+                    <Link href="/enforcement" className="text-primary-strong hover:underline">
+                      Review it
+                    </Link>
+                  </p>
+                </div>
+              )}
               <Evidence report={report} />
 
               {isUser && report.target && (

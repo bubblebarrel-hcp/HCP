@@ -11,6 +11,7 @@ import {
 import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
 import { displayName } from '../serializers/user';
+import * as enforcement from './enforcement.service';
 import { recordAudit } from './record.service';
 import { getNumberSetting } from './settings.service';
 import { verificationReadiness } from './admin-oversight.service';
@@ -211,6 +212,8 @@ export async function updateStatus(actorId: string, id: string, status: AccountS
       newState: { status },
       reason: reason ?? null,
     });
+    // A person changed this by hand: any automatic hold gives way to it (D74).
+    await enforcement.afterStaffChange(tx, id, status, actorId);
     return user;
   });
 }

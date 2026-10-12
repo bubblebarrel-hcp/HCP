@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
+import { Composer } from '@/components/messages/composer';
+import { MessageBubble } from '@/components/messages/message-bubble';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ActionDialog } from '@/components/ui/action-dialog';
@@ -14,22 +16,20 @@ import { isRealtimeConnected, useRealtimeConnection, useRealtimeEvent } from '@/
 import {
   acceptRequest,
   archiveConversation,
-  clientKey,
   declineRequest,
   getConversation,
   getMessages,
   markConversationRead,
-  MAX_MESSAGE,
-  sendMessage,
   setConversationMuted,
-  unsendMessage,
   type ConversationDetail,
   type DirectMessage,
+  type Receipt,
 } from '@/lib/messages';
 
-// One conversation (D71), as the web has it (app/messages/[id]/page.tsx). There
-// is no socket: while it is open the newest page is re-read every few seconds
-// and merged by id, which also picks up a message the other person unsent.
+// One conversation (D71, D73), as the web has it (app/messages/[id]/page.tsx). The
+// socket delivers what happens in it (D72); the newest page is also re-read every
+// few seconds as the net and merged by id, which picks up an edit, a removal and
+// the ticks on what I sent.
 
 const POLL_MS = 4_000;
 
@@ -39,7 +39,17 @@ const merge = (current: DirectMessage[], incoming: DirectMessage[]) => {
   return [...map.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
 };
 
-const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+// A receipt only ever moves forward: a late, stale answer cannot take a "seen" back.
+const RANK: Record<Receipt, number> = { SENT: 0, DELIVERED: 1, SEEN: 2 };
+
+function applyReceipt(messages: DirectMessage[], at: { deliveredAt: string | null; seenAt: string | null }) {
+  return messages.map((m) => {
+    if (!m.mine || !m.receipt || m.status !== 'SENT') return m;
+    const next: Receipt =
+      at.seenAt && m.createdAt <= at.seenAt ? 'SEEN' : at.deliveredAt && m.createdAt <= at.deliveredAt ? 'DELIVERED' : m.receipt;
+    return RANK[next] > RANK[m.receipt] ? { ...m, receipt: next } : m;
+  });
+}
 
 export default function ConversationScreen() {
   const theme = useTheme();
@@ -50,9 +60,8 @@ export default function ConversationScreen() {
   const [missing, setMissing] = useState(false);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
-  const [draft, setDraft] = useState('');
-  const [sending, setSending] = useState(false);
-  const key = useRef(clientKey());
+  const [editing, setEditing] = useState<DirectMessage | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const scroller = useRef<ScrollView>(null);
   const first = useRef(true);
 
@@ -85,7 +94,14 @@ export default function ConversationScreen() {
     if (!e.message.mine) markConversationRead(id).catch(() => undefined);
   });
   useRealtimeEvent(['dm:message-updated'], (e: { conversationId: string; message: DirectMessage }) => {
-    if (e.conversationId === id) setMessages((current) => merge(current, [e.message]));
+    if (e.conversationId !== id) return;
+    setMessages((current) => merge(current, [e.message]));
+    // Someone removed the message I was editing.
+    setEditing((open) => (open?.id === e.message.id && e.message.status !== 'SENT' ? null : open));
+  });
+  // The other person's device received, or read, what I sent (D73).
+  useRealtimeEvent(['dm:receipt'], (e: { conversationId: string; deliveredAt: string | null; seenAt: string | null }) => {
+    if (e.conversationId === id) setMessages((current) => applyReceipt(current, e));
   });
   useRealtimeEvent(['dm:conversation', 'dm:refresh', 'resync'], (e?: { conversationId?: string }) => {
     if (!e?.conversationId || e.conversationId === id) void refresh();
@@ -109,6 +125,23 @@ export default function ConversationScreen() {
     };
   }, [user, id, refresh]);
 
+  // The edit window shuts by itself: a clock ticks only while a message of mine
+  // can still be edited, so a quiet screen does no work.
+  const anyEditable = messages.some((m) => m.editableUntil && new Date(m.editableUntil).getTime() > now);
+  useEffect(() => {
+    if (!anyEditable) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [anyEditable]);
+  // An edit that ran out while open stops being an edit.
+  useEffect(() => {
+    if (editing?.editableUntil && new Date(editing.editableUntil).getTime() <= now) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEditing(null);
+      Alert.alert('Too late to edit', 'The two minutes for editing that message are up.');
+    }
+  }, [now, editing]);
+
   async function older() {
     const oldest = messages[0];
     if (!oldest) return;
@@ -118,24 +151,6 @@ export default function ConversationScreen() {
       setHasMore(page.hasMore);
     } catch (err) {
       Alert.alert('Could not load earlier messages', errorMessage(err, 'Try again'));
-    }
-  }
-
-  async function send() {
-    const text = draft.trim();
-    if (!text || sending) return;
-    setSending(true);
-    try {
-      const sent = await sendMessage(id, text, key.current);
-      key.current = clientKey();
-      setDraft('');
-      setMessages((current) => merge(current, [sent.message]));
-      setDetail((d) => (d ? { ...d, status: sent.status, isRequest: false } : d));
-      void refresh();
-    } catch (err) {
-      Alert.alert('Could not send that', errorMessage(err, 'Try again'));
-    } finally {
-      setSending(false);
     }
   }
 
@@ -173,16 +188,6 @@ export default function ConversationScreen() {
     }
   }
 
-  async function unsend(message: DirectMessage) {
-    try {
-      await unsendMessage(message.id);
-      setMessages((current) => current.map((m) => (m.id === message.id ? { ...m, body: null, status: 'DELETED' } : m)));
-    } catch (err) {
-      Alert.alert('Could not unsend that', errorMessage(err, 'Try again'));
-      throw err;
-    }
-  }
-
   if (missing) {
     return (
       <ThemedView type="canvas" style={styles.center}>
@@ -202,7 +207,11 @@ export default function ConversationScreen() {
 
   return (
     <ThemedView type="canvas" style={styles.screen}>
-      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Padding on Android as well as iOS: with edge-to-edge drawing the window no
+          longer resizes for the keyboard, so without it the keyboard sat on top of the
+          box being typed in. Here the message box is pinned to the bottom, which is
+          why this screen needs it and a scrolling form does not. */}
+      <KeyboardAvoidingView style={styles.screen} behavior="padding">
         <View testID="conversation" style={[styles.header, { borderBottomColor: theme.border }]}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back to messages" onPress={() => router.back()}>
             <ThemedText style={styles.back}>←</ThemedText>
@@ -237,6 +246,7 @@ export default function ConversationScreen() {
           ref={scroller}
           testID="message-list"
           contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}>
           {hasMore && (
             <Button variant="ghost" size="sm" onPress={() => void older()}>
@@ -244,55 +254,7 @@ export default function ConversationScreen() {
             </Button>
           )}
           {messages.map((m) => (
-            <View key={m.id} testID="message" style={[styles.msg, m.mine ? styles.mine : styles.theirs]}>
-              <View
-                style={[
-                  styles.bubble,
-                  m.status !== 'SENT'
-                    ? { borderWidth: 1, borderStyle: 'dashed', borderColor: theme.border }
-                    : { backgroundColor: m.mine ? theme.primary : theme.backgroundElement },
-                ]}>
-                <ThemedText
-                  style={m.status !== 'SENT' ? [styles.sm, styles.italic] : m.mine ? [styles.sm, { color: theme.onPrimary }] : styles.sm}
-                  themeColor={m.status !== 'SENT' ? 'textSecondary' : undefined}>
-                  {m.status === 'SENT'
-                    ? m.body
-                    : m.status === 'DELETED'
-                      ? m.mine
-                        ? 'You unsent this message'
-                        : 'This message was unsent'
-                      : 'Removed by moderators'}
-                </ThemedText>
-              </View>
-              <View style={styles.meta}>
-                <ThemedText themeColor="textSecondary" style={styles.xs}>
-                  {clock(m.createdAt)}
-                </ThemedText>
-                {m.status === 'SENT' && m.mine && (
-                  <ActionDialog
-                    title="Unsend this message?"
-                    description="It disappears for both of you. They may already have read it."
-                    confirmLabel="Unsend"
-                    destructive
-                    onConfirm={() => unsend(m)}
-                    trigger={(open) => (
-                      <Pressable accessibilityRole="button" testID="message-unsend" onPress={open}>
-                        <ThemedText themeColor="textSecondary" style={styles.xs}>
-                          Unsend
-                        </ThemedText>
-                      </Pressable>
-                    )}
-                  />
-                )}
-                {m.status === 'SENT' && !m.mine && (
-                  <Pressable accessibilityRole="button" testID="message-report" onPress={() => router.push(`/report/DIRECT_MESSAGE/${m.id}`)}>
-                    <ThemedText themeColor="textSecondary" style={styles.xs}>
-                      Report
-                    </ThemedText>
-                  </Pressable>
-                )}
-              </View>
-            </View>
+            <MessageBubble key={m.id} message={m} now={now} onEdit={setEditing} />
           ))}
         </ScrollView>
 
@@ -317,21 +279,18 @@ export default function ConversationScreen() {
             </View>
           </View>
         ) : detail.canReply ? (
-          <View style={[styles.composer, { borderTopColor: theme.border }]}>
-            <TextInput
-              testID="message-input"
-              value={draft}
-              onChangeText={setDraft}
-              maxLength={MAX_MESSAGE}
-              multiline
-              placeholder="Write a message"
-              placeholderTextColor={theme.textSecondary}
-              style={[styles.input, { borderColor: theme.border, color: theme.text, backgroundColor: theme.card }]}
-            />
-            <Button testID="message-send" disabled={!draft.trim() || sending} onPress={() => void send()}>
-              Send
-            </Button>
-          </View>
+          <Composer
+            conversationId={id}
+            canShareFiles={detail.canShareFiles}
+            editing={editing}
+            onCancelEdit={() => setEditing(null)}
+            onSent={({ message, status }) => {
+              setMessages((current) => merge(current, [message]));
+              setDetail((d) => (d ? { ...d, status, isRequest: false } : d));
+              void refresh();
+            }}
+            onEdited={(message) => setMessages((current) => merge(current, [message]))}
+          />
         ) : (
           <View style={[styles.footer, { borderTopColor: theme.border }]}>
             <ThemedText themeColor="textSecondary" style={styles.sm} testID="cannot-reply">
@@ -356,16 +315,7 @@ const styles = StyleSheet.create({
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
   name: { flexShrink: 1, fontSize: 16, lineHeight: 22, fontWeight: '600' },
   list: { padding: 16, gap: 8 },
-  msg: { gap: 2, maxWidth: '85%' },
-  mine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
-  theirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
-  bubble: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
   sm: { fontSize: 14, lineHeight: 20 },
-  xs: { fontSize: 12, lineHeight: 16 },
-  italic: { fontStyle: 'italic' },
-  meta: { flexDirection: 'row', gap: 8 },
   footer: { padding: 16, gap: 12, borderTopWidth: 1 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 12, borderTopWidth: 1 },
-  input: { flex: 1, maxHeight: 120, minHeight: 40, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14 },
 });
