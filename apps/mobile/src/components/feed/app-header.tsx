@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Moon, Search, Sun } from 'lucide-react-native';
+import { MessageCircle, Moon, Search, Sun } from 'lucide-react-native';
 import { usePathname, useRouter } from 'expo-router';
 
 import { HashLogo } from '@/components/brand/hash-logo';
@@ -11,6 +11,8 @@ import { useAuth } from '@/context/auth';
 import { useThemePreference } from '@/context/theme-preference';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
+import { unreadCounts } from '@/lib/messages';
+import { useRealtimeConnection, useRealtimeEvent } from '@/lib/realtime';
 
 // Orange is a fill and carries Hash Black text in both schemes.
 const HASH_BLACK = '#171717';
@@ -35,6 +37,12 @@ export function AppHeader({ onSearch }: { onSearch: () => void }) {
   const { user, loading } = useAuth();
   const { scheme, setPreference } = useThemePreference();
   const [unread, setUnread] = useState(0);
+  // Conversations waiting on this hasher: unread ones plus message requests (D71).
+  const [waiting, setWaiting] = useState(0);
+
+  // The header is on every screen, so this is what keeps the socket open (D72).
+  useRealtimeConnection(Boolean(user));
+  useRealtimeEvent(['dm:unread'], (c: { unread: number; requests: number }) => setWaiting(c.unread + c.requests));
 
   // Asked again whenever the route changes, so the badge is right after coming
   // back from the notifications screen (the header lives above the navigator,
@@ -49,7 +57,15 @@ export function AppHeader({ onSearch }: { onSearch: () => void }) {
     api<{ unread: number }>('/me/notifications/unread-count')
       .then((data) => setUnread(data.unread))
       .catch(() => {});
+    unreadCounts()
+      .then((c) => setWaiting(c.unread + c.requests))
+      .catch(() => {});
   }, [user, pathname]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!user) setWaiting(0);
+  }, [user]);
 
   const next = scheme === 'dark' ? 'light' : 'dark';
 
@@ -75,6 +91,21 @@ export function AppHeader({ onSearch }: { onSearch: () => void }) {
           style={({ pressed }) => [styles.round, { opacity: pressed ? 0.7 : 1 }]}>
           {scheme === 'dark' ? <Sun size={20} color={theme.text} /> : <Moon size={20} color={theme.text} />}
         </Pressable>
+        {user && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={waiting > 0 ? `Messages, ${waiting} waiting` : 'Messages'}
+            testID="messages-link"
+            onPress={() => router.push('/messages')}
+            style={({ pressed }) => [styles.round, { opacity: pressed ? 0.7 : 1 }]}>
+            <MessageCircle size={20} color={theme.text} />
+            {waiting > 0 && (
+              <View style={[styles.badge, { backgroundColor: theme.primary }]} testID="messages-count">
+                <ThemedText style={[styles.badgeText, { color: HASH_BLACK }]}>{waiting > 9 ? '9+' : waiting}</ThemedText>
+              </View>
+            )}
+          </Pressable>
+        )}
         {user && (
           <Pressable
             accessibilityRole="button"
@@ -125,7 +156,7 @@ const styles = StyleSheet.create({
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   companion: { width: 40, height: 40 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   round: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   join: { minHeight: 40, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   badge: {
