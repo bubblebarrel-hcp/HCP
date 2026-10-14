@@ -374,3 +374,17 @@ export interface CoordinationRow {
   target: { id: string; name: string; username: string | null; status: string };
   groups: { signals: string[]; reporters: { id: string; name: string; username: string | null; joined: string | null }[] }[];
 }
+
+// D76: a platform broadcast, as the admin list shows it.
+export interface BroadcastRow {
+  id: string;
+  title: string;
+  body: string;
+  audience: 'EVERYONE' | 'KENNEL';
+  kennelId: string | null;
+  kennelName: string | null;
+  push: boolean;
+  urgent: boolean;
+  recipientCount: number;
+  createdAt: string;
+}

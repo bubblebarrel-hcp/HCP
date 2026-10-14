@@ -1395,3 +1395,18 @@ Decision: A held hasher can appeal, and reporters who look like one count as one
 - **Checked.** `scripts/enforcement-check.ts` is now 95 assertions: the D74 set (48) plus the appeal path end to end (wrong password, a one-word appeal, one per hold, the sign-in text at each stage, staff seeing the words, notified, turning down needing a reason and the hasher reading it, a granted appeal restoring the account, a staff lift answering an open appeal, a hold ending first making it moot, the sweeper never lifting a turned-down hold) and coordination (independent strangers not grouped, a burst counting as one, the flag and its explanation, a flag widening and not duplicating, independent and campaign outcomes and their effects, one signal being ordinary, follows linking, a ring linking, an account with no life counting half). In a browser: the held login, the appeal form and its confirmation, and both admin tabs.
 
 Rationale: D74 trusted a count; this is what keeps that from being a weapon. The stakeholder asked for both. The ones affected most by being wrong are the held person (who needs a voice) and the hasher being reported by a ring (who needs the platform to hesitate), and neither can be protected by loosening a threshold.
+
+
+## 2026-10-14 - D76: Platform broadcasts
+
+Status: Active
+
+Decision: Platform staff can send one message to everyone, or to one kennel's active members, from **Admin → Broadcasts** (`POST /admin/broadcasts`). The Bible is silent on platform-wide messages (Chapter 9 lists announcements only as kennel content), so this is inferred and logged here. It is for update notices, outages, policy changes and events.
+
+- **It is a notification, not a message.** It is not a direct message (D71) and not a kennel's own `Announcement`. A `Broadcast` row holds the words; `BroadcastSent` is the domain event (aggregate `Broadcast`, actor the staff member); `notification.service#specFor` turns it into one `ANNOUNCEMENT` notification per recipient. Every hasher's own switches for that category still win (BR-NOT-003), and a kennel's own announcement rule cannot silence the platform, so the spec carries no kennel.
+- **Audience.** Only two: **everyone** (every ACTIVE account) and **one kennel's** ACTIVE members who are ACTIVE accounts. No "officers only", no per-run or per-person targeting. The form shows how many it will reach before sending, and a broadcast to nobody is refused. The sender is not told about their own broadcast (the usual rule), so a staff member sees it only in the list.
+- **In app by default; push is opt-in.** Off, it waits in the notification list. **Also send a push** asks for a phone notification, still only for hashers with a registered device who have not turned announcement pushes off, and still held by quiet hours and digests.
+- **Urgent** is `CRITICAL` priority: it **always asks for a push** and skips quiet hours and digests. It is meant for outages and safety. A hasher who switched announcement pushes off still gets no push; the in-app copy always lands.
+- **Append-only.** A sent broadcast is never edited or deleted. It stays in the admin list (who, to whom, how many, urgent or not) and in the audit log (`broadcast.send`, policy `platform-admin`). Message limits: title 3-80, body 3-500 characters.
+- **Not built.** Scheduling for later, a banner inside the app, other audiences, email, a hasher's reply, and any read-count per broadcast.
+- **Checked.** Admin only (a hasher gets 403); a kennel audience needs a kennel; a short title is refused; an empty kennel is refused; a send to 16 members wrote 16 `CRITICAL` in-app notifications, one event, one audit row; the admin form, count, confirm dialog and history were checked in a browser.

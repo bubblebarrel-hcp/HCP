@@ -18,6 +18,9 @@ import {
 } from '../validators/moderation.validator';
 import {
   auditQuery,
+  broadcastListQuery,
+  broadcastPreviewQuery,
+  broadcastSchema,
   contentQuery,
   eventsQuery,
   listUsersQuery,
@@ -72,6 +75,11 @@ router.post('/appeals/:id/decide', validate(appealDecisionSchema), asyncHandler(
 // Reporters who look like one, waiting for a person to say which it was (D75).
 router.get('/coordination', validate(coordinationQuery, 'query'), asyncHandler(moderationController.coordination));
 router.post('/coordination/:id/review', validate(coordinationReviewSchema), asyncHandler(moderationController.reviewCoordination));
+
+// Platform broadcasts (D76).
+router.get('/broadcasts', validate(broadcastListQuery, 'query'), asyncHandler(adminController.listBroadcasts));
+router.get('/broadcasts/preview', validate(broadcastPreviewQuery, 'query'), asyncHandler(adminController.previewBroadcast));
+router.post('/broadcasts', validate(broadcastSchema), asyncHandler(adminController.sendBroadcast));
 
 // Governance record and event stream (append-only; read here, never edited).
 router.get('/audit', validate(auditQuery, 'query'), asyncHandler(adminController.listAudit));

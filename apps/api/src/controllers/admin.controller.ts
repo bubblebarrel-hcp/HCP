@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import * as adminService from '../services/admin.service';
 import * as audit from '../services/admin-audit.service';
 import * as oversight from '../services/admin-oversight.service';
+import * as broadcasts from '../services/broadcast.service';
 import { sendDueDigests } from '../services/digest.service';
 import { runAllReminders } from '../services/escalation.service';
 import { nudgeUnharedRuns } from '../services/reminder.service';
@@ -95,4 +96,17 @@ export async function takedownPost(req: Request, res: Response) {
 }
 export async function takedownReel(req: Request, res: Response) {
   return ok(res, await oversight.takedownReel(actor(req), req.params.id, req.body.reason));
+}
+
+// D76: platform broadcasts.
+export async function listBroadcasts(req: Request, res: Response) {
+  return ok(res, await broadcasts.list(req.query as unknown as { page: number; limit: number }));
+}
+export async function previewBroadcast(req: Request, res: Response) {
+  const { audience, kennelId } = req.query as unknown as { audience: 'EVERYONE' | 'KENNEL'; kennelId?: string };
+  return ok(res, await broadcasts.preview(audience, kennelId));
+}
+export async function sendBroadcast(req: Request, res: Response) {
+  if (!req.user) throw ApiError.unauthorized();
+  return ok(res, { broadcast: await broadcasts.send(req.user.id, req.body) }, 201);
 }

@@ -786,6 +786,7 @@ model User {
   supplementalArtifacts         SupplementalArtifact[]
   mediaUploads                  MediaAsset[]
   announcements                 Announcement[]
+  broadcasts                    Broadcast[]
   channelMemberships            ChannelMember[]
   messages                      Message[]
   directParticipations          DirectParticipant[]
@@ -1106,6 +1107,7 @@ model Kennel {
   runs                Run[]
   eventHosts          EventHostKennel[]
   announcements       Announcement[]
+  broadcasts          Broadcast[]
   channels            Channel[]
   galleries           Gallery[]
   reels               Reel[]
@@ -2368,6 +2370,35 @@ model Announcement {
   author User   @relation(fields: [authorId], references: [id])
 
   @@index([kennelId, publishedAt])
+}
+
+// D76: a message from the platform to every hasher, or to one kennel's active
+// members. Not a direct message and not a kennel's own Announcement: staff write
+// it, it is delivered as a notification, and it is never edited or deleted.
+enum BroadcastAudience {
+  EVERYONE
+  KENNEL
+}
+
+model Broadcast {
+  id             String            @id @default(uuid()) @db.Uuid
+  authorId       String            @db.Uuid
+  audience       BroadcastAudience
+  kennelId       String?           @db.Uuid
+  title          String
+  body           String
+  // Asked for a phone notification. Urgent implies it.
+  push           Boolean           @default(false)
+  // Skips digests and quiet hours (CRITICAL priority).
+  urgent         Boolean           @default(false)
+  // Who it was addressed to when it was sent.
+  recipientCount Int
+  createdAt      DateTime          @default(now())
+
+  author User    @relation(fields: [authorId], references: [id])
+  kennel Kennel? @relation(fields: [kennelId], references: [id])
+
+  @@index([createdAt])
 }
 
 // Group-scoped (kennel, event, committee, run). One-to-one conversations are

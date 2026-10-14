@@ -22,6 +22,7 @@ import prisma from '../config/prisma';
 import { ApiError, isUuid, page } from '../utils/http';
 import { resolveSubject } from './subject.service';
 import { reachable } from './block.service';
+import { priorityOf, recipientIds as broadcastRecipientIds } from './broadcast.service';
 import { isEmailConfigured, sendEmail } from './email.service';
 import { isExpoPushToken, isPushConfigured, registerDevice, revokeDevice, sendPush } from './push.service';
 import { DIGEST_LABELS } from '../utils/digest-schedule';
@@ -280,6 +281,28 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
           // A message is something you want to hear every time while you are away.
           pushEach: true,
         },
+      };
+    }
+    // ── Platform broadcast (D76) ──
+    //
+    // Words from staff to everyone or to one kennel's members. The words live on
+    // the Broadcast row, not in the event. The kennel is left off the spec on
+    // purpose: a kennel's own rule for announcements governs what its officers
+    // post, and cannot silence the platform. A hasher's own switch for the
+    // category still wins, and urgent (CRITICAL) skips quiet hours and digests.
+    case 'BroadcastSent': {
+      const broadcast = await prisma.broadcast.findUnique({ where: { id: event.aggregateId } });
+      if (!broadcast) return null;
+      return {
+        category: C.ANNOUNCEMENT,
+        priority: priorityOf(broadcast.urgent),
+        title: broadcast.title,
+        body: broadcast.body,
+        contextType: 'Broadcast',
+        contextId: broadcast.id,
+        kennelId: null,
+        recipients: await broadcastRecipientIds(broadcast.audience, broadcast.kennelId),
+        pushByDefault: broadcast.push,
       };
     }
     // ── Membership ──

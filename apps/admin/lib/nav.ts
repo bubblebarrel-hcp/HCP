@@ -5,6 +5,7 @@ import {
   Flag,
   Image as ImageIcon,
   LayoutDashboard,
+  Megaphone,
   Settings,
   ShieldAlert,
   UserCheck,
@@ -47,6 +48,7 @@ export const NAV: NavGroup[] = [
   {
     label: 'Platform',
     items: [
+      { href: '/broadcasts', label: 'Broadcasts', icon: Megaphone },
       { href: '/audit', label: 'Audit & events', icon: Activity },
       { href: '/settings', label: 'Settings', icon: Settings },
     ],
