@@ -34,6 +34,7 @@ import profileRoutes from './routes/profile.routes';
 import invitationRoutes from './routes/invitation.routes';
 import searchRoutes from './routes/search.routes';
 import messageRoutes from './routes/message.routes';
+import appVersionRoutes from './routes/app-version.routes';
 import { localRoot, storageDriver } from './services/storage.service';
 import { startOutbox, stopOutbox } from './services/outbox.service';
 import { closeRealtime, initRealtime } from './services/realtime.service';
@@ -90,6 +91,8 @@ app.use(
   }),
 );
 
+// The phone app's version gate: public, before anything that needs a session.
+app.use('/api/v1', appVersionRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/kennels', kennelRoutes);
 app.use('/api/v1/admin', adminRoutes);

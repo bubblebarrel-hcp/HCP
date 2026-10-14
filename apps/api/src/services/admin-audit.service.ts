@@ -3,7 +3,7 @@ import prisma from '../config/prisma';
 import { ApiError, page } from '../utils/http';
 import { displayName } from '../serializers/user';
 import { recordAudit } from './record.service';
-import { SETTING_DEFAULTS } from './settings.service';
+import { SETTING_DEFAULTS, STRING_SETTING_DEFAULTS } from './settings.service';
 
 // Platform-admin reads of the governance record (AuditLog) and the event stream
 // (DomainEvent), plus the platform settings. Both logs are append-only: nothing
@@ -142,7 +142,17 @@ const SETTING_DESCRIPTIONS: Record<keyof typeof SETTING_DEFAULTS, string> = {
   'moderation.auto.minReporterAgeDays': 'D74: days old a reporter account must be for the report to count',
 };
 
+const TEXT_SETTING_DESCRIPTIONS: Record<keyof typeof STRING_SETTING_DEFAULTS, string> = {
+  'mobile.version.min': 'Oldest phone app version still allowed (x.y.z). Older ones are blocked until updated',
+  'mobile.version.latest': 'Newest phone app version out (x.y.z). Older ones are asked to update',
+  'mobile.storeUrl.android': 'Where the Update button goes on Android (https link)',
+  'mobile.storeUrl.ios': 'Where the Update button goes on iPhone (https link). Empty hides the button',
+};
+
 type SettingKey = keyof typeof SETTING_DEFAULTS;
+type TextSettingKey = keyof typeof STRING_SETTING_DEFAULTS;
+const isTextSettingKey = (key: string): key is TextSettingKey =>
+  Object.prototype.hasOwnProperty.call(STRING_SETTING_DEFAULTS, key);
 const isSettingKey = (key: string): key is SettingKey => Object.prototype.hasOwnProperty.call(SETTING_DEFAULTS, key);
 
 export async function listSettings() {
@@ -153,6 +163,7 @@ export async function listSettings() {
     const stored = row && typeof row.value === 'number' ? row.value : null;
     return {
       key,
+      kind: 'number' as const,
       description: SETTING_DESCRIPTIONS[key],
       defaultValue: SETTING_DEFAULTS[key],
       // The database row wins when present (settings.service#getNumberSetting).
@@ -161,13 +172,81 @@ export async function listSettings() {
       updatedAt: row?.updatedAt ?? null,
     };
   });
-  return { items };
+  const textItems = (Object.keys(STRING_SETTING_DEFAULTS) as TextSettingKey[]).map((key) => {
+    const row = byKey.get(key);
+    const stored = row && typeof row.value === 'string' ? row.value : null;
+    return {
+      key,
+      kind: 'text' as const,
+      description: TEXT_SETTING_DESCRIPTIONS[key],
+      defaultValue: STRING_SETTING_DEFAULTS[key],
+      value: stored ?? STRING_SETTING_DEFAULTS[key],
+      overridden: stored !== null,
+      updatedAt: row?.updatedAt ?? null,
+    };
+  });
+  return { items: [...items, ...textItems] };
+}
+
+const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/;
+const cmp = (a: string, b: string) => {
+  const x = a.split('.').map(Number);
+  const y = b.split('.').map(Number);
+  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+};
+
+// The phone app's version gate and its store links. `min` may never pass `latest`
+// (that would block the newest release), and a link must be https or empty.
+async function updateTextSetting(actorId: string, key: TextSettingKey, raw: string, reason?: string | null) {
+  const value = raw.trim();
+  if (key.startsWith('mobile.version.')) {
+    if (!VERSION.test(value)) throw ApiError.badRequest('A version looks like 1.2.0', 'INVALID_SETTING');
+    const other = await prisma.platformSetting.findUnique({
+      where: { key: key === 'mobile.version.min' ? 'mobile.version.latest' : 'mobile.version.min' },
+    });
+    const otherValue =
+      typeof other?.value === 'string'
+        ? other.value
+        : STRING_SETTING_DEFAULTS[key === 'mobile.version.min' ? 'mobile.version.latest' : 'mobile.version.min'];
+    if (key === 'mobile.version.min' ? cmp(value, otherValue) > 0 : cmp(otherValue, value) > 0) {
+      throw ApiError.badRequest('The oldest allowed version cannot be newer than the latest one', 'INVALID_SETTING');
+    }
+  } else if (value !== '' && !/^https:\/\/\S+$/.test(value)) {
+    throw ApiError.badRequest('That must be an https link', 'INVALID_SETTING');
+  }
+  if (value === '' && key !== 'mobile.storeUrl.ios' && key.startsWith('mobile.storeUrl.')) {
+    throw ApiError.badRequest('Android needs a store link', 'INVALID_SETTING');
+  }
+  const before = await prisma.platformSetting.findUnique({ where: { key } });
+  const previous = typeof before?.value === 'string' ? before.value : STRING_SETTING_DEFAULTS[key];
+  await prisma.$transaction(async (tx) => {
+    await tx.platformSetting.upsert({
+      where: { key },
+      create: { key, value, description: TEXT_SETTING_DESCRIPTIONS[key], updatedById: actorId },
+      update: { value, updatedById: actorId },
+    });
+    await recordAudit(tx, {
+      actorId,
+      action: 'platformSetting.change',
+      resourceType: 'PlatformSetting',
+      previousState: { key, value: previous },
+      newState: { key, value },
+      reason: reason ?? null,
+      policyRef: 'platform-admin',
+    });
+  });
+  return (await listSettings()).items.find((s) => s.key === key);
 }
 
 // Only keys the code reads are editable: an unknown key would be a row nothing
 // ever consults. PlatformSetting.key is a string, not a uuid, so there is no
 // aggregate for a DomainEvent; the change is recorded in the AuditLog alone.
-export async function updateSetting(actorId: string, key: string, value: number, reason?: string | null) {
+export async function updateSetting(actorId: string, key: string, value: number | string, reason?: string | null) {
+  if (isTextSettingKey(key)) {
+    if (typeof value !== 'string') throw ApiError.badRequest('That setting takes text', 'INVALID_SETTING');
+    return updateTextSetting(actorId, key, value, reason);
+  }
+  if (typeof value !== 'number') throw ApiError.badRequest('That setting takes a number', 'INVALID_SETTING');
   if (!isSettingKey(key)) throw ApiError.notFound('Unknown setting');
   if (key === 'kennel.verification.minMismanagement' && value < 1) {
     throw ApiError.badRequest('Kennel verification needs at least one mismanagement member', 'INVALID_SETTING');

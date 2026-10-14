@@ -16,9 +16,14 @@ import { formatDate } from '@/lib/utils';
 // A change is recorded in the audit log with who made it and the old value.
 
 function SettingRow({ setting, onSaved }: { setting: PlatformSettingRow; onSaved: (s: PlatformSettingRow) => void }) {
+  const isText = setting.kind === 'text';
   const [draft, setDraft] = useState(String(setting.value));
-  const parsed = Number(draft);
-  const valid = draft.trim() !== '' && Number.isInteger(parsed) && parsed >= 0 && parsed <= 3650;
+  const parsed: number | string = isText ? draft.trim() : Number(draft);
+  // The API has the last word on text (a version is x.y.z, a link is https); this
+  // only stops a save that is plainly empty or out of range.
+  const valid = isText
+    ? setting.key === 'mobile.storeUrl.ios' || draft.trim() !== ''
+    : draft.trim() !== '' && Number.isInteger(parsed) && (parsed as number) >= 0 && (parsed as number) <= 3650;
   const dirty = valid && parsed !== setting.value;
   const id = `setting-${setting.key}`;
 
@@ -42,7 +47,7 @@ function SettingRow({ setting, onSaved }: { setting: PlatformSettingRow; onSaved
         <label htmlFor={id} className="font-mono text-sm font-medium">{setting.key}</label>
         <p className="text-sm text-muted-foreground">{setting.description}</p>
         <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-          Default {setting.defaultValue}
+          Default {setting.defaultValue === '' ? 'empty' : setting.defaultValue}
           {setting.overridden ? <StatusBadge value="Overridden" tone="warn" /> : null}
           {setting.updatedAt ? <span>· changed {formatDate(setting.updatedAt)}</span> : null}
         </p>
@@ -50,11 +55,12 @@ function SettingRow({ setting, onSaved }: { setting: PlatformSettingRow; onSaved
       <div className="flex items-center gap-2">
         <Input
           id={id}
-          type="number"
-          inputMode="numeric"
-          min={0}
-          max={3650}
-          className="w-24"
+          type={isText ? 'text' : 'number'}
+          inputMode={isText ? undefined : 'numeric'}
+          min={isText ? undefined : 0}
+          max={isText ? undefined : 3650}
+          className={isText ? 'w-72 max-w-full' : 'w-24'}
+          placeholder={isText && setting.key.startsWith('mobile.version.') ? '1.2.0' : undefined}
           value={draft}
           aria-invalid={!valid}
           onChange={(e) => setDraft(e.target.value)}

@@ -45,3 +45,22 @@ export async function getNumberSetting(key: SettingKey): Promise<number> {
   const value = row?.value;
   return typeof value === 'number' ? value : SETTING_DEFAULTS[key];
 }
+
+// Text settings. Kept apart from the numeric ones so a number is never read as text.
+export const STRING_SETTING_DEFAULTS = {
+  // The app version gate. Below `min` the app is blocked until it is updated;
+  // below `latest` it only asks. Both are plain x.y.z, compared by number.
+  'mobile.version.min': '1.0.0',
+  'mobile.version.latest': '1.0.0',
+  'mobile.storeUrl.android': 'https://play.google.com/store/apps/details?id=com.shiggytrails.app',
+  // Empty until the app is on the App Store; the app then offers no link.
+  'mobile.storeUrl.ios': '',
+} as const;
+
+type StringSettingKey = keyof typeof STRING_SETTING_DEFAULTS;
+
+export async function getStringSetting(key: StringSettingKey): Promise<string> {
+  const row = await prisma.platformSetting.findUnique({ where: { key } });
+  const value = row?.value;
+  return typeof value === 'string' ? value : STRING_SETTING_DEFAULTS[key];
+}

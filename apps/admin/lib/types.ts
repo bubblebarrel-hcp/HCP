@@ -255,9 +255,11 @@ export interface EventsHealth {
 
 export interface PlatformSettingRow {
   key: string;
+  // 'text' rows are the phone app's version gate and store links.
+  kind: 'number' | 'text';
   description: string;
-  defaultValue: number;
-  value: number;
+  defaultValue: number | string;
+  value: number | string;
   overridden: boolean;
   updatedAt: string | null;
 }

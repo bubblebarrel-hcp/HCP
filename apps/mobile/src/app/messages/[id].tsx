@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { KeyboardAvoidingView, useKeyboardState } from 'react-native-keyboard-controller';
+import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -67,8 +68,14 @@ export default function ConversationScreen() {
   const scroller = useRef<ScrollView>(null);
   const first = useRef(true);
   const insets = useSafeAreaInsets();
-  // With the keyboard up it is the bottom edge; closed, the system bar is.
-  const keyboardUp = useKeyboardState((s) => s.isVisible);
+  // The screen's bottom edge is the top of the keyboard. `height` is the keyboard's
+  // live height, negative, straight from the system's window insets frame by frame, so
+  // nothing here depends on measuring where this view sits on the screen (the
+  // measuring avoider left the box under the keyboard on some phones). With the
+  // keyboard down the bottom edge is the system bar, so that is the floor.
+  const keyboard = useReanimatedKeyboardAnimation();
+  const bottomInset = insets.bottom;
+  const rise = useAnimatedStyle(() => ({ paddingBottom: Math.max(bottomInset, -keyboard.height.get()) }));
 
   useEffect(() => {
     if (!loading && !user) router.replace('/account');
@@ -212,11 +219,9 @@ export default function ConversationScreen() {
 
   return (
     <ThemedView type="canvas" style={styles.screen}>
-      {/* keyboard-controller's, not React Native's: with edge-to-edge drawing the
-          window does not resize for the keyboard and the built-in one measured wrongly,
-          so the keyboard sat on top of the box being typed in. This one follows the
-          keyboard frame by frame, so the box rides up with it. */}
-      <KeyboardAvoidingView style={styles.screen} behavior="padding">
+      {/* The whole screen is padded by the keyboard's height as it rises, so the
+          message box sits on the keyboard's top edge and the list shrinks above it. */}
+      <Animated.View style={[styles.screen, rise]}>
         <View testID="conversation" style={[styles.header, { borderBottomColor: theme.border }]}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back to messages" onPress={() => router.back()}>
             <ThemedText style={styles.back}>←</ThemedText>
@@ -288,7 +293,7 @@ export default function ConversationScreen() {
             </View>
           </View>
         ) : detail.canReply ? (
-          <View style={{ paddingBottom: keyboardUp ? 0 : insets.bottom, backgroundColor: theme.canvas }}>
+          <View style={{ backgroundColor: theme.canvas }}>
           <Composer
             conversationId={id}
             canShareFiles={detail.canShareFiles}
@@ -313,7 +318,7 @@ export default function ConversationScreen() {
             </ThemedText>
           </View>
         )}
-      </KeyboardAvoidingView>
+      </Animated.View>
     </ThemedView>
   );
 }

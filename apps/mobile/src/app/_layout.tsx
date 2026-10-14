@@ -11,6 +11,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { BottomNav } from '@/components/bottom-nav';
 import { AppHeader } from '@/components/feed/app-header';
+import { UpdateGate } from '@/components/update-gate';
 import { AuthProvider } from '@/context/auth';
 import { ThemePreferenceProvider, useThemePreference } from '@/context/theme-preference';
 import { Notifications, routeFor } from '@/lib/push';
@@ -124,6 +125,7 @@ function Shell() {
     <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
         <AnimatedSplashOverlay />
+        <UpdateGate />
         {Platform.OS !== 'web' && Notifications && <PushRouting />}
         <Frame />
       </AuthProvider>
