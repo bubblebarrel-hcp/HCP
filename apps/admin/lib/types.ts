@@ -457,9 +457,10 @@ export interface BroadcastRow {
   id: string;
   title: string;
   body: string;
-  audience: 'EVERYONE' | 'KENNEL';
+  audience: 'EVERYONE' | 'KENNEL' | 'USER';
   kennelId: string | null;
   kennelName: string | null;
+  recipientName: string | null;
   push: boolean;
   urgent: boolean;
   recipientCount: number;

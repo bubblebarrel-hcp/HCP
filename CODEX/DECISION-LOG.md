@@ -1410,3 +1410,25 @@ Decision: Platform staff can send one message to everyone, or to one kennel's ac
 - **Append-only.** A sent broadcast is never edited or deleted. It stays in the admin list (who, to whom, how many, urgent or not) and in the audit log (`broadcast.send`, policy `platform-admin`). Message limits: title 3-80, body 3-500 characters.
 - **Not built.** Scheduling for later, a banner inside the app, other audiences, email, a hasher's reply, and any read-count per broadcast.
 - **Checked.** Admin only (a hasher gets 403); a kennel audience needs a kennel; a short title is refused; an empty kennel is refused; a send to 16 members wrote 16 `CRITICAL` in-app notifications, one event, one audit row; the admin form, count, confirm dialog and history were checked in a browser.
+
+
+## 2026-10-15 - D77: A broadcast can go to one named hasher
+
+Widens D76's audiences with `USER`: a personal nudge from staff, such as asking someone to review their date of birth.
+
+- **Addressed by email.** Staff type the hasher's sign-in email; the form shows who it resolves to ("Goes to <handle>") before anything is sent, and an unknown email is a 404, never a silent send to nobody. `Broadcast.recipientId` records who.
+- **Same rules as every broadcast.** Active accounts only, the hasher's own announcement switch still wins, append-only, one `BroadcastSent` event and one `broadcast.send` audit row (with `recipientId`). It is the platform's act, not a direct message, and opens no conversation (D71).
+- **No biodata in it.** The words are staff's; nothing from `PersonProfile` is put in a notification.
+- **Not built.** A deep link from the notification to the profile screen, and picking a hasher from a list instead of typing an email.
+- **Checked.** Preview of a known email says 1 and names the hasher; an unknown email is 404; a missing email is refused; a send wrote exactly one `DELIVERED` notification to that hasher and none to anyone else.
+
+
+## 2026-10-15 - D78: Date of birth stays editable, every change is audited
+
+Shiggy Trails is for adults (18+). The rule is enforced on sign-up and on every profile edit (`MIN_AGE` in `validators/common.ts`; mirrored in the web and mobile register and profile forms). Accounts made before the rule existed were never checked, so a hasher can hold a date that makes them under 18.
+
+- **Editable, not locked.** A hasher can still change their own date of birth. A lock would stop the hasher who is asked to correct a wrong date from doing so; the 18+ check already refuses any date that makes them under 18. A staff-granted, one-time correction window was considered and not built.
+- **Every real change is recorded.** `profile.service#updateProfile` writes an `identity.date_of_birth.change` audit row (same transaction and domain event as the profile update) when the stored date actually changes. The forms send the whole profile on every save, so an unchanged date is ignored and no longer appears in `fields`. The date itself, old or new, is encrypted biodata and is never logged, only that it changed, by whom and when.
+- **Reaching a hasher about it.** Staff use a one-hasher broadcast (D77), with neutral wording that does not mention age.
+- **Not built.** A scan or migration that flags existing under-18 accounts, and a stored previous value for comparison.
+- **Checked.** A save with the date unchanged logs only the other fields; a changed date logs both the update and the date-of-birth entry; a date under 18 is a 400 and writes nothing.

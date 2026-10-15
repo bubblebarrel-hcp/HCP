@@ -304,7 +304,7 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
     }
     // ── Platform broadcast (D76) ──
     //
-    // Words from staff to everyone or to one kennel's members. The words live on
+    // Words from staff to everyone, to one kennel's members or to one hasher. The words live on
     // the Broadcast row, not in the event. The kennel is left off the spec on
     // purpose: a kennel's own rule for announcements governs what its officers
     // post, and cannot silence the platform. A hasher's own switch for the
@@ -320,7 +320,7 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         contextType: 'Broadcast',
         contextId: broadcast.id,
         kennelId: null,
-        recipients: await broadcastRecipientIds(broadcast.audience, broadcast.kennelId),
+        recipients: await broadcastRecipientIds(broadcast.audience, broadcast.kennelId, broadcast.recipientId),
         pushByDefault: broadcast.push,
       };
     }

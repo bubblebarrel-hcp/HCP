@@ -17,6 +17,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 // D5/FR-ID-005: the same biodata shape as registration (apps/web/app/auth/register/page.tsx),
 // editable after the fact. Mirrors apps/api/src/validators/profile.validator.ts — change both together.
+// Mirrors api/src/validators/common.ts (MIN_AGE): change both together.
+const isAdult = (v: string) => {
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - 18);
+  return new Date(v) <= cutoff;
+};
 const required = (label: string, max = 80) => z.string().trim().min(1, `${label} is required`).max(max);
 
 const schema = z.object({
@@ -26,7 +32,8 @@ const schema = z.object({
   dateOfBirth: z
     .string()
     .min(1, 'Date of birth is required')
-    .refine((v) => !Number.isNaN(Date.parse(v)) && new Date(v) < new Date(), 'Enter a valid past date'),
+    .refine((v) => !Number.isNaN(Date.parse(v)) && new Date(v) < new Date(), 'Enter a valid past date')
+    .refine((v) => isAdult(v), 'You must be 18 or older to use Shiggy Trails'),
   gender: z.enum(['FEMALE', 'MALE', 'NON_BINARY', 'OTHER', 'PREFER_NOT_TO_SAY'], { message: 'Select an option' }),
   phone: required('Phone', 40),
   nationality: required('Nationality'),

@@ -109,16 +109,22 @@ export interface UpdateProfileInput {
 }
 
 export async function updateProfile(userId: string, input: UpdateProfileInput) {
-  const existing = await prisma.personProfile.findUnique({ where: { userId }, select: { id: true } });
+  const existing = await prisma.personProfile.findUnique({ where: { userId }, select: { id: true, dateOfBirth: true } });
   if (!existing) throw ApiError.notFound('Profile not found', 'PROFILE_NOT_FOUND');
 
   const data: Record<string, unknown> = {};
+  let dateOfBirthChanged = false;
   if (input.firstName !== undefined) data.firstName = input.firstName;
   if (input.middleName !== undefined) data.middleName = input.middleName || null;
   if (input.lastName !== undefined) data.lastName = input.lastName;
   if (input.dateOfBirth !== undefined) {
-    const iso = input.dateOfBirth instanceof Date ? input.dateOfBirth.toISOString().slice(0, 10) : input.dateOfBirth;
-    data.dateOfBirth = encryptField(iso);
+    const iso = input.dateOfBirth instanceof Date ? input.dateOfBirth.toISOString().slice(0, 10) : input.dateOfBirth.slice(0, 10);
+    // The forms send the whole profile, so most saves carry the date unchanged.
+    // Only a real change is written (and recorded below).
+    if (iso !== decryptField(existing.dateOfBirth).slice(0, 10)) {
+      data.dateOfBirth = encryptField(iso);
+      dateOfBirthChanged = true;
+    }
   }
   if (input.gender !== undefined) data.gender = input.gender;
   if (input.phone !== undefined) data.phone = encryptField(input.phone);
@@ -157,6 +163,19 @@ export async function updateProfile(userId: string, input: UpdateProfileInput) {
       newState: { fields: Object.keys(data) },
       domainEventId: event.id,
     });
+    // The date itself is encrypted biodata and stays out of the log: the record
+    // says only that it changed, by whom and when. It is the one field that decides
+    // whether someone may be on the platform, so it gets an entry of its own.
+    if (dateOfBirthChanged) {
+      await recordAudit(tx, {
+        actorId: userId,
+        action: 'identity.date_of_birth.change',
+        resourceType: 'Identity',
+        resourceId: userId,
+        newState: { changed: true },
+        domainEventId: event.id,
+      });
+    }
   });
 
   return getProfile(userId);

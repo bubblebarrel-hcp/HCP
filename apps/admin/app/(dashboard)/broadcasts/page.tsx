@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import type { AdminKennel, BroadcastRow, Page } from '@/lib/types';
 import { cn, formatDate } from '@/lib/utils';
 
-// D76. A message from the platform to everyone or to one kennel's members. It is
+// D76. A message from the platform to everyone, to one kennel's members or to one hasher. It is
 // delivered as a notification, so each hasher's own switches still apply: they can
 // turn announcements off, and quiet hours hold a push. Urgent is the exception to
 // quiet hours and digests, and it always asks for a push. A sent broadcast is never
@@ -26,8 +26,11 @@ const BODY_MAX = 500;
 export default function BroadcastsPage() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [audience, setAudience] = useState<'EVERYONE' | 'KENNEL'>('EVERYONE');
+  const [audience, setAudience] = useState<'EVERYONE' | 'KENNEL' | 'USER'>('EVERYONE');
   const [kennelId, setKennelId] = useState('');
+  const [email, setEmail] = useState('');
+  const [personName, setPersonName] = useState<string | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [push, setPush] = useState(false);
   const [urgent, setUrgent] = useState(false);
   const [kennels, setKennels] = useState<AdminKennel[]>([]);
@@ -65,27 +68,44 @@ export default function BroadcastsPage() {
 
   // How many it would reach, so nobody sends to a kennel they did not mean.
   useEffect(() => {
-    if (audience === 'KENNEL' && !kennelId) {
+    const address = email.trim();
+    if ((audience === 'KENNEL' && !kennelId) || (audience === 'USER' && !address.includes('@'))) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- derived from the choice above
       setReach(null);
+      setPersonName(null);
+      setLookupError(null);
       return;
     }
     let live = true;
-    api
-      .get<{ data: { recipients: number } }>('/admin/broadcasts/preview', {
-        params: { audience, ...(audience === 'KENNEL' ? { kennelId } : {}) },
-      })
-      .then((res) => live && setReach(res.data.data.recipients))
-      .catch(() => live && setReach(null));
+    // A typed email is looked up once it settles, not on every keystroke.
+    const t = setTimeout(() => {
+      api
+        .get<{ data: { recipients: number; recipientName: string | null } }>('/admin/broadcasts/preview', {
+          params: { audience, ...(audience === 'KENNEL' ? { kennelId } : {}), ...(audience === 'USER' ? { recipientEmail: address } : {}) },
+        })
+        .then((res) => {
+          if (!live) return;
+          setReach(res.data.data.recipients);
+          setPersonName(res.data.data.recipientName);
+          setLookupError(null);
+        })
+        .catch((err) => {
+          if (!live) return;
+          setReach(null);
+          setPersonName(null);
+          setLookupError(audience === 'USER' ? errorMessage(err, 'Could not find that hasher') : null);
+        });
+    }, audience === 'USER' ? 400 : 0);
     return () => {
       live = false;
+      clearTimeout(t);
     };
-  }, [audience, kennelId]);
+  }, [audience, kennelId, email]);
 
   const kennelName = kennels.find((k) => k.id === kennelId)?.name;
   const ready =
-    title.trim().length >= 3 && body.trim().length >= 3 && (audience === 'EVERYONE' || kennelId !== '') && (reach ?? 0) > 0;
-  const who = audience === 'EVERYONE' ? 'everyone' : (kennelName ?? 'that kennel');
+    title.trim().length >= 3 && body.trim().length >= 3 && (audience !== 'KENNEL' || kennelId !== '') && (reach ?? 0) > 0;
+  const who = audience === 'EVERYONE' ? 'everyone' : audience === 'USER' ? (personName ?? 'that hasher') : (kennelName ?? 'that kennel');
 
   async function send() {
     try {
@@ -94,12 +114,14 @@ export default function BroadcastsPage() {
         body: body.trim(),
         audience,
         ...(audience === 'KENNEL' ? { kennelId } : {}),
+        ...(audience === 'USER' ? { recipientEmail: email.trim() } : {}),
         push,
         urgent,
       });
       toast.success('Broadcast sent');
       setTitle('');
       setBody('');
+      setEmail('');
       setPush(false);
       setUrgent(false);
       setPage(1);
@@ -121,7 +143,7 @@ export default function BroadcastsPage() {
         </div>
       ),
     },
-    { key: 'to', header: 'To', cell: (r) => (r.audience === 'EVERYONE' ? 'Everyone' : (r.kennelName ?? 'A kennel')) },
+    { key: 'to', header: 'To', cell: (r) => (r.audience === 'EVERYONE' ? 'Everyone' : r.audience === 'USER' ? (r.recipientName ?? 'One hasher') : (r.kennelName ?? 'A kennel')) },
     { key: 'count', header: 'Reached', cell: (r) => r.recipientCount },
     {
       key: 'how',
@@ -184,10 +206,11 @@ export default function BroadcastsPage() {
                 id="broadcast-audience"
                 data-testid="broadcast-audience"
                 value={audience}
-                onChange={(e) => setAudience(e.target.value as 'EVERYONE' | 'KENNEL')}
+                onChange={(e) => setAudience(e.target.value as 'EVERYONE' | 'KENNEL' | 'USER')}
               >
                 <option value="EVERYONE">Everyone</option>
                 <option value="KENNEL">One kennel&apos;s members</option>
+                <option value="USER">One hasher</option>
               </Select>
             </div>
             {audience === 'KENNEL' && (
@@ -199,6 +222,22 @@ export default function BroadcastsPage() {
                     <option key={k.id} value={k.id}>{k.name}</option>
                   ))}
                 </Select>
+              </div>
+            )}
+            {audience === 'USER' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="broadcast-email">Hasher&apos;s email</Label>
+                <Input
+                  id="broadcast-email"
+                  data-testid="broadcast-email"
+                  type="email"
+                  autoComplete="off"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="hasher@example.com"
+                />
+                {personName && <p className="text-xs text-muted-foreground" data-testid="broadcast-person">Goes to {personName}.</p>}
+                {lookupError && <p className="text-xs text-destructive">{lookupError}</p>}
               </div>
             )}
           </div>
@@ -243,7 +282,9 @@ export default function BroadcastsPage() {
               {reach === null
                 ? 'Choose who it goes to.'
                 : reach === 0
-                  ? 'Nobody is in that audience.'
+                  ? audience === 'USER'
+                    ? 'That account is not active, so it cannot receive this.'
+                    : 'Nobody is in that audience.'
                   : `This will reach ${reach} hasher${reach === 1 ? '' : 's'}.`}
             </p>
             <ConfirmDialog

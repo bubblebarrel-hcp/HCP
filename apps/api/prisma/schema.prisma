@@ -786,7 +786,8 @@ model User {
   supplementalArtifacts         SupplementalArtifact[]
   mediaUploads                  MediaAsset[]
   announcements                 Announcement[]
-  broadcasts                    Broadcast[]
+  broadcasts                    Broadcast[]                    @relation("BroadcastAuthor")
+  broadcastsReceived            Broadcast[]                    @relation("BroadcastRecipient")
   channelMemberships            ChannelMember[]
   messages                      Message[]
   directParticipations          DirectParticipant[]
@@ -2378,6 +2379,8 @@ model Announcement {
 enum BroadcastAudience {
   EVERYONE
   KENNEL
+  // One named hasher, for a personal nudge from staff.
+  USER
 }
 
 model Broadcast {
@@ -2385,6 +2388,8 @@ model Broadcast {
   authorId       String            @db.Uuid
   audience       BroadcastAudience
   kennelId       String?           @db.Uuid
+  // Only for the USER audience: the one hasher it was addressed to.
+  recipientId    String?           @db.Uuid
   title          String
   body           String
   // Asked for a phone notification. Urgent implies it.
@@ -2395,8 +2400,9 @@ model Broadcast {
   recipientCount Int
   createdAt      DateTime          @default(now())
 
-  author User    @relation(fields: [authorId], references: [id])
-  kennel Kennel? @relation(fields: [kennelId], references: [id])
+  author    User    @relation("BroadcastAuthor", fields: [authorId], references: [id])
+  recipient User?   @relation("BroadcastRecipient", fields: [recipientId], references: [id])
+  kennel    Kennel? @relation(fields: [kennelId], references: [id])
 
   @@index([createdAt])
 }

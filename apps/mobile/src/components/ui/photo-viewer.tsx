@@ -14,14 +14,14 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { X } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 
 import { ThemedText } from '@/components/themed-text';
 
 // A picture or clip filling the screen (posts, profile pictures, kennel logos, run
 // and profile photos). Pinch or double-tap to zoom a picture, drag to look around once
-// zoomed, swipe sideways between the items of a post, tap the cross (or the system
-// back) to leave. A clip plays with the native controls and cannot be zoomed.
+// zoomed, swipe sideways (or tap the arrows) between the items of a post, tap the
+// cross (or the system back) to leave. A clip plays with the native controls and cannot be zoomed.
 //
 // A photo may carry a caption and one action ("Open post"), for a viewer reached from
 // somewhere that is not the thing's own page, such as a profile's photo grid.
@@ -56,6 +56,13 @@ function ZoomableImage({
   const y = useSharedValue(0);
   const savedX = useSharedValue(0);
   const savedY = useSharedValue(0);
+  // The pan is only switched on while zoomed. A pan that is merely idle at 1x still
+  // claims the touch, and the carousel behind it never sees the swipe.
+  const [isZoomed, setIsZoomed] = useState(false);
+  const zoomChanged = (zoomed: boolean) => {
+    setIsZoomed(zoomed);
+    onZoomed(zoomed);
+  };
 
   const reset = () => {
     'worklet';
@@ -74,15 +81,16 @@ function ZoomableImage({
     .onEnd(() => {
       if (scale.value <= 1.02) {
         reset();
-        runOnJS(onZoomed)(false);
+        runOnJS(zoomChanged)(false);
       } else {
         savedScale.value = scale.value;
-        runOnJS(onZoomed)(true);
+        runOnJS(zoomChanged)(true);
       }
     });
 
   // Only while zoomed: at 1x a drag belongs to the carousel behind it.
   const pan = Gesture.Pan()
+    .enabled(isZoomed)
     .minPointers(1)
     .onUpdate((e) => {
       if (savedScale.value <= 1) return;
@@ -101,11 +109,11 @@ function ZoomableImage({
     .onEnd(() => {
       if (savedScale.value > 1) {
         reset();
-        runOnJS(onZoomed)(false);
+        runOnJS(zoomChanged)(false);
       } else {
         scale.value = withTiming(2.5);
         savedScale.value = 2.5;
-        runOnJS(onZoomed)(true);
+        runOnJS(zoomChanged)(true);
       }
     });
 
@@ -188,6 +196,14 @@ function ViewerBody({ photos, index, onClose }: { photos: ViewerPhoto[]; index: 
 
   const shown = photos[current];
 
+  const go = (to: number) => {
+    if (to < 0 || to >= photos.length) return;
+    scroller.current?.scrollTo({ x: to * width, animated: true });
+    // A programmatic scroll does not reliably report its end on Android.
+    setCurrent(to);
+    setZoomed(false);
+  };
+
   return (
     // A Modal is its own native root, so gestures need a root of their own in it.
     <GestureHandlerRootView style={styles.root} testID="photo-viewer">
@@ -244,6 +260,29 @@ function ViewerBody({ photos, index, onClose }: { photos: ViewerPhoto[]; index: 
         </View>
       )}
 
+      {photos.length > 1 && current > 0 && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Previous"
+          testID="photo-viewer-prev"
+          onPress={() => go(current - 1)}
+          hitSlop={8}
+          style={[styles.arrow, { left: 8, top: height / 2 - 20 }]}>
+          <ChevronLeft size={24} color="#fff" />
+        </Pressable>
+      )}
+      {photos.length > 1 && current < photos.length - 1 && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Next"
+          testID="photo-viewer-next"
+          onPress={() => go(current + 1)}
+          hitSlop={8}
+          style={[styles.arrow, { right: 8, top: height / 2 - 20 }]}>
+          <ChevronRight size={24} color="#fff" />
+        </Pressable>
+      )}
+
       {(shown.caption || shown.action) && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
           {shown.caption ? <ThemedText style={styles.caption}>{shown.caption}</ThemedText> : null}
@@ -270,6 +309,15 @@ const styles = StyleSheet.create({
   close: {
     position: 'absolute',
     right: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  arrow: {
+    position: 'absolute',
     width: 40,
     height: 40,
     borderRadius: 20,

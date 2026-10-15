@@ -80,19 +80,26 @@ export const updateSettingSchema = Joi.object({
   reason: Joi.string().trim().max(500).allow('', null),
 });
 
-// D76: a platform broadcast. A kennel is named only for the KENNEL audience.
+// D76: a platform broadcast. A kennel is named only for the KENNEL audience, a
+// hasher's email only for the USER audience.
 export const broadcastSchema = Joi.object({
   title: Joi.string().trim().min(3).max(80).required(),
   body: Joi.string().trim().min(3).max(500).required(),
-  audience: Joi.string().valid('EVERYONE', 'KENNEL').required(),
+  audience: Joi.string().valid('EVERYONE', 'KENNEL', 'USER').required(),
   kennelId: Joi.when('audience', { is: 'KENNEL', then: Joi.string().uuid().required(), otherwise: Joi.any().valid(null, '').optional() }),
+  recipientEmail: Joi.when('audience', {
+    is: 'USER',
+    then: Joi.string().trim().email({ tlds: { allow: false } }).required(),
+    otherwise: Joi.any().valid(null, '').optional(),
+  }),
   push: Joi.boolean().default(false),
   urgent: Joi.boolean().default(false),
 });
 
 export const broadcastPreviewQuery = Joi.object({
-  audience: Joi.string().valid('EVERYONE', 'KENNEL').required(),
+  audience: Joi.string().valid('EVERYONE', 'KENNEL', 'USER').required(),
   kennelId: Joi.string().uuid().when('audience', { is: 'KENNEL', then: Joi.required(), otherwise: Joi.optional() }),
+  recipientEmail: Joi.string().trim().email({ tlds: { allow: false } }).when('audience', { is: 'USER', then: Joi.required(), otherwise: Joi.optional() }),
 });
 
 export const broadcastListQuery = Joi.object({

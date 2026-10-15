@@ -16,6 +16,13 @@ import { api, errorMessage } from '@/lib/api';
 // Save button. D5/FR-ID-005. Mirrors apps/api/src/validators/profile.validator.ts and
 // the web's Zod schema: change all three together.
 
+// Mirrors api/src/validators/common.ts (MIN_AGE): change both together.
+function isAdult(dob: string) {
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - 18);
+  return new Date(dob) <= cutoff;
+}
+
 const GENDERS = [
   { value: 'PREFER_NOT_TO_SAY', label: 'Prefer not to say' },
   { value: 'FEMALE', label: 'Female' },
@@ -108,6 +115,7 @@ function validate(v: Values): Errors {
   if (v.medicalNotes.trim().length > 2000) e.medicalNotes = 'Medical notes are too long';
   if (!v.dateOfBirth) e.dateOfBirth = 'Date of birth is required';
   else if (Number.isNaN(Date.parse(v.dateOfBirth)) || new Date(v.dateOfBirth) >= new Date()) e.dateOfBirth = 'Enter a valid past date';
+  else if (!isAdult(v.dateOfBirth)) e.dateOfBirth = 'You must be 18 or older to use Shiggy Trails';
   return e;
 }
 

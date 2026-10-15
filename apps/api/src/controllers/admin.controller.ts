@@ -103,8 +103,12 @@ export async function listBroadcasts(req: Request, res: Response) {
   return ok(res, await broadcasts.list(req.query as unknown as { page: number; limit: number }));
 }
 export async function previewBroadcast(req: Request, res: Response) {
-  const { audience, kennelId } = req.query as unknown as { audience: 'EVERYONE' | 'KENNEL'; kennelId?: string };
-  return ok(res, await broadcasts.preview(audience, kennelId));
+  const { audience, kennelId, recipientEmail } = req.query as unknown as {
+    audience: 'EVERYONE' | 'KENNEL' | 'USER';
+    kennelId?: string;
+    recipientEmail?: string;
+  };
+  return ok(res, await broadcasts.preview(audience, kennelId, recipientEmail));
 }
 export async function sendBroadcast(req: Request, res: Response) {
   if (!req.user) throw ApiError.unauthorized();
