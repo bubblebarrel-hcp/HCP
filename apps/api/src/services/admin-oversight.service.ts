@@ -238,9 +238,13 @@ export async function listPosts(opts: { page: number; limit: number; q?: string;
     }),
     prisma.post.count({ where }),
   ]);
+  // What staff open full screen from the table. Staff see every audience (D57) and
+  // the same files a viewer would, so a half-uploaded or rejected file is not here.
+  const photos = await posts.photosFor(rows.map((r) => r.id));
   const items = rows.map(({ author, body: text, ...p }) => ({
     ...p,
     body: body(text),
+    items: (photos.get(p.id) ?? []).map(({ id, kind, url, thumbnailUrl }) => ({ id, kind, url, thumbnailUrl })),
     author: { id: author.id, displayName: nameOf(author) },
   }));
   return page(items, total, opts.page, opts.limit);
@@ -278,8 +282,10 @@ export async function listReels(opts: { page: number; limit: number; q?: string;
     }),
     prisma.reel.count({ where }),
   ]);
+  const found = await reels.itemsFor(rows.map((r) => r.id));
   const items = rows.map(({ author, pinnedAt, ...r }) => ({
     ...r,
+    items: (found.get(r.id) ?? []).map(({ id, kind, url, posterUrl }) => ({ id, kind, url, thumbnailUrl: posterUrl })),
     pinned: pinnedAt !== null,
     author: { id: author.id, displayName: nameOf(author) },
   }));

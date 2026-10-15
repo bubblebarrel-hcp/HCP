@@ -71,11 +71,78 @@ export interface AdminUser {
   status: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
   trustLevel: string;
   displayName: string;
+  avatarUrl: string | null;
   fullName: string | null;
   country: string | null;
   homeKennel: { id: string; shortName: string } | null;
   createdAt: string;
   lastLoginAt: string | null;
+}
+
+export interface AdminUserDetail {
+  id: string;
+  email: string;
+  emailVerifiedAt: string | null;
+  role: 'USER' | 'ADMIN';
+  status: string;
+  trustLevel: string;
+  displayName: string;
+  hashHandle: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
+  bio: string | null;
+  profileVisibility: string;
+  dmPolicy: string;
+  homeKennel: { id: string; shortName: string; name: string } | null;
+  preferredLanguage: string;
+  timeZone: string | null;
+  termsAcceptedAt: string;
+  termsVersion: string | null;
+  createdAt: string;
+  lastLoginAt: string | null;
+  deactivatedAt: string | null;
+  deletedAt: string | null;
+  hashNames: { id: string; name: string; isPrimary: boolean; isAlias: boolean; bestowedAt: string | null }[];
+  biodata: {
+    firstName: string;
+    middleName: string | null;
+    lastName: string;
+    dateOfBirth: string;
+    gender: string;
+    phone: string;
+    nationality: string;
+    country: string;
+    stateProvince: string;
+    city: string;
+    addressLine: string | null;
+    occupation: string | null;
+    languages: string[];
+    emergencyContactName: string;
+    emergencyContactPhone: string;
+    emergencyContactRelationship: string;
+  } | null;
+  memberships: {
+    id: string;
+    type: string;
+    status: string;
+    isHomeKennel: boolean;
+    startDate: string | null;
+    endDate: string | null;
+    kennel: { id: string; shortName: string; name: string };
+  }[];
+  roles: { id: string; role: string; title: string | null; kennelId: string | null }[];
+  offices: { id: string; kennel: { shortName: string }; startDate: string }[];
+  activity: { posts: number; reels: number; followers: number; following: number; reportsAgainst: number };
+  enforcements: {
+    id: string;
+    level: string;
+    reporterCount: number;
+    endsAt: string | null;
+    liftedAt: string | null;
+    confirmedAt: string | null;
+    createdAt: string;
+  }[];
 }
 
 export interface AdminStats {
@@ -323,6 +390,15 @@ export interface PostRow {
   createdAt: string;
   author: HasherRef;
   kennel: KennelRef | null;
+  items: ContentMedia[];
+}
+
+// A picture or clip on a post or reel, as staff open it from the Content tables.
+export interface ContentMedia {
+  id: string;
+  kind: 'PHOTO' | 'VIDEO';
+  url: string;
+  thumbnailUrl: string | null;
 }
 
 export interface ReelRow {
@@ -339,6 +415,7 @@ export interface ReelRow {
   author: HasherRef;
   kennel: KennelRef | null;
   media: { thumbnailUrl: string | null; kind: string } | null;
+  items: ContentMedia[];
 }
 
 // --- automatic actions on reports (D74: GET /admin/enforcements) ---

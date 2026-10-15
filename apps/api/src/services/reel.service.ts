@@ -131,7 +131,7 @@ export interface ReelItem {
   durationSec: number | null;
 }
 
-async function itemsFor(reelIds: string[]) {
+export async function itemsFor(reelIds: string[]) {
   const byReel = new Map<string, ReelItem[]>();
   if (reelIds.length === 0) return byReel;
 

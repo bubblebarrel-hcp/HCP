@@ -97,7 +97,7 @@ export interface PostPhoto {
 // The pictures and clips on a post, in the order they were added — the same rule
 // a reel's items follow (D48), and for the same reason: that is the order the
 // hasher picked them.
-async function photosFor(postIds: string[]) {
+export async function photosFor(postIds: string[]) {
   const byPost = new Map<string, PostPhoto[]>();
   if (postIds.length === 0) return byPost;
 

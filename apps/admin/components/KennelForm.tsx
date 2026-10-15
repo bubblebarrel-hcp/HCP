@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,6 +9,7 @@ import api, { errorMessage } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
+import { PhotoViewer } from '@/components/ui/PhotoViewer';
 import { emptyKennel, kennelSchema, kennelToForm, toKennelPayload, type KennelFormValues } from '@/lib/schemas';
 import {
   KENNEL_STATUSES,
@@ -22,10 +24,12 @@ import { humanize } from '@/lib/utils';
 export function KennelForm({ kennel, onSaved }: { kennel?: AdminKennel; onSaved?: (k: AdminKennel) => void }) {
   const router = useRouter();
   const isEdit = Boolean(kennel);
-  const { register, handleSubmit, formState } = useForm<KennelFormValues>({
+  const { register, handleSubmit, formState, watch } = useForm<KennelFormValues>({
     resolver: zodResolver(kennelSchema),
     defaultValues: kennel ? kennelToForm(kennel) : emptyKennel,
   });
+  const logoUrl = watch('logoUrl');
+  const [viewingLogo, setViewingLogo] = useState(false);
   const e = formState.errors;
 
   const onSubmit = handleSubmit(async (values) => {
@@ -85,7 +89,20 @@ export function KennelForm({ kennel, onSaved }: { kennel?: AdminKennel; onSaved?
         {text('longitude', 'Longitude')}
         {text('logoUrl', 'Logo URL')}
         {text('bannerUrl', 'Banner URL')}
+        {/^https?:\/\//.test(logoUrl ?? '') && (
+          <button
+            type="button"
+            onClick={() => setViewingLogo(true)}
+            aria-label="Open logo full screen"
+            data-testid="kennel-logo-view"
+            className="w-fit cursor-zoom-in rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- storage is an arbitrary host */}
+            <img src={logoUrl} alt="" className="h-16 w-16 rounded-full object-cover" referrerPolicy="no-referrer" />
+          </button>
+        )}
       </section>
+      <PhotoViewer photos={[{ url: logoUrl ?? '', label: 'Logo' }]} open={viewingLogo} onOpenChange={setViewingLogo} />
 
       <section className="grid gap-4 border-t border-border pt-6 sm:grid-cols-2">
         {select('status', 'Status', KENNEL_STATUSES)}

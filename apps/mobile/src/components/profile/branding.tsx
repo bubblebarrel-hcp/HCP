@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, PanResponder, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Alert, PanResponder, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Defs, LinearGradient, Rect, Stop, Svg } from 'react-native-svg';
 import { Camera, Check, Move, Trash2, X } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Avatar } from '@/components/feed/avatar';
 import { ThemedText } from '@/components/themed-text';
 import { ActionDialog } from '@/components/ui/action-dialog';
+import { PhotoViewer } from '@/components/ui/photo-viewer';
 import { CoverImage, clamp, formatPosition, parsePosition, type Point } from '@/components/ui/cover-image';
 import { Button } from '@/components/ui/web-ui';
 import { MaxContentWidth } from '@/constants/theme';
@@ -108,6 +109,7 @@ export function Branding({
   const [dragging, setDragging] = useState<Point | null>(null);
   const [avatarDragging, setAvatarDragging] = useState<Point | null>(null);
   const [saving, setSaving] = useState(false);
+  const [viewing, setViewing] = useState(false);
 
   const pictures = {
     avatar: edited.avatar !== undefined ? edited.avatar : avatarUrl,
@@ -316,13 +318,28 @@ export function Branding({
 
       <View style={styles.identity}>
         <View style={[styles.ring4, { backgroundColor: theme.card }]}>
-          <Avatar
-            name={name}
-            size={128}
-            color={brandColor(color)}
-            src={pictures.avatar}
-            position={formatPosition(shownAvatar)}
-          />
+          {/* Tap the picture to see all of it; not while its crop is being dragged. */}
+          <Pressable
+            disabled={!pictures.avatar || repositioningAvatar}
+            accessibilityRole={pictures.avatar ? 'imagebutton' : undefined}
+            accessibilityLabel={`${name}, open picture full screen`}
+            testID="profile-avatar-view"
+            onPress={() => setViewing(true)}>
+            <Avatar
+              name={name}
+              size={128}
+              color={brandColor(color)}
+              src={pictures.avatar}
+              position={formatPosition(shownAvatar)}
+            />
+          </Pressable>
+          {pictures.avatar && (
+            <PhotoViewer
+              photos={[{ url: pictures.avatar, label: name }]}
+              visible={viewing}
+              onClose={() => setViewing(false)}
+            />
+          )}
           {canManage && repositioningAvatar && (
             <>
               <View

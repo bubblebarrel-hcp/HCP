@@ -121,7 +121,7 @@ function subjectWord(subjectType: string | null) {
   }
 }
 
-// The web names a notification's page by these words, not by the enum.
+// The clients name a notification's page by these words, not by the enum.
 function mentionContext(type: string) {
   switch (type) {
     case 'POST':
@@ -130,9 +130,28 @@ function mentionContext(type: string) {
       return 'Reel';
     case 'RUN':
       return 'Run';
+    case 'TRAIL_REPORT':
+      return 'TrailReport';
+    case 'RUN_CAPSULE':
+      return 'RunCapsule';
     default:
       return type;
   }
+}
+
+// Where a social notice about a subject should open. A comment is not a page:
+// it lives on the thing it was written on, so a like on a comment opens that.
+async function homeOf(subjectType: string, subjectId: string): Promise<{ contextType: string; contextId: string }> {
+  if (subjectType === 'COMMENT') {
+    const comment = await prisma.contentComment.findUnique({
+      where: { id: subjectId },
+      select: { subjectType: true, subjectId: true },
+    });
+    if (comment && comment.subjectType !== 'COMMENT') {
+      return { contextType: mentionContext(comment.subjectType), contextId: comment.subjectId };
+    }
+  }
+  return { contextType: mentionContext(subjectType), contextId: subjectId };
 }
 
 // What each hash reaction reads as in a sentence (D60).
@@ -805,6 +824,7 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
       const authorId = str(payload, 'authorId');
       if (!authorId || !event.actorId || authorId === event.actorId) return null;
       const who = await publicNameOf(event.actorId);
+      const home = await homeOf(event.aggregateType, event.aggregateId);
       return {
         category: C.SOCIAL,
         priority: P.LOW,
@@ -813,8 +833,8 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
             ? `${who} ${REACTION_VERB[str(payload, 'reaction') as string] ?? 'reacted to'} your ${subjectWord(str(payload, 'subjectType'))}`
             : `${who} liked your ${subjectWord(str(payload, 'subjectType'))}`,
         body: 'On On!',
-        contextType: event.aggregateType,
-        contextId: event.aggregateId,
+        contextType: home.contextType,
+        contextId: home.contextId,
         kennelId: str(payload, 'kennelId'),
         recipients: [authorId],
         // FR-NOT-005: twelve reactions to one reel are one notice, not twelve.
@@ -853,8 +873,7 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         priority: P.NORMAL,
         title,
         body: comment ? excerpt(comment.body) : 'Go and see what they said.',
-        contextType: event.aggregateType,
-        contextId: event.aggregateId,
+        ...(await homeOf(event.aggregateType, event.aggregateId)),
         kennelId: str(payload, 'kennelId'),
         recipients: [recipient],
       };
@@ -868,8 +887,7 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         priority: P.NORMAL,
         title: `${who} reshared your ${subjectWord(str(payload, 'subjectType'))}`,
         body: payload.hasCommentary ? 'They added something of their own.' : 'It is in their feed now.',
-        contextType: event.aggregateType,
-        contextId: event.aggregateId,
+        ...(await homeOf(event.aggregateType, event.aggregateId)),
         kennelId: str(payload, 'kennelId'),
         recipients: [authorId],
       };
@@ -914,8 +932,7 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         title: `${who} mentioned you in a ${subjectWord(subjectType)}`,
         body: words ? excerpt(words) : 'Go and see what they said.',
         // The thing the words are on, which for a comment is not the comment.
-        contextType: mentionContext(str(payload, 'homeType') ?? event.aggregateType),
-        contextId: event.aggregateId,
+        ...(await homeOf(str(payload, 'homeType') ?? event.aggregateType, event.aggregateId)),
         kennelId: null,
         recipients,
         pushByDefault: true,
@@ -1128,8 +1145,7 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
         priority: P.NORMAL,
         title: 'A comment of yours was taken down',
         body: str(payload, 'reason') ?? 'A moderator removed it.',
-        contextType: event.aggregateType,
-        contextId: event.aggregateId,
+        ...(await homeOf(event.aggregateType, event.aggregateId)),
         kennelId: null,
         recipients: [comment.authorId],
       };

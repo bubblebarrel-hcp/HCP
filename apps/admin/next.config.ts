@@ -14,6 +14,8 @@ const csp = [
   // R2 media is https; in development the fallback is the API's own /uploads
   // on plain http, so that origin has to be named (D28).
   `img-src 'self' data: blob: https:${isDev ? ` ${backendOrigin}` : ''}`,
+  // Clips play in the content viewer; same origins as the pictures.
+  `media-src 'self' blob: https:${isDev ? ` ${backendOrigin}` : ''}`,
   "font-src 'self' data:",
   `connect-src 'self' ${backendOrigin}${isDev ? " ws://localhost:*" : ""}`,
   "object-src 'none'",

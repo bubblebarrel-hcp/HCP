@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Avatar } from '@/components/Avatar';
 import { ActionDialog } from '@/components/membership/ActionDialog';
 import { Button } from '@/components/ui/button';
+import { PhotoViewer } from '@/components/ui/PhotoViewer';
 import { KEY_STEP, clamp, formatPosition, parsePosition } from '@/lib/banner';
 import { MAX_UPLOAD_BYTES, fileSize, uploadPhoto } from '@/lib/media';
 import { brandColor, cn, coverBackground } from '@/lib/utils';
@@ -70,6 +71,7 @@ export function ProfileBranding({
   const [editedAvatarPosition, setEditedAvatarPosition] = useState<string | null | undefined>(undefined);
   const [avatarDragging, setAvatarDragging] = useState<{ x: number; y: number } | null>(null);
   const [savingAvatarPosition, setSavingAvatarPosition] = useState(false);
+  const [viewingAvatar, setViewingAvatar] = useState(false);
   const avatarCropRef = useRef<HTMLDivElement>(null);
   const avatarGrab = useRef<{ pointerId: number; startX: number; startY: number; from: { x: number; y: number } } | null>(
     null,
@@ -457,13 +459,30 @@ export function ProfileBranding({
 
       <div className="flex flex-col items-center gap-3 px-4 pb-4 sm:flex-row sm:items-end sm:gap-5 lg:px-8">
         <div className="relative -mt-16 sm:-mt-12">
-          <Avatar
-            name={name}
-            size="xl"
-            color={brandColor(color)}
-            src={pictures.avatar}
-            position={formatPosition(shownAvatar)}
-          />
+          {/* Click the picture to see all of it; not while its crop is being dragged. */}
+          <button
+            type="button"
+            disabled={!pictures.avatar || repositioningAvatar}
+            onClick={() => setViewingAvatar(true)}
+            aria-label={`${name}, open picture full screen`}
+            data-testid="profile-avatar-view"
+            className="block rounded-full enabled:cursor-zoom-in focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <Avatar
+              name={name}
+              size="xl"
+              color={brandColor(color)}
+              src={pictures.avatar}
+              position={formatPosition(shownAvatar)}
+            />
+          </button>
+          {pictures.avatar && (
+            <PhotoViewer
+              photos={[{ url: pictures.avatar, label: name }]}
+              open={viewingAvatar}
+              onOpenChange={setViewingAvatar}
+            />
+          )}
           {canManage && repositioningAvatar && (
             <>
               {/* Covers the circle so a drag anywhere on it moves the crop. */}

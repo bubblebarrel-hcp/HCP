@@ -1,4 +1,5 @@
 import { MediaCarousel } from '@/components/feed/MediaCarousel';
+import { ClickablePhoto } from '@/components/feed/ClickablePhoto';
 import { PostVideo } from '@/components/feed/PostVideo';
 import type { PostPhoto } from '@/lib/types';
 
@@ -21,20 +22,10 @@ export function PostMedia({ items, tallest = '36rem' }: { items: PostPhoto[]; ta
           poster={item.thumbnailUrl ?? undefined}
           style={{ maxHeight: tallest }}
           className="w-full bg-black"
+          expandable
         />
       ) : (
-        // Storage is an arbitrary host, so next/image would need every
-        // deployment's domain configured up front.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={item.url}
-          alt=""
-          width={item.width ?? undefined}
-          height={item.height ?? undefined}
-          loading="lazy"
-          style={{ maxHeight: tallest }}
-          className="w-full bg-muted object-cover"
-        />
+        <ClickablePhoto item={item} tallest={tallest} />
       )}
     </div>
   );

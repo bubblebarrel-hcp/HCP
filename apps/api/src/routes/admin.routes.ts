@@ -53,6 +53,7 @@ router.post('/notifications/digests', asyncHandler(adminController.sweepDigests)
 router.post('/notifications/escalations', asyncHandler(adminController.sweepEscalations));
 
 router.get('/users', validate(listUsersQuery, 'query'), asyncHandler(adminController.listUsers));
+router.get('/users/:id', asyncHandler(adminController.getUser));
 router.patch('/users/:id/role', validate(updateUserRoleSchema), asyncHandler(adminController.updateUserRole));
 router.patch('/users/:id/status', validate(updateUserStatusSchema), asyncHandler(adminController.updateUserStatus));
 

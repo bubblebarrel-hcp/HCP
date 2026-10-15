@@ -154,8 +154,16 @@ export function routeFor(data: Record<string, unknown> | undefined): string | nu
   if (!type || !id) return '/notifications';
   switch (type) {
     case 'Run':
-    case 'Trail':
+    case 'RUN':
       return `/run/${id}`;
+    case 'Trail':
+      return `/trails/${id}`;
+    case 'TrailReport':
+    case 'TRAIL_REPORT':
+      return `/trail-reports/${id}`;
+    case 'RunCapsule':
+    case 'RUN_CAPSULE':
+      return `/capsules/${id}`;
     // Somebody asked to follow a locked profile (D57): the thing to do is answer.
     // A direct message, or a request for one (D71).
     case 'DirectConversation':
@@ -170,8 +178,10 @@ export function routeFor(data: Record<string, unknown> | undefined): string | nu
       return '/photo-tags';
     // A like or a comment names the thing it was on (D50).
     case 'Post':
+    case 'POST':
       return `/posts/${id}`;
     case 'Reel':
+    case 'REEL':
       return `/reels/${id}`;
     // A social notice about a person (an approved request) opens them.
     case 'User':

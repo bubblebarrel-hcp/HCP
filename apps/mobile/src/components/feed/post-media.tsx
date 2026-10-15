@@ -13,6 +13,7 @@ import { Play, Volume2, VolumeX } from 'lucide-react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 
 import { ThemedText } from '@/components/themed-text';
+import { PhotoViewer } from '@/components/ui/photo-viewer';
 import { MaxContentWidth } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useDevicePrefs } from '@/lib/device-prefs';
@@ -114,9 +115,26 @@ function ClipPlayer({ url, width, height, muted: startMuted }: { url: string; wi
   );
 }
 
+// Tapping a picture opens it full screen (PhotoViewer), which pages through every
+// item of the post, clips included.
+function useViewer(items: PostPhoto[]) {
+  const [open, setOpen] = useState<number | null>(null);
+  return {
+    show: (item: PostPhoto) => setOpen(Math.max(0, items.indexOf(item))),
+    viewer: (
+      <PhotoViewer
+        photos={items.map((p) => ({ url: p.url, kind: p.kind === 'VIDEO' ? 'VIDEO' : undefined, poster: p.thumbnailUrl ?? undefined }))}
+        index={open ?? 0}
+        visible={open !== null}
+        onClose={() => setOpen(null)}
+      />
+    ),
+  };
+}
+
 function Carousel({ items, width, height }: { items: PostPhoto[]; width: number; height: number }) {
-  const theme = useTheme();
   const [index, setIndex] = useState(0);
+  const { show, viewer } = useViewer(items);
 
   const onEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     setIndex(Math.round(event.nativeEvent.contentOffset.x / width));
@@ -136,17 +154,23 @@ function Carousel({ items, width, height }: { items: PostPhoto[]; width: number;
           item.kind === 'VIDEO' ? (
             <Clip key={item.id} item={item} width={width} height={height} active={i === index} />
           ) : (
-            <Image
+            <Pressable
               key={item.id}
-              source={{ uri: item.url }}
-              style={{ width, height, backgroundColor: '#000' }}
-              resizeMode="contain"
-              accessibilityIgnoresInvertColors
-              accessibilityLabel={`Picture ${i + 1} of ${items.length}`}
-            />
+              accessibilityRole="imagebutton"
+              accessibilityLabel={`Picture ${i + 1} of ${items.length}, open full screen`}
+              testID="post-photo"
+              onPress={() => show(item)}>
+              <Image
+                source={{ uri: item.url }}
+                style={{ width, height, backgroundColor: '#000' }}
+                resizeMode="contain"
+                accessibilityIgnoresInvertColors
+              />
+            </Pressable>
           ),
         )}
       </ScrollView>
+      {viewer}
 
       <View style={styles.counter} pointerEvents="none">
         <ThemedText style={styles.counterText} testID="post-carousel-count">
@@ -167,7 +191,6 @@ function Carousel({ items, width, height }: { items: PostPhoto[]; width: number;
 }
 
 export function PostMedia({ items, tallest = 576 }: { items: PostPhoto[]; tallest?: number }) {
-  const theme = useTheme();
   const { width: screen } = useWindowDimensions();
   if (items.length === 0) return null;
 
@@ -187,14 +210,27 @@ export function PostMedia({ items, tallest = 576 }: { items: PostPhoto[]; talles
       </View>
     );
   }
+  return <SinglePhoto item={item} width={width} height={Math.min(width * 1.1, tallest)} />;
+}
+
+function SinglePhoto({ item, width, height }: { item: PostPhoto; width: number; height: number }) {
+  const theme = useTheme();
+  const { show, viewer } = useViewer([item]);
   return (
     <View testID="post-media">
-      <Image
-        source={{ uri: item.url }}
-        style={{ backgroundColor: theme.backgroundElement, width, height: Math.min(width * 1.1, tallest) }}
-        resizeMode="cover"
-        accessibilityIgnoresInvertColors
-      />
+      <Pressable
+        accessibilityRole="imagebutton"
+        accessibilityLabel="Open photo full screen"
+        testID="post-photo"
+        onPress={() => show(item)}>
+        <Image
+          source={{ uri: item.url }}
+          style={{ backgroundColor: theme.backgroundElement, width, height }}
+          resizeMode="cover"
+          accessibilityIgnoresInvertColors
+        />
+      </Pressable>
+      {viewer}
     </View>
   );
 }

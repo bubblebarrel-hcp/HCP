@@ -46,14 +46,24 @@ export function notificationHref(item: NotificationItem) {
   if (!item.contextId) return null;
   switch (item.contextType) {
     case 'Run':
+    case 'RUN':
       return `/runs/${item.contextId}`;
     case 'Trail':
       return `/trails/${item.contextId}`;
-    // A like or a comment names the thing it was on (D50).
+    // A like or a comment names the thing it was on (D50). The upper-case names
+    // are older rows, written before the API named the page.
     case 'Post':
+    case 'POST':
       return `/posts/${item.contextId}`;
     case 'Reel':
+    case 'REEL':
       return `/reels/${item.contextId}`;
+    case 'TrailReport':
+    case 'TRAIL_REPORT':
+      return `/reports/${item.contextId}`;
+    case 'RunCapsule':
+    case 'RUN_CAPSULE':
+      return `/capsules/${item.contextId}`;
     // Somebody asked to follow a locked profile (D57): the thing to do is answer.
     // Somebody tagged you in a photo and wants your yes (D60).
     // The outcome of something you reported (D61).

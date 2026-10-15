@@ -110,3 +110,8 @@ export async function sendBroadcast(req: Request, res: Response) {
   if (!req.user) throw ApiError.unauthorized();
   return ok(res, { broadcast: await broadcasts.send(req.user.id, req.body) }, 201);
 }
+
+export async function getUser(req: Request, res: Response) {
+  if (!req.user) throw ApiError.unauthorized();
+  return ok(res, { user: await adminService.getUserDetail(req.user.id, req.params.id) });
+}

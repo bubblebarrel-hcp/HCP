@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 
 import { PhotoTags } from '@/components/social/photo-tags';
 import { ThemedText } from '@/components/themed-text';
+import { PhotoViewer } from '@/components/ui/photo-viewer';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/web-ui';
 import { MaxContentWidth } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
@@ -28,6 +29,10 @@ export function RunMedia({ target, canContribute, title = 'Photos' }: { target: 
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(0);
   const [open, setOpen] = useState<MediaAsset | null>(null);
+  // The picture in the dialog, full screen over it.
+  const [zooming, setZooming] = useState(false);
+  // Pictures only: an item with no address (still processing) has nothing to show.
+  const viewable = items.filter((m) => m.url);
 
   // p-6 inside the card, gap-2 between three tiles.
   const tile = Math.floor((Math.min(width, MaxContentWidth) - 48 - 16) / 3);
@@ -149,12 +154,18 @@ export function RunMedia({ target, canContribute, title = 'Photos' }: { target: 
                   </Pressable>
                 </View>
                 {open.url ? (
-                  <Image
-                    source={{ uri: open.url }}
-                    accessibilityLabel={open.caption ?? `Photo by ${open.uploadedBy ?? 'a hasher'}`}
-                    style={[styles.full, { backgroundColor: theme.backgroundElement }]}
-                    resizeMode="contain"
-                  />
+                  <Pressable
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel="Open photo full screen"
+                    testID="run-photo-full"
+                    onPress={() => setZooming(true)}>
+                    <Image
+                      source={{ uri: open.url }}
+                      accessibilityLabel={open.caption ?? `Photo by ${open.uploadedBy ?? 'a hasher'}`}
+                      style={[styles.full, { backgroundColor: theme.backgroundElement }]}
+                      resizeMode="contain"
+                    />
+                  </Pressable>
                 ) : null}
                 <ThemedText themeColor="textSecondary" style={styles.sm}>
                   Added by {open.uploadedBy ?? 'a hasher'}
@@ -198,6 +209,13 @@ export function RunMedia({ target, canContribute, title = 'Photos' }: { target: 
             </View>
           ) : null}
         </View>
+        {/* Inside the dialog's Modal, so it opens over it rather than behind. */}
+        <PhotoViewer
+          photos={viewable.map((m) => ({ url: m.url as string, caption: m.caption }))}
+          index={Math.max(0, viewable.findIndex((m) => m.id === open?.id))}
+          visible={zooming && Boolean(open)}
+          onClose={() => setZooming(false)}
+        />
       </Modal>
     </Card>
   );

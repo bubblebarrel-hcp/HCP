@@ -1,13 +1,14 @@
 'use client';
 
-import Link from 'next/link';
+import { useState } from 'react';
 import { Film, Loader2, Mountain, StickyNote } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PhotoViewer } from '@/components/ui/PhotoViewer';
 import type { HasherPhoto } from '@/lib/types';
 
 // The photo grid on a hasher's page (D57): square tiles, three across, the way a
-// profile reads on a phone. Each tile opens what the picture is on: the post, the
-// reel or the run, since a photo has no page of its own.
+// profile reads on a phone. A tile opens the picture full screen; from there "Open
+// post" (or reel, or run) goes to what it is on, since a photo has no page of its own.
 
 const HREF: Record<HasherPhoto['source']['type'], string> = {
   POST: '/posts',
@@ -19,6 +20,12 @@ const WHERE: Record<HasherPhoto['source']['type'], string> = {
   POST: 'a post',
   REEL: 'a reel',
   RUN: 'a run',
+};
+
+const OPEN: Record<HasherPhoto['source']['type'], string> = {
+  POST: 'Open post',
+  REEL: 'Open reel',
+  RUN: 'Open run',
 };
 
 function SourceBadge({ type }: { type: HasherPhoto['source']['type'] }) {
@@ -46,6 +53,7 @@ export function ProfilePhotoGrid({
   onMore: () => void;
   name: string;
 }) {
+  const [viewing, setViewing] = useState<number | null>(null);
   if (photos.length === 0) {
     return (
       <p
@@ -60,11 +68,12 @@ export function ProfilePhotoGrid({
   return (
     <div data-testid="photo-grid">
       <ul className="grid grid-cols-3 gap-0.5 sm:gap-1">
-        {photos.map((photo) => (
+        {photos.map((photo, i) => (
           <li key={photo.id} className="group relative aspect-square overflow-hidden bg-muted sm:rounded-sm">
-            <Link
-              href={`${HREF[photo.source.type]}/${photo.source.id}`}
-              className="block h-full w-full focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
+            <button
+              type="button"
+              onClick={() => setViewing(i)}
+              className="block h-full w-full cursor-zoom-in focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary"
               aria-label={`${photo.caption ?? 'A photo'}, on ${WHERE[photo.source.type]}`}
               data-testid="photo-tile"
             >
@@ -78,10 +87,20 @@ export function ProfilePhotoGrid({
                 className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
               />
               <SourceBadge type={photo.source.type} />
-            </Link>
+            </button>
           </li>
         ))}
       </ul>
+      <PhotoViewer
+        photos={photos.map((photo) => ({
+          url: photo.url,
+          caption: photo.caption,
+          action: { label: OPEN[photo.source.type], href: `${HREF[photo.source.type]}/${photo.source.id}` },
+        }))}
+        index={viewing ?? 0}
+        open={viewing !== null}
+        onOpenChange={(open) => !open && setViewing(null)}
+      />
       {photos.length < total && (
         <div className="flex justify-center p-4">
           <Button type="button" variant="outline" size="sm" onClick={onMore} disabled={loading} data-testid="photo-grid-more">

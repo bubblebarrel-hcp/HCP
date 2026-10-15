@@ -9,6 +9,7 @@ import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Textarea } from '@/components/ui/input';
+import { PhotoViewer } from '@/components/ui/PhotoViewer';
 import type { ModerationActionKind, ReportDetail, ReportHasher } from '@/lib/types';
 import { cn, formatDate, humanize } from '@/lib/utils';
 
@@ -19,13 +20,22 @@ import { cn, formatDate, humanize } from '@/lib/utils';
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3010';
 
 function HasherCard({ title, hasher, tone }: { title: string; hasher: ReportHasher; tone?: 'danger' }) {
+  const [viewing, setViewing] = useState(false);
   return (
     <div className={cn('rounded-lg border p-4', tone === 'danger' ? 'border-destructive/40' : 'border-border')}>
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
       <div className="mt-2 flex items-start gap-3">
         {hasher.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={hasher.avatarUrl} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+          <button
+            type="button"
+            onClick={() => setViewing(true)}
+            aria-label="Open picture full screen"
+            data-testid="report-avatar-view"
+            className="shrink-0 cursor-zoom-in rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={hasher.avatarUrl} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+          </button>
         ) : (
           <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-muted text-lg font-semibold">
             {hasher.name.replace(/^Just /, '').slice(0, 2).toUpperCase()}
@@ -42,6 +52,9 @@ function HasherCard({ title, hasher, tone }: { title: string; hasher: ReportHash
         </div>
       </div>
       {hasher.bio && <p className="mt-3 whitespace-pre-line text-sm">{hasher.bio}</p>}
+      {hasher.avatarUrl && (
+        <PhotoViewer photos={[{ url: hasher.avatarUrl, label: hasher.name }]} open={viewing} onOpenChange={setViewing} />
+      )}
       <a
         href={`${WEB_URL}/hashers/${hasher.id}`}
         target="_blank"

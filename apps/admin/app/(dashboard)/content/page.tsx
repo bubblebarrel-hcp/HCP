@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import api, { errorMessage } from '@/services/api';
 import { DataTable, type Column } from '@/components/DataTable';
 import { FilterBar, type FilterField, type FilterValues } from '@/components/FilterBar';
+import { MediaStrip } from '@/components/MediaStrip';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { ReasonDialog } from '@/components/ui/reason-dialog';
@@ -95,6 +96,7 @@ function Posts() {
       cell: (p) => (
         <div className="max-w-md">
           <p className="line-clamp-3 whitespace-pre-line">{p.body}</p>
+          {p.items.length > 0 && <div className="mt-2"><MediaStrip items={p.items} /></div>}
           {p.removedReason && <p className="mt-1 text-xs text-destructive">Removed: {p.removedReason}</p>}
         </div>
       ),
@@ -141,7 +143,11 @@ function Reels() {
       header: 'Reel',
       cell: (r) => (
         <div className="flex items-center gap-3">
-          <Thumb url={r.media?.thumbnailUrl ?? null} kind={r.media ? humanize(r.media.kind) : 'None'} />
+          {r.items.length > 0 ? (
+            <MediaStrip items={r.items} />
+          ) : (
+            <Thumb url={r.media?.thumbnailUrl ?? null} kind={r.media ? humanize(r.media.kind) : 'None'} />
+          )}
           <div className="max-w-xs">
             <p className="line-clamp-2">{r.caption || <span className="text-muted-foreground">No caption</span>}</p>
             {r.removedReason && <p className="mt-1 text-xs text-destructive">Removed: {r.removedReason}</p>}

@@ -8,6 +8,7 @@ import { DataTable, type Column } from '@/components/DataTable';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/input';
 import { Badge } from '@/components/ui/card';
+import { UserDetailDrawer } from '@/components/UserDetailDrawer';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { AdminUser, Page } from '@/lib/types';
 import { formatDate, humanize } from '@/lib/utils';
@@ -22,6 +23,7 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [q, setQ] = useState('');
   const [search, setSearch] = useState('');
+  const [detailId, setDetailId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,10 +70,26 @@ export default function UsersPage() {
       key: 'name',
       header: 'Hasher',
       cell: (u) => (
-        <div>
-          <p className="font-medium">{u.displayName}</p>
-          <p className="text-xs text-muted-foreground">{u.fullName} · {u.email}</p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setDetailId(u.id)}
+          aria-label={`See everything about ${u.displayName}`}
+          data-testid="user-open"
+          className="flex items-center gap-3 rounded-md text-left hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          {u.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- storage is an arbitrary host
+            <img src={u.avatarUrl} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+          ) : (
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold">
+              {u.displayName.replace(/^Just /, '').slice(0, 2).toUpperCase()}
+            </span>
+          )}
+          <span>
+            <span className="block font-medium">{u.displayName}</span>
+            <span className="block text-xs text-muted-foreground">{u.fullName} · {u.email}</span>
+          </span>
+        </button>
       ),
     },
     { key: 'kennel', header: 'Home kennel', cell: (u) => u.homeKennel?.shortName ?? <span className="text-muted-foreground">—</span> },
@@ -156,6 +174,8 @@ export default function UsersPage() {
         total={data?.total ?? 0}
         onPageChange={setPage}
       />
+
+      <UserDetailDrawer userId={detailId} onClose={() => setDetailId(null)} />
     </div>
   );
 }

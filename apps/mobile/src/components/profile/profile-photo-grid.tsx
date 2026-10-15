@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Image, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
+import { PhotoViewer } from '@/components/ui/photo-viewer';
 import { Button } from '@/components/ui/web-ui';
 import { MaxContentWidth } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -9,9 +11,10 @@ import type { HasherPhoto } from '@/lib/types';
 
 // The photo grid on a hasher's page (D57), as the web draws it
 // (components/profile/ProfilePhotoGrid.tsx): square tiles, three across, 2pt
-// apart. Each tile opens what the picture is on: the post, the reel or the run,
-// since a photo has no page of its own.
+// apart. A tile opens the picture full screen; from there "Open post" (or reel, or
+// run) goes to what it is on, since a photo has no page of its own.
 const WHERE: Record<HasherPhoto['source']['type'], string> = { POST: 'a post', REEL: 'a reel', RUN: 'a run' };
+const OPEN: Record<HasherPhoto['source']['type'], string> = { POST: 'Open post', REEL: 'Open reel', RUN: 'Open run' };
 
 export function ProfilePhotoGrid({
   photos,
@@ -30,6 +33,7 @@ export function ProfilePhotoGrid({
   const router = useRouter();
   const { width } = useWindowDimensions();
   const tile = Math.floor((Math.min(width, MaxContentWidth) - 4) / 3);
+  const [viewing, setViewing] = useState<number | null>(null);
 
   function open(photo: HasherPhoto) {
     if (photo.source.type === 'RUN') router.push(`/run/${photo.source.id}`);
@@ -56,7 +60,7 @@ export function ProfilePhotoGrid({
             accessibilityRole="imagebutton"
             accessibilityLabel={`${photo.caption ?? 'A photo'}, on ${WHERE[photo.source.type]}`}
             testID="photo-tile"
-            onPress={() => open(photo)}
+            onPress={() => setViewing(photos.indexOf(photo))}
             style={[styles.tile, { width: tile, height: tile, backgroundColor: theme.backgroundElement }]}>
             <Image
               source={{ uri: photo.thumbnailUrl ?? photo.url }}
@@ -67,6 +71,16 @@ export function ProfilePhotoGrid({
           </Pressable>
         ))}
       </View>
+      <PhotoViewer
+        photos={photos.map((photo) => ({
+          url: photo.url,
+          caption: photo.caption,
+          action: { label: OPEN[photo.source.type], onPress: () => open(photo) },
+        }))}
+        index={viewing ?? 0}
+        visible={viewing !== null}
+        onClose={() => setViewing(null)}
+      />
       {photos.length < total && (
         <View style={styles.more}>
           <Button variant="outline" size="sm" disabled={loading} busy={loading} testID="photo-grid-more" onPress={onMore}>

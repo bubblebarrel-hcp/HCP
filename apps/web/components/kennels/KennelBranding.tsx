@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Avatar } from '@/components/Avatar';
 import { ActionDialog } from '@/components/membership/ActionDialog';
 import { Button } from '@/components/ui/button';
+import { PhotoViewer } from '@/components/ui/PhotoViewer';
 import { KEY_STEP, clamp, formatPosition, parsePosition } from '@/lib/banner';
 import { ACCEPTED_IMAGES, MAX_UPLOAD_BYTES, fileSize, uploadPhoto } from '@/lib/media';
 import type { ViewerMembership } from '@/lib/types';
@@ -62,6 +63,7 @@ export function KennelBranding({
   // worked on, kept apart from the saved one so Cancel is a real cancel.
   const [dragging, setDragging] = useState<{ x: number; y: number } | null>(null);
   const [savingPosition, setSavingPosition] = useState(false);
+  const [viewingLogo, setViewingLogo] = useState(false);
   const inputs = { banner: useRef<HTMLInputElement>(null), logo: useRef<HTMLInputElement>(null) };
   const bannerRef = useRef<HTMLDivElement>(null);
   const grab = useRef<{ pointerId: number; startX: number; startY: number; from: { x: number; y: number } } | null>(
@@ -377,7 +379,24 @@ export function KennelBranding({
 
       <div className="flex flex-col items-center gap-3 px-4 pb-4 sm:flex-row sm:items-end sm:gap-5 lg:px-8">
         <div className="relative -mt-16 sm:-mt-12">
-          <Avatar name={shortName} size="xl" color={brandColor(primaryColor)} src={pictures.logo} />
+          {/* Click the logo to see all of it. */}
+          <button
+            type="button"
+            disabled={!pictures.logo}
+            onClick={() => setViewingLogo(true)}
+            aria-label={`${shortName}, open logo full screen`}
+            data-testid="kennel-logo-view"
+            className="block rounded-full enabled:cursor-zoom-in focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <Avatar name={shortName} size="xl" color={brandColor(primaryColor)} src={pictures.logo} />
+          </button>
+          {pictures.logo && (
+            <PhotoViewer
+              photos={[{ url: pictures.logo, label: shortName }]}
+              open={viewingLogo}
+              onOpenChange={setViewingLogo}
+            />
+          )}
           {canManage && (
             <>
               {picker('logo')}

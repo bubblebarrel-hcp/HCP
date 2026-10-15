@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { PostVideo } from '@/components/feed/PostVideo';
+import { PhotoViewer } from '@/components/ui/PhotoViewer';
 import { cn } from '@/lib/utils';
 import type { PostPhoto } from '@/lib/types';
 
@@ -17,6 +18,7 @@ import type { PostPhoto } from '@/lib/types';
 export function MediaCarousel({ items, tallest }: { items: PostPhoto[]; tallest: string }) {
   const row = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
+  const [viewing, setViewing] = useState<number | null>(null);
 
   const goTo = useCallback((next: number) => {
     const el = row.current;
@@ -81,17 +83,27 @@ export function MediaCarousel({ items, tallest }: { items: PostPhoto[]; tallest:
                 renditions={item.renditions}
                 poster={item.thumbnailUrl ?? undefined}
                 className="h-full w-full object-contain"
+                expandable
+                onExpand={() => setViewing(i)}
               />
             ) : (
-              // Storage is an arbitrary host, so next/image would need every
-              // deployment's domain configured up front.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={item.url}
-                alt=""
-                loading={i === 0 ? 'eager' : 'lazy'}
-                className="h-full w-full object-contain"
-              />
+              <button
+                type="button"
+                onClick={() => setViewing(i)}
+                aria-label={`Open picture ${i + 1} full screen`}
+                data-testid="post-photo"
+                className="h-full w-full cursor-zoom-in"
+              >
+                {/* Storage is an arbitrary host, so next/image would need every
+                    deployment's domain configured up front. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.url}
+                  alt=""
+                  loading={i === 0 ? 'eager' : 'lazy'}
+                  className="h-full w-full object-contain"
+                />
+              </button>
             )}
           </div>
         ))}
@@ -124,6 +136,13 @@ export function MediaCarousel({ items, tallest }: { items: PostPhoto[]; tallest:
           />
         ))}
       </div>
+
+      <PhotoViewer
+        photos={items.map((p) => ({ url: p.url, kind: p.kind === 'VIDEO' ? 'VIDEO' : undefined, poster: p.thumbnailUrl ?? undefined }))}
+        index={Math.max(0, viewing ?? 0)}
+        open={viewing !== null}
+        onOpenChange={(open) => !open && setViewing(null)}
+      />
     </div>
   );
 }

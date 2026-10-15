@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { PhotoViewer } from '@/components/ui/PhotoViewer';
 import { PhotoTags } from '@/components/social/PhotoTags';
 import { ReportDialog } from '@/components/social/ReportDialog';
 import { useAuth } from '@/context/AuthContext';
@@ -66,6 +67,10 @@ export function RunMedia({
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(0);
   const [open, setOpen] = useState<MediaAsset | null>(null);
+  // The picture in the dialog, full screen over it.
+  const [zooming, setZooming] = useState(false);
+  // An item with no address (still processing) has nothing to show.
+  const viewable = items.filter((m) => m.url);
 
   useEffect(() => {
     let cancelled = false;
@@ -195,12 +200,20 @@ export function RunMedia({
             <DialogContent className="max-w-3xl" title={open.caption ?? 'Photo from this run'}>
               <div className="space-y-3">
                 {open.url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={open.url}
-                    alt={open.caption ?? `Photo by ${open.uploadedBy ?? 'a hasher'}`}
-                    className="max-h-[70vh] w-full rounded-lg object-contain"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setZooming(true)}
+                    aria-label="Open photo full screen"
+                    data-testid="run-photo-full"
+                    className="block w-full cursor-zoom-in"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={open.url}
+                      alt={open.caption ?? `Photo by ${open.uploadedBy ?? 'a hasher'}`}
+                      className="max-h-[70vh] w-full rounded-lg object-contain"
+                    />
+                  </button>
                 )}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-muted-foreground">
@@ -246,6 +259,13 @@ export function RunMedia({
             </DialogContent>
           )}
         </Dialog>
+
+        <PhotoViewer
+          photos={viewable.map((m) => ({ url: m.url as string, caption: m.caption, label: m.caption ?? undefined }))}
+          index={Math.max(0, viewable.findIndex((m) => m.id === open?.id))}
+          open={zooming && Boolean(open)}
+          onOpenChange={setZooming}
+        />
       </CardContent>
     </Card>
   );

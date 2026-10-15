@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Volume2, VolumeX } from 'lucide-react';
+import { Maximize2, Volume2, VolumeX } from 'lucide-react';
+import { PhotoViewer } from '@/components/ui/PhotoViewer';
 import { useDevicePrefs } from '@/lib/device-prefs';
 import { pickVideoSource } from '@/lib/video-quality';
 import type { VideoRendition } from '@/lib/types';
@@ -17,13 +18,20 @@ export function PostVideo({
   poster,
   className,
   style,
+  expandable = false,
+  onExpand,
 }: {
   src: string;
   renditions?: VideoRendition[];
   poster?: string;
   className?: string;
   style?: React.CSSProperties;
+  // Adds an expand button that opens the clip full screen. `onExpand` lets a
+  // carousel open its own viewer over all its items; without it the clip opens alone.
+  expandable?: boolean;
+  onExpand?: () => void;
 }) {
+  const [viewing, setViewing] = useState(false);
   const [prefs] = useDevicePrefs();
   const src = pickVideoSource(url, renditions, prefs.quality, prefs.dataSaver);
   const ref = useRef<HTMLVideoElement>(null);
@@ -50,6 +58,13 @@ export function PostVideo({
     seen.observe(el);
     return () => seen.disconnect();
   }, [prefs.autoplay, prefs.dataSaver]);
+
+  const expand = () => {
+    // The inline player stops: two copies of one clip must not play over each other.
+    ref.current?.pause();
+    if (onExpand) onExpand();
+    else setViewing(true);
+  };
 
   const toggle = () => {
     chosen.current = true;
@@ -79,6 +94,23 @@ export function PostVideo({
           }
         }}
       />
+      {expandable && (
+        <button
+          type="button"
+          onClick={expand}
+          aria-label="Open video full screen"
+          data-testid="post-video-expand"
+          className={cn(
+            'absolute left-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white',
+            'hover:bg-black/80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white',
+          )}
+        >
+          <Maximize2 className="h-4 w-4" aria-hidden />
+        </button>
+      )}
+      {expandable && !onExpand && (
+        <PhotoViewer photos={[{ url: src, kind: 'VIDEO', poster, label: 'Video' }]} open={viewing} onOpenChange={setViewing} />
+      )}
       <button
         type="button"
         onClick={toggle}

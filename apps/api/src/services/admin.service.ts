@@ -13,6 +13,7 @@ import { ApiError, isUuid, page } from '../utils/http';
 import { displayName } from '../serializers/user';
 import * as enforcement from './enforcement.service';
 import { recordAudit } from './record.service';
+import { decryptField } from '../utils/field-crypto';
 import { getNumberSetting } from './settings.service';
 import { verificationReadiness } from './admin-oversight.service';
 
@@ -143,6 +144,7 @@ export async function listUsers(opts: { page: number; limit: number; q?: string 
         status: true,
         trustLevel: true,
         hashHandle: true,
+        avatarUrl: true,
         createdAt: true,
         lastLoginAt: true,
         person: { select: { firstName: true, lastName: true, country: true } },
@@ -159,6 +161,7 @@ export async function listUsers(opts: { page: number; limit: number; q?: string 
     status: u.status,
     trustLevel: u.trustLevel,
     displayName: displayName(u.hashHandle, u.person?.firstName),
+    avatarUrl: u.avatarUrl,
     fullName: u.person ? `${u.person.firstName} ${u.person.lastName}` : null,
     country: u.person?.country ?? null,
     homeKennel: u.homeKennel,
@@ -216,4 +219,121 @@ export async function updateStatus(actorId: string, id: string, status: AccountS
     await enforcement.afterStaffChange(tx, id, status, actorId);
     return user;
   });
+}
+
+// Everything staff may see about one hasher, for the Hashers page's detail panel.
+// Deliberately not here: direct messages (D71: staff only see what a reporter
+// files), the password hash and sessions, and medical notes (health data nobody
+// needs to moderate with). Biodata is the private PersonProfile (D5), so reading
+// it is itself audited: who looked, at whom.
+export async function getUserDetail(actorId: string, id: string) {
+  if (!isUuid(id)) throw ApiError.notFound('User not found');
+  const user = await prisma.user.findUnique({
+    where: { id },
+    include: {
+      person: true,
+      homeKennel: { select: { id: true, shortName: true, name: true } },
+      hashNames: { orderBy: { createdAt: 'asc' } },
+    },
+  });
+  if (!user) throw ApiError.notFound('User not found');
+
+  const [memberships, roles, offices, posts, reels, followers, following, reportsAgainst, enforcements] =
+    await prisma.$transaction([
+      prisma.membership.findMany({
+        where: { userId: id },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          isHomeKennel: true,
+          startDate: true,
+          endDate: true,
+          kennel: { select: { id: true, shortName: true, name: true } },
+        },
+      }),
+      prisma.roleAssignment.findMany({
+        where: { userId: id, status: 'ACTIVE' },
+        select: { id: true, role: true, title: true, kennelId: true },
+      }),
+      prisma.officerAppointment.findMany({
+        where: { userId: id, status: 'ACTIVE' },
+        select: { id: true, kennel: { select: { shortName: true } }, startDate: true },
+      }),
+      prisma.post.count({ where: { authorId: id } }),
+      prisma.reel.count({ where: { authorId: id } }),
+      prisma.follow.count({ where: { targetType: 'USER', targetId: id, status: 'ACTIVE', unfollowedAt: null } }),
+      prisma.follow.count({ where: { followerId: id, status: 'ACTIVE', unfollowedAt: null } }),
+      prisma.contentReport.count({ where: { targetUserId: id } }),
+      prisma.autoEnforcement.findMany({
+        where: { userId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: { id: true, level: true, reporterCount: true, endsAt: true, liftedAt: true, confirmedAt: true, createdAt: true },
+      }),
+    ]);
+
+  await prisma.$transaction((tx) =>
+    recordAudit(tx, {
+      actorId,
+      action: 'user.detail.view',
+      resourceType: 'Identity',
+      resourceId: id,
+      policyRef: 'platform-admin',
+    }),
+  );
+
+  const p = user.person;
+  return {
+    id: user.id,
+    email: user.email,
+    emailVerifiedAt: user.emailVerifiedAt,
+    role: user.platformRole,
+    status: user.status,
+    trustLevel: user.trustLevel,
+    displayName: displayName(user.hashHandle, p?.firstName),
+    hashHandle: user.hashHandle,
+    username: user.username,
+    avatarUrl: user.avatarUrl,
+    bannerUrl: user.bannerUrl,
+    bio: user.bio,
+    profileVisibility: user.profileVisibility,
+    dmPolicy: user.dmPolicy,
+    homeKennel: user.homeKennel,
+    preferredLanguage: user.preferredLanguage,
+    timeZone: user.timeZone,
+    termsAcceptedAt: user.termsAcceptedAt,
+    termsVersion: user.termsVersion,
+    createdAt: user.createdAt,
+    lastLoginAt: user.lastLoginAt,
+    deactivatedAt: user.deactivatedAt,
+    deletedAt: user.deletedAt,
+    hashNames: user.hashNames.map((n) => ({ id: n.id, name: n.name, isPrimary: n.isPrimary, isAlias: n.isAlias, bestowedAt: n.bestowedAt })),
+    biodata: p
+      ? {
+          firstName: p.firstName,
+          middleName: p.middleName,
+          lastName: p.lastName,
+          dateOfBirth: decryptField(p.dateOfBirth),
+          gender: p.gender,
+          phone: decryptField(p.phone),
+          nationality: p.nationality,
+          country: p.country,
+          stateProvince: p.stateProvince,
+          city: p.city,
+          addressLine: p.addressLine,
+          occupation: p.occupation,
+          languages: p.languages,
+          emergencyContactName: decryptField(p.emergencyContactName),
+          emergencyContactPhone: decryptField(p.emergencyContactPhone),
+          emergencyContactRelationship: decryptField(p.emergencyContactRelationship),
+        }
+      : null,
+    memberships,
+    roles,
+    offices,
+    activity: { posts, reels, followers, following, reportsAgainst },
+    enforcements,
+  };
 }
