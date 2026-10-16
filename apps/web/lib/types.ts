@@ -493,6 +493,8 @@ export interface NotificationItem {
 
 export interface NotificationPage extends Page<NotificationItem> {
   unread: number;
+  // What is still unread in each category, for the dropdown's tab counts.
+  unreadByCategory: Partial<Record<NotificationCategory, number>>;
 }
 
 // D12 closed the set: no SMS.

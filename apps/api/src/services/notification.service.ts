@@ -1576,11 +1576,22 @@ const notificationSelect = {
   createdAt: true,
 } satisfies Prisma.NotificationSelect;
 
-export async function listMine(actor: Actor, opts: { unreadOnly: boolean; page: number; limit: number }) {
+export async function listMine(
+  actor: Actor,
+  opts: { unreadOnly: boolean; page: number; limit: number; categories?: NotificationCategory[] },
+) {
   const where: Prisma.NotificationWhereInput = {
     recipientUserId: actor.id,
     ...(opts.unreadOnly ? { readAt: null } : {}),
+    ...(opts.categories?.length ? { category: { in: opts.categories } } : {}),
   };
+  // What is waiting in each category, so a tab can show its own count.
+  const unreadGroups = await prisma.notification.groupBy({
+    by: ['category'],
+    where: { recipientUserId: actor.id, readAt: null },
+    _count: { _all: true },
+  });
+  const unreadByCategory = Object.fromEntries(unreadGroups.map((g) => [g.category, g._count._all]));
   const [rows, total, unread] = await prisma.$transaction([
     prisma.notification.findMany({
       where,
@@ -1592,7 +1603,7 @@ export async function listMine(actor: Actor, opts: { unreadOnly: boolean; page: 
     prisma.notification.count({ where }),
     prisma.notification.count({ where: { recipientUserId: actor.id, readAt: null } }),
   ]);
-  return { ...page(rows, total, opts.page, opts.limit), unread };
+  return { ...page(rows, total, opts.page, opts.limit), unread, unreadByCategory };
 }
 
 export async function unreadCount(actor: Actor) {

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import type { NotificationCategory } from '@prisma/client';
 import * as notifications from '../services/notification.service';
 import type { Actor } from '../services/permission.service';
 import { ApiError, ok } from '../utils/http';
@@ -9,8 +10,13 @@ function actor(req: Request): Actor {
 }
 
 export async function list(req: Request, res: Response) {
-  const { page, limit, unread } = req.query as unknown as { page: number; limit: number; unread: boolean };
-  return ok(res, await notifications.listMine(actor(req), { page, limit, unreadOnly: unread }));
+  const { page, limit, unread, categories } = req.query as unknown as {
+    page: number;
+    limit: number;
+    unread: boolean;
+    categories?: NotificationCategory[];
+  };
+  return ok(res, await notifications.listMine(actor(req), { page, limit, unreadOnly: unread, categories }));
 }
 
 export async function unreadCount(req: Request, res: Response) {

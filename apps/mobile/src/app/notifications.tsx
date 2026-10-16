@@ -11,13 +11,15 @@ import { MaxContentWidth } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { api, errorMessage } from '@/lib/api';
+import { type NotificationTab, matchesTab, notificationQuery, notificationTabs } from '@/lib/notification-tabs';
 import { routeFor } from '@/lib/push';
 import type { NotificationItem, Page } from '@/lib/types';
 
 // Notifications as the web app lays it out on a phone
 // (app/notifications/page.tsx): a header card with the settings cog and the
-// All / Unread / Mentions filters, then one bordered list with unread rows
-// tinted and a dot in front.
+// Inbox / Runs / Social / Kennel / All tabs (the same ones as the web bell), then
+// one bordered list with unread rows tinted and a dot in front. The mentions inbox
+// (D60) is a button under the tabs.
 
 const LIMIT = 20;
 
@@ -48,7 +50,7 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-type Listing = Page<NotificationItem> & { unread: number };
+type Listing = Page<NotificationItem> & { unread: number; unreadByCategory?: Record<string, number> };
 
 export default function NotificationsScreen() {
   const theme = useTheme();
@@ -57,7 +59,9 @@ export default function NotificationsScreen() {
   const [items, setItems] = useState<NotificationItem[] | null>(null);
   const [total, setTotal] = useState(0);
   const [unread, setUnread] = useState(0);
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [tab, setTab] = useState<NotificationTab>('inbox');
+  // What is still unread in each category, for the tab counts.
+  const [byCategory, setByCategory] = useState<Record<string, number>>({});
   // The mentions inbox (D60): everything that has mentioned you, kept.
   const [mentions, setMentions] = useState(false);
   const [page, setPage] = useState(1);
@@ -71,22 +75,23 @@ export default function NotificationsScreen() {
 
   const fetchPage = useCallback(
     (nextPage: number) =>
-      api<Listing>(`/me/notifications?limit=${LIMIT}&page=${nextPage}${unreadOnly ? '&unread=true' : ''}`),
-    [unreadOnly],
+      api<Listing>(`/me/notifications?limit=${LIMIT}&page=${nextPage}&${notificationQuery(tab)}`),
+    [tab],
   );
 
   const reload = useCallback(async () => {
     try {
       const data = await fetchPage(1);
       setError(null);
-      setItems(data.items);
+      setItems(data.items.filter((i) => matchesTab(i, tab)));
       setTotal(data.total);
       setUnread(data.unread);
+      setByCategory(data.unreadByCategory ?? {});
       setPage(1);
     } catch (err) {
       setError(errorMessage(err, 'Could not load your notifications'));
     }
-  }, [fetchPage]);
+  }, [fetchPage, tab]);
 
   useEffect(() => {
     if (!user) return;
@@ -98,7 +103,7 @@ export default function NotificationsScreen() {
     setLoadingMore(true);
     try {
       const data = await fetchPage(page + 1);
-      setItems((prev) => [...(prev ?? []), ...data.items]);
+      setItems((prev) => [...(prev ?? []), ...data.items.filter((i) => matchesTab(i, tab))]);
       setTotal(data.total);
       setUnread(data.unread);
       setPage(page + 1);
@@ -117,6 +122,14 @@ export default function NotificationsScreen() {
     }
     const path = routeFor({ contextType: item.contextType, contextId: item.contextId });
     if (path && path !== '/notifications') router.push(path as never);
+  }
+
+  // What is waiting on a tab: the whole inbox, or its categories' share of it.
+  function tabCount(id: NotificationTab) {
+    if (id === 'inbox') return unread;
+    if (id === 'all') return 0;
+    const cats = notificationTabs.find((t) => t.id === id)?.categories ?? [];
+    return cats.reduce((n, c) => n + (byCategory[c] ?? 0), 0);
   }
 
   async function markAllRead() {
@@ -172,35 +185,33 @@ export default function NotificationsScreen() {
                 <Settings size={20} color={theme.text} />
               </Pressable>
             </View>
-            <View style={styles.filters}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+              {notificationTabs.map((t) => {
+                const count = tabCount(t.id);
+                const active = !mentions && tab === t.id;
+                return (
+                  <Button
+                    key={t.id}
+                    size="sm"
+                    variant={active ? 'default' : 'outline'}
+                    testID={`notifications-tab-${t.id}`}
+                    onPress={() => {
+                      if (mentions || tab !== t.id) setItems(null);
+                      setMentions(false);
+                      setTab(t.id);
+                    }}>
+                    {`${t.label}${count > 0 ? ` ${count > 99 ? '99+' : count}` : ''}`}
+                  </Button>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.subFilters}>
               <Button
                 size="sm"
-                variant={!mentions && !unreadOnly ? 'default' : 'outline'}
-                testID="notifications-filter-all"
-                onPress={() => {
-                  setItems(null);
-                  setMentions(false);
-                  setUnreadOnly(false);
-                }}>
-                All
-              </Button>
-              <Button
-                size="sm"
-                variant={!mentions && unreadOnly ? 'default' : 'outline'}
-                testID="notifications-filter-unread"
-                onPress={() => {
-                  setItems(null);
-                  setMentions(false);
-                  setUnreadOnly(true);
-                }}>
-                {`Unread${unread > 0 ? ` (${unread})` : ''}`}
-              </Button>
-              <Button
-                size="sm"
-                variant={mentions ? 'default' : 'outline'}
+                variant={mentions ? 'default' : 'ghost'}
                 testID="notifications-filter-mentions"
                 onPress={() => setMentions(true)}>
-                Mentions
+                Mentions inbox
               </Button>
               {unread > 0 && !mentions && (
                 <Button size="sm" variant="ghost" testID="notifications-read-all" style={styles.readAll} onPress={() => void markAllRead()}>
@@ -223,7 +234,9 @@ export default function NotificationsScreen() {
               </View>
             ) : items.length === 0 ? (
               <ThemedText themeColor="textSecondary" style={styles.empty} testID="notifications-empty">
-                {unreadOnly ? 'You are all caught up. On On!' : 'Nothing yet. Likes, comments, follows and run news land here.'}
+                {tab === 'inbox'
+                  ? 'You are all caught up. On On! Use the other tabs, or All, to look back.'
+                  : 'Nothing here yet. Likes, comments, follows and run news land here.'}
               </ThemedText>
             ) : (
               items.map((item, index) => (
@@ -276,7 +289,8 @@ const styles = StyleSheet.create({
   h1: { fontSize: 24, lineHeight: 32, fontWeight: '700', letterSpacing: -0.4 },
   lead: { marginTop: 4, fontSize: 16, lineHeight: 24, fontWeight: '400' },
   cog: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  filters: { marginTop: 16, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  filters: { marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  subFilters: { marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
   readAll: { marginLeft: 'auto' },
   list: { overflow: 'hidden' },
   message: { padding: 32, textAlign: 'center', fontSize: 14, lineHeight: 20, fontWeight: '400' },

@@ -25,6 +25,11 @@ export const listNotificationsQuery = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(50).default(20),
   unread: Joi.boolean().default(false),
+  // A comma-separated list ("RUN,SOCIAL"), for the dropdown's tabs.
+  categories: Joi.string().custom((value: string, helpers) => {
+    const list = value.split(',').map((c) => c.trim()).filter(Boolean);
+    return list.length > 0 && list.every((c) => CATEGORIES.includes(c)) ? list : helpers.error('any.invalid');
+  }),
 });
 
 export const updatePreferencesSchema = Joi.object({

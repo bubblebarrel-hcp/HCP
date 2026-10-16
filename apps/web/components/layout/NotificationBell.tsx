@@ -6,7 +6,15 @@ import { useRouter } from 'next/navigation';
 import { Bell, Settings } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/card';
-import { NOTIFICATIONS_CHANGED, notificationCategoryLabel, notificationHref, notificationTone } from '@/lib/notifications';
+import {
+  NOTIFICATIONS_CHANGED,
+  matchesTab,
+  type NotificationTab,
+  notificationCategoryLabel,
+  notificationHref,
+  notificationTabs,
+  notificationTone,
+} from '@/lib/notifications';
 import type { NotificationItem, NotificationPage } from '@/lib/types';
 import { cn, formatDate } from '@/lib/utils';
 import api from '@/services/api';
@@ -17,8 +25,12 @@ function fetchUnread() {
   return api.get<{ data: { unread: number } }>('/me/notifications/unread-count').then((res) => res.data.data.unread);
 }
 
-function fetchRecent() {
-  return api.get<{ data: NotificationPage }>('/me/notifications?limit=10').then((res) => res.data.data);
+function fetchRecent(tab: NotificationTab) {
+  const def = notificationTabs.find((t) => t.id === tab);
+  const params: Record<string, string | number | boolean> = { limit: 15 };
+  if (tab === 'inbox') params.unread = true;
+  if (def?.categories) params.categories = def.categories.join(',');
+  return api.get<{ data: NotificationPage }>('/me/notifications', { params }).then((res) => res.data.data);
 }
 
 export function NotificationBell() {
@@ -26,6 +38,8 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState<NotificationItem[] | null>(null);
+  const [tab, setTab] = useState<NotificationTab>('inbox');
+  const [byCategory, setByCategory] = useState<NotificationPage['unreadByCategory']>({});
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -67,11 +81,12 @@ export function NotificationBell() {
     };
   }, [open]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (which: NotificationTab) => {
     try {
-      const data = await fetchRecent();
-      setItems(data.items);
+      const data = await fetchRecent(which);
+      setItems(data.items.filter((i) => matchesTab(i, which)));
       setUnread(data.unread);
+      setByCategory(data.unreadByCategory ?? {});
     } catch {
       setItems([]);
     }
@@ -82,7 +97,22 @@ export function NotificationBell() {
   async function openPanel() {
     const next = !open;
     setOpen(next);
-    if (next) await load();
+    if (next) await load(tab);
+  }
+
+  function chooseTab(next: NotificationTab) {
+    if (next === tab) return;
+    setTab(next);
+    setItems(null);
+    void load(next);
+  }
+
+  // What is waiting on a tab: the whole inbox, or its categories' share of it.
+  function tabCount(id: NotificationTab) {
+    if (id === 'inbox') return unread;
+    if (id === 'all') return 0;
+    const cats = notificationTabs.find((t) => t.id === id)?.categories ?? [];
+    return cats.reduce((n, c) => n + (byCategory[c] ?? 0), 0);
   }
 
   async function markRead(item: NotificationItem) {
@@ -92,7 +122,7 @@ export function NotificationBell() {
     try {
       await api.post(`/me/notifications/${item.id}/read`);
     } catch {
-      void load();
+      void load(tab);
     }
   }
 
@@ -102,7 +132,7 @@ export function NotificationBell() {
     try {
       await api.post('/me/notifications/read-all');
     } catch {
-      void load();
+      void load(tab);
     }
   }
 
@@ -131,7 +161,7 @@ export function NotificationBell() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-12 z-50 w-[22rem] max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card shadow-lg"
+          className="fixed inset-x-4 top-16 z-50 rounded-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-[26rem] border border-border bg-card shadow-lg"
           data-testid="notification-panel"
         >
           <div className="flex items-center justify-between gap-2 border-b border-border p-3">
@@ -158,6 +188,34 @@ export function NotificationBell() {
             </div>
           </div>
 
+          <div role="tablist" aria-label="Notification groups" className="flex gap-0.5 overflow-x-auto border-b border-border px-2 py-2">
+            {notificationTabs.map((t) => {
+              const count = tabCount(t.id);
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  data-testid={`notification-tab-${t.id}`}
+                  onClick={() => chooseTab(t.id)}
+                  className={cn(
+                    'flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1.5 text-sm font-medium',
+                    active ? 'border-border bg-muted text-foreground' : 'border-transparent text-muted-foreground hover:bg-muted',
+                  )}
+                >
+                  {t.label}
+                  {count > 0 && (
+                    <span className="rounded-md border border-border bg-card px-1.5 text-xs" data-testid={`notification-tab-count-${t.id}`}>
+                      {count > 99 ? '99+' : count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="max-h-[26rem] overflow-y-auto">
             {items === null ? (
               <div className="space-y-2 p-3" aria-busy>
@@ -166,7 +224,9 @@ export function NotificationBell() {
               </div>
             ) : items.length === 0 ? (
               <p className="p-6 text-center text-sm text-muted-foreground">
-                Nothing yet. Likes, comments, follows, run changes and trail releases land here.
+                {tab === 'inbox'
+                  ? 'You are all caught up. Use the other tabs, or All, to look back.'
+                  : 'Nothing here yet. Likes, comments, follows, run changes and trail releases land here.'}
               </p>
             ) : (
               <ul className="divide-y divide-border">
