@@ -28,7 +28,6 @@ function fetchUnread() {
 function fetchRecent(tab: NotificationTab) {
   const def = notificationTabs.find((t) => t.id === tab);
   const params: Record<string, string | number | boolean> = { limit: 15 };
-  if (tab === 'inbox') params.unread = true;
   if (def?.categories) params.categories = def.categories.join(',');
   return api.get<{ data: NotificationPage }>('/me/notifications', { params }).then((res) => res.data.data);
 }
@@ -38,7 +37,7 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState<NotificationItem[] | null>(null);
-  const [tab, setTab] = useState<NotificationTab>('inbox');
+  const [tab, setTab] = useState<NotificationTab>('all');
   const [byCategory, setByCategory] = useState<NotificationPage['unreadByCategory']>({});
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -107,10 +106,9 @@ export function NotificationBell() {
     void load(next);
   }
 
-  // What is waiting on a tab: the whole inbox, or its categories' share of it.
+  // What is unread on a tab: everything on All, or its categories' share of it.
   function tabCount(id: NotificationTab) {
-    if (id === 'inbox') return unread;
-    if (id === 'all') return 0;
+    if (id === 'all') return unread;
     const cats = notificationTabs.find((t) => t.id === id)?.categories ?? [];
     return cats.reduce((n, c) => n + (byCategory[c] ?? 0), 0);
   }
@@ -224,9 +222,7 @@ export function NotificationBell() {
               </div>
             ) : items.length === 0 ? (
               <p className="p-6 text-center text-sm text-muted-foreground">
-                {tab === 'inbox'
-                  ? 'You are all caught up. Use the other tabs, or All, to look back.'
-                  : 'Nothing here yet. Likes, comments, follows, run changes and trail releases land here.'}
+                Nothing here yet. Likes, comments, follows, run changes and trail releases land here.
               </p>
             ) : (
               <ul className="divide-y divide-border">

@@ -17,7 +17,7 @@ import type { NotificationItem, Page } from '@/lib/types';
 
 // Notifications as the web app lays it out on a phone
 // (app/notifications/page.tsx): a header card with the settings cog and the
-// Inbox / Runs / Social / Kennel / All tabs (the same ones as the web bell), then
+// All / Runs / Social / Kennel tabs (the same ones as the web bell), then
 // one bordered list with unread rows tinted and a dot in front. The mentions inbox
 // (D60) is a button under the tabs.
 
@@ -59,7 +59,7 @@ export default function NotificationsScreen() {
   const [items, setItems] = useState<NotificationItem[] | null>(null);
   const [total, setTotal] = useState(0);
   const [unread, setUnread] = useState(0);
-  const [tab, setTab] = useState<NotificationTab>('inbox');
+  const [tab, setTab] = useState<NotificationTab>('all');
   // What is still unread in each category, for the tab counts.
   const [byCategory, setByCategory] = useState<Record<string, number>>({});
   // The mentions inbox (D60): everything that has mentioned you, kept.
@@ -124,10 +124,9 @@ export default function NotificationsScreen() {
     if (path && path !== '/notifications') router.push(path as never);
   }
 
-  // What is waiting on a tab: the whole inbox, or its categories' share of it.
+  // What is unread on a tab: everything on All, or its categories' share of it.
   function tabCount(id: NotificationTab) {
-    if (id === 'inbox') return unread;
-    if (id === 'all') return 0;
+    if (id === 'all') return unread;
     const cats = notificationTabs.find((t) => t.id === id)?.categories ?? [];
     return cats.reduce((n, c) => n + (byCategory[c] ?? 0), 0);
   }
@@ -234,9 +233,7 @@ export default function NotificationsScreen() {
               </View>
             ) : items.length === 0 ? (
               <ThemedText themeColor="textSecondary" style={styles.empty} testID="notifications-empty">
-                {tab === 'inbox'
-                  ? 'You are all caught up. On On! Use the other tabs, or All, to look back.'
-                  : 'Nothing here yet. Likes, comments, follows and run news land here.'}
+                Nothing here yet. Likes, comments, follows and run news land here.
               </ThemedText>
             ) : (
               items.map((item, index) => (

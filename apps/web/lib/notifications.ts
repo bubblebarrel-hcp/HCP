@@ -35,16 +35,15 @@ export const notificationCategoryHint: Record<NotificationCategory, string> = {
   SYSTEM: 'Account and platform notices.',
 };
 
-// The tabs of the bell's dropdown. Inbox is whatever still needs you (unread, any
-// category); the others are groups of categories; All is everything, read or not.
-export type NotificationTab = 'inbox' | 'runs' | 'social' | 'kennel' | 'all';
+// The tabs of the bell's dropdown. All is everything, read or not, and carries the
+// unread count; the others are groups of categories.
+export type NotificationTab = 'all' | 'runs' | 'social' | 'kennel';
 
 export const notificationTabs: { id: NotificationTab; label: string; categories?: NotificationCategory[] }[] = [
-  { id: 'inbox', label: 'Inbox' },
+  { id: 'all', label: 'All' },
   { id: 'runs', label: 'Runs', categories: ['RUN', 'TRAIL_RELEASE', 'REMINDER', 'EVENT', 'SAFETY', 'REPORT', 'MEDIA'] },
   { id: 'social', label: 'Social', categories: ['SOCIAL', 'MESSAGE'] },
   { id: 'kennel', label: 'Kennel', categories: ['MEMBERSHIP', 'GOVERNANCE', 'ANNOUNCEMENT'] },
-  { id: 'all', label: 'All' },
 ];
 
 export function notificationTone(priority: NotificationPriority) {
@@ -102,7 +101,6 @@ export function notificationHref(item: NotificationItem) {
 // The server filters by tab too; this keeps a tab right against an API that does not
 // yet know `categories` (an older deploy) and would answer with everything.
 export function matchesTab(item: NotificationItem, tab: NotificationTab) {
-  if (tab === 'inbox') return !item.readAt;
   const cats = notificationTabs.find((t) => t.id === tab)?.categories;
   return !cats || cats.includes(item.category);
 }
