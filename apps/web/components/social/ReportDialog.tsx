@@ -30,13 +30,23 @@ export function ReportDialog({
   // Offered once it is sent: block or mute the person behind it, which is a
   // different thing from telling us and often wanted straight away.
   afterSend,
+  // For a caller that opens it from somewhere else, like a message menu.
+  open: controlledOpen,
+  onOpenChange,
 }: {
   targetType: ReportTargetType;
   targetId: string;
-  trigger: React.ReactNode;
+  trigger?: React.ReactNode;
   afterSend?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [innerOpen, setInnerOpen] = useState(false);
+  const open = controlledOpen ?? innerOpen;
+  const setOpen = (next: boolean) => {
+    setInnerOpen(next);
+    onOpenChange?.(next);
+  };
   const [reason, setReason] = useState<ReportReason | null>(null);
   const [details, setDetails] = useState('');
   const [impersonating, setImpersonating] = useState<'ME' | 'OTHER' | null>(null);
@@ -110,7 +120,7 @@ export function ReportDialog({
         if (!next) reset();
       }}
     >
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       {open && (
         <DialogContent
           title={sent ? 'Thank you' : `Report ${TARGET_WORDS[targetType]}`}

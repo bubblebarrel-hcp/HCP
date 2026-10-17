@@ -19,10 +19,20 @@ export const sendSchema = Joi.object({
   body,
   attachmentIds: Joi.array().items(uuid).max(10),
   stickerId: uuid,
+  // The earlier message of this conversation being answered.
+  replyToId: uuid,
   clientKey,
 });
 
 export const editSchema = Joi.object({ body });
+
+// Passing messages on: up to twenty, into up to five of my conversations.
+export const forwardSchema = Joi.object({
+  messageIds: Joi.array().items(uuid).min(1).max(20).unique().required(),
+  toConversationIds: Joi.array().items(uuid).min(1).max(5).unique().required(),
+});
+
+export const pinSchema = Joi.object({ pinned: Joi.boolean().required() });
 
 export const listSchema = Joi.object({
   box: Joi.string().valid('inbox', 'requests').default('inbox'),

@@ -34,11 +34,22 @@ import {
 type Panel = 'emoji' | 'sticker' | null;
 type Picked = ImagePicker.ImagePickerAsset;
 
+// A line standing in for the message being answered.
+function replyPreview(m: DirectMessage) {
+  const words = (m.body ?? '').trim();
+  if (m.kind === 'STICKER') return 'Sticker';
+  if (m.kind === 'VOICE') return 'Voice message';
+  if (m.kind === 'MEDIA') return words || (m.attachments.length === 1 ? (m.attachments[0].kind === 'VIDEO' ? 'Video' : 'Photo') : `${m.attachments.length} items`);
+  return words;
+}
+
 export function Composer({
   conversationId,
   canShareFiles,
   editing,
   onCancelEdit,
+  replyingTo,
+  onCancelReply,
   onSent,
   onEdited,
 }: {
@@ -46,6 +57,9 @@ export function Composer({
   canShareFiles: boolean;
   editing: DirectMessage | null;
   onCancelEdit: () => void;
+  // The message being answered; it rides along with whatever is sent next.
+  replyingTo: DirectMessage | null;
+  onCancelReply: () => void;
   onSent: (result: { message: DirectMessage; status: ConversationStatus }) => void;
   onEdited: (message: DirectMessage) => void;
 }) {
@@ -71,6 +85,10 @@ export function Composer({
       input.current?.focus();
     }
   }, [editing]);
+
+  useEffect(() => {
+    if (replyingTo) input.current?.focus();
+  }, [replyingTo]);
 
   function format(mark: '*' | '_' | '~' | '`') {
     const next = toggleMark(draft, selection.start, selection.end, mark);
@@ -124,7 +142,7 @@ export function Composer({
   }
 
   async function post(body: SendInput) {
-    const result = await sendMessage(conversationId, body, key.current);
+    const result = await sendMessage(conversationId, { ...body, ...(replyingTo ? { replyToId: replyingTo.id } : {}) }, key.current);
     key.current = clientKey();
     onSent({ message: result.message, status: result.status });
     return result;
@@ -249,6 +267,20 @@ export function Composer({
       {panel === 'emoji' && <EmojiPanel onPick={insert} />}
       {panel === 'sticker' && <StickerPanel sending={busy} onSend={(s) => void sendSticker(s)} />}
 
+      {replyingTo && !editing && (
+        <View style={[styles.banner, { backgroundColor: theme.backgroundElement, borderLeftColor: theme.primary, borderLeftWidth: 4 }]} testID="reply-banner">
+          <View style={styles.bannerText}>
+            <ThemedText style={[styles.small, { fontWeight: '600' }]}>Replying to {replyingTo.mine ? 'yourself' : 'them'}</ThemedText>
+            <ThemedText numberOfLines={1} themeColor="textSecondary" style={styles.small}>
+              {replyPreview(replyingTo)}
+            </ThemedText>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cancel reply" onPress={onCancelReply} hitSlop={8}>
+            <X size={18} color={theme.text} />
+          </Pressable>
+        </View>
+      )}
+
       {editing && (
         <View style={[styles.banner, { backgroundColor: theme.backgroundElement }]} testID="editing-banner">
           <ThemedText style={styles.small}>
@@ -351,6 +383,7 @@ export function Composer({
 const styles = StyleSheet.create({
   banner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8 },
   small: { fontSize: 13, lineHeight: 18 },
+  bannerText: { flex: 1, minWidth: 0, paddingRight: 12 },
   staged: { gap: 8, paddingHorizontal: 12, paddingTop: 8 },
   thumb: { width: 72, height: 72, borderRadius: 8, overflow: 'hidden' },
   thumbImage: { width: '100%', height: '100%' },

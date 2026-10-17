@@ -35,6 +35,11 @@ export const accept = async (req: Request, res: Response) => ok(res, await dm.ac
 export const decline = async (req: Request, res: Response) => ok(res, await dm.decline(actor(req), req.params.id));
 export const mute = async (req: Request, res: Response) => ok(res, await dm.setMuted(actor(req), req.params.id, req.body.muted));
 export const archive = async (req: Request, res: Response) => ok(res, await dm.archive(actor(req), req.params.id));
+export const active = async (req: Request, res: Response) => ok(res, await dm.setActive(actor(req), req.params.id, true));
+export const inactive = async (req: Request, res: Response) => ok(res, await dm.setActive(actor(req), req.params.id, false));
+export const forward = async (req: Request, res: Response) =>
+  ok(res, await dm.forward(actor(req), req.params.id, req.body.messageIds, req.body.toConversationIds));
+export const pin = async (req: Request, res: Response) => ok(res, await dm.pin(actor(req), req.params.id, req.body.pinned));
 
 // Files (D73).
 export const requestUpload = async (req: Request, res: Response) =>

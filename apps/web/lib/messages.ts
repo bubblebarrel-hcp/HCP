@@ -77,7 +77,31 @@ export interface DirectMessage {
   sticker: MessageSticker | null;
   // Only on my own messages.
   receipt: Receipt | null;
+  // Passed on from another conversation.
+  forwarded: boolean;
+  // The earlier message this one answers, read from that message as it is now.
+  replyTo: ReplyQuote | null;
+  // Set while the message is pinned; pins are shared by both people.
+  pinnedAt: string | null;
 }
+
+export interface ReplyQuote {
+  id: string;
+  mine: boolean;
+  kind: MessageKind;
+  status: MessageStatus;
+  preview: string;
+}
+
+export interface PinnedMessage {
+  id: string;
+  mine: boolean;
+  kind: MessageKind;
+  preview: string;
+  pinnedAt: string;
+}
+
+export const MAX_PINS = 3;
 
 export interface LastMessage {
   id: string;
@@ -113,6 +137,7 @@ export interface ConversationDetail {
   canShareFiles: boolean;
   editWindowMs: number;
   createdAt: string;
+  pins: PinnedMessage[];
 }
 
 export interface CanMessage {
@@ -161,11 +186,12 @@ export async function startConversation(userId: string, body: string, clientKey:
   );
 }
 
-export type SendInput =
+export type SendInput = (
   | { kind: 'TEXT'; body: string }
   | { kind: 'MEDIA'; attachmentIds: string[]; body?: string }
   | { kind: 'VOICE'; attachmentIds: string[] }
-  | { kind: 'STICKER'; stickerId: string };
+  | { kind: 'STICKER'; stickerId: string }
+) & { replyToId?: string };
 
 export async function sendMessage(id: string, input: SendInput, clientKey: string) {
   return unwrap(
@@ -180,6 +206,31 @@ export async function sendMessage(id: string, input: SendInput, clientKey: strin
 export async function editMessage(id: string, body: string) {
   return unwrap(await api.patch<Envelope<{ message: DirectMessage }>>(`/messages/${id}`, { body }));
 }
+
+export interface ForwardResult {
+  conversationId: string;
+  sent: number;
+  error: { code: string; message: string } | null;
+}
+
+// Messages are passed on in the order they were sent, into conversations I am already in.
+export async function forwardMessages(fromId: string, messageIds: string[], toConversationIds: string[]) {
+  return unwrap(
+    await api.post<Envelope<{ results: ForwardResult[] }>>(`/conversations/${fromId}/forward`, { messageIds, toConversationIds }),
+  ).results;
+}
+
+export async function pinMessage(id: string, pinned: boolean) {
+  return unwrap(await api.put<Envelope<{ message: DirectMessage }>>(`/messages/${id}/pin`, { pinned })).message;
+}
+
+// "I am looking at this conversation": while it holds, its new messages stay out of the bell.
+export const setConversationActive = (id: string, active: boolean) =>
+  active ? api.put(`/conversations/${id}/active`) : api.delete(`/conversations/${id}/active`);
+
+/** The words of a message that can be copied; nothing for a sticker or a voice note. */
+export const copyableText = (m: DirectMessage) =>
+  m.status === 'SENT' && (m.kind === 'TEXT' || m.kind === 'MEDIA') ? (m.body ?? '').trim() : '';
 
 export const markConversationRead = (id: string) => api.post(`/conversations/${id}/read`);
 export const acceptRequest = (id: string) => api.post(`/conversations/${id}/accept`);

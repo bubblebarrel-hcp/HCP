@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, CheckCheck, ChevronLeft, ChevronRight, Flag, Pause, Pencil, Play } from 'lucide-react';
+import { Check, CheckCheck, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Copy, Flag, Forward, Pause, Pencil, Pin, PinOff, Play, Reply } from 'lucide-react';
+import { toast } from 'sonner';
 import { ReportDialog } from '@/components/social/ReportDialog';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { FormattedText } from '@/lib/chat-format';
-import { clockTime, type DirectMessage, type MessageAttachment, type Receipt } from '@/lib/messages';
+import { clockTime, copyableText, type DirectMessage, type MessageAttachment, type Receipt, type ReplyQuote } from '@/lib/messages';
 import { cn } from '@/lib/utils';
 
 // One message in the thread (D71, D73): words with their marks, pictures and clips
@@ -148,17 +149,129 @@ function Viewer({ files, index, onChange, onClose }: { files: MessageAttachment[
   );
 }
 
+// The quote above a reply. Tapping it takes you to the message it answers.
+function Quote({ quote, mine, onJump }: { quote: ReplyQuote; mine: boolean; onJump: (id: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onJump(quote.id)}
+      className={cn(
+        'mb-1.5 block w-full rounded-lg border-l-4 px-2 py-1 text-left text-xs',
+        mine ? 'border-primary-foreground/60 bg-primary-foreground/15' : 'border-primary bg-background/60',
+      )}
+      data-testid="message-quote"
+    >
+      <span className="block font-semibold">{quote.mine ? 'You' : 'Them'}</span>
+      <span className="line-clamp-2 break-words opacity-90">{quote.preview || 'Message'}</span>
+    </button>
+  );
+}
+
+// Everything you can do to one message, behind the chevron. A small popover of our
+// own: it closes on a click elsewhere, on Escape, and when an item is chosen.
+function ActionMenu({ mine, items }: { mine: boolean; items: { key: string; label: string; icon: React.ReactNode; onClick: () => void }[] }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('pointerdown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('pointerdown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+
+  return (
+    <div ref={box} className="relative self-start pt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Message actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={cn(
+          'grid h-7 w-7 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100',
+          open ? 'opacity-100' : 'opacity-0 max-md:opacity-70',
+        )}
+        data-testid="message-menu"
+      >
+        <ChevronDown className="h-4 w-4" aria-hidden />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className={cn(
+            'absolute top-8 z-20 min-w-40 rounded-lg border border-border bg-card p-1 text-sm shadow-lg',
+            mine ? 'right-0' : 'left-0',
+          )}
+        >
+          {items.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                item.onClick();
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-muted"
+              data-testid={`message-${item.key}`}
+            >
+              <span className="text-muted-foreground">{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SWIPE_TO_REPLY = 56;
+
 export function MessageBubble({
   message: m,
   now,
   onEdit,
+  onReply,
+  onForward,
+  onPin,
+  onSelect,
+  onJump,
+  canReply,
+  canPin,
+  selecting,
+  selected,
+  onToggle,
+  flash,
 }: {
   message: DirectMessage;
   // The clock, ticking once a second while an edit window is open.
   now: number;
   onEdit: (message: DirectMessage) => void;
+  onReply: (message: DirectMessage) => void;
+  onForward: (message: DirectMessage) => void;
+  onPin: (message: DirectMessage) => void;
+  // Starts selecting with this message ticked.
+  onSelect: (message: DirectMessage) => void;
+  onJump: (id: string) => void;
+  canReply: boolean;
+  canPin: boolean;
+  selecting: boolean;
+  selected: boolean;
+  onToggle: (message: DirectMessage) => void;
+  flash: boolean;
 }) {
   const [viewing, setViewing] = useState<number | null>(null);
+  const [reporting, setReporting] = useState(false);
+  const [dx, setDx] = useState(0);
+  const swipe = useRef<{ x: number; y: number; active: boolean } | null>(null);
   const live = m.status === 'SENT';
   const canEdit = live && m.mine && m.editableUntil !== null && new Date(m.editableUntil).getTime() > now;
   const media = m.attachments.filter((a) => a.kind !== 'AUDIO');
@@ -190,42 +303,134 @@ export function MessageBubble({
     content = <FormattedText text={m.body ?? ''} />;
   }
 
+  const text = copyableText(m);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copied');
+    } catch {
+      toast.error('Could not copy that');
+    }
+  }
+
+  // Everything but a removed message can be passed on or picked; the rest need a live conversation.
+  const items = [
+    ...(live && canReply ? [{ key: 'reply', label: 'Reply', icon: <Reply className="h-4 w-4" aria-hidden />, onClick: () => onReply(m) }] : []),
+    ...(text ? [{ key: 'copy', label: 'Copy', icon: <Copy className="h-4 w-4" aria-hidden />, onClick: () => void copy() }] : []),
+    ...(live ? [{ key: 'forward', label: 'Forward', icon: <Forward className="h-4 w-4" aria-hidden />, onClick: () => onForward(m) }] : []),
+    ...(live && canPin
+      ? [
+          {
+            key: 'pin',
+            label: m.pinnedAt ? 'Unpin' : 'Pin',
+            icon: m.pinnedAt ? <PinOff className="h-4 w-4" aria-hidden /> : <Pin className="h-4 w-4" aria-hidden />,
+            onClick: () => onPin(m),
+          },
+        ]
+      : []),
+    { key: 'select', label: 'Select', icon: <CheckSquare className="h-4 w-4" aria-hidden />, onClick: () => onSelect(m) },
+    ...(live && !m.mine ? [{ key: 'report', label: 'Report', icon: <Flag className="h-4 w-4" aria-hidden />, onClick: () => setReporting(true) }] : []),
+  ];
+
+  // Swipe to reply, on a touch screen: drag the message to the right and let go.
+  // Vertical drags stay scrolling (touch-action: pan-y); a mouse uses the menu.
+  const swipeable = live && canReply && !selecting;
+  function down(e: React.PointerEvent) {
+    if (!swipeable || e.pointerType !== 'touch') return;
+    swipe.current = { x: e.clientX, y: e.clientY, active: false };
+  }
+  function move(e: React.PointerEvent) {
+    const s = swipe.current;
+    if (!s) return;
+    const moveX = e.clientX - s.x;
+    const moveY = e.clientY - s.y;
+    if (!s.active) {
+      if (Math.abs(moveY) > 12) swipe.current = null;
+      else if (moveX > 12 && moveX > Math.abs(moveY) * 1.5) s.active = true;
+      return;
+    }
+    setDx(Math.max(0, Math.min(moveX, 84)));
+  }
+  function up() {
+    const s = swipe.current;
+    swipe.current = null;
+    if (s?.active && dx >= SWIPE_TO_REPLY) {
+      navigator.vibrate?.(10);
+      onReply(m);
+    }
+    setDx(0);
+  }
+
   return (
-    <div className={cn('flex flex-col', m.mine ? 'items-end' : 'items-start')} data-testid="message" data-kind={m.kind}>
+    <div
+      className={cn('group/row flex items-start gap-2 rounded-lg transition-colors', flash && 'bg-primary/15', selected && 'bg-primary/10')}
+      onClick={selecting ? () => onToggle(m) : undefined}
+      data-testid="message"
+      data-kind={m.kind}
+      data-message-id={m.id}
+      data-selected={selected || undefined}
+    >
+      {selecting && (
+        <span className="mt-2 grid h-5 w-5 shrink-0 place-items-center">
+          <input type="checkbox" checked={selected} onChange={() => onToggle(m)} aria-label="Select message" className="h-4 w-4" data-testid="message-checkbox" />
+        </span>
+      )}
       <div
-        className={cn(
-          'max-w-[85%] break-words text-sm',
-          !live
-            ? 'rounded-2xl border border-dashed border-border px-3 py-2 italic text-muted-foreground'
-            : bare
-              ? ''
-              : cn('whitespace-pre-wrap rounded-2xl px-3 py-2', m.mine ? 'bg-primary text-primary-foreground' : 'bg-muted'),
-        )}
-        data-testid="message-bubble"
+        className={cn('relative flex min-w-0 flex-1 flex-col touch-pan-y', m.mine ? 'items-end' : 'items-start')}
+        style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: dx ? undefined : 'transform 160ms ease-out' }}
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={up}
       >
-        {content}
-      </div>
-      <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-        <time dateTime={m.createdAt}>{clock(m.createdAt)}</time>
-        {live && m.editedAt && <span data-testid="message-edited">Edited</span>}
-        {canEdit && (
-          <button type="button" onClick={() => onEdit(m)} className="inline-flex items-center gap-1 hover:text-foreground" data-testid="message-edit">
-            <Pencil className="h-3 w-3" aria-hidden /> Edit
-          </button>
+        {dx > 0 && (
+          <span
+            className="absolute -left-9 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-muted text-muted-foreground"
+            style={{ opacity: Math.min(1, dx / SWIPE_TO_REPLY) }}
+            aria-hidden
+          >
+            <Reply className="h-4 w-4" />
+          </span>
         )}
-        {live && m.mine && m.receipt && <ReceiptTicks receipt={m.receipt} />}
-        {live && !m.mine && (
-          <ReportDialog
-            targetType="DIRECT_MESSAGE"
-            targetId={m.id}
-            trigger={
-              <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" data-testid="message-report">
-                <Flag className="h-3 w-3" aria-hidden /> Report
-              </button>
-            }
-          />
-        )}
+        <div className={cn('flex max-w-[85%] items-start gap-1', m.mine && 'flex-row-reverse')}>
+          <div
+            className={cn(
+              'min-w-0 break-words text-sm',
+              !live
+                ? 'rounded-2xl border border-dashed border-border px-3 py-2 italic text-muted-foreground'
+                : bare
+                  ? ''
+                  : cn('whitespace-pre-wrap rounded-2xl px-3 py-2', m.mine ? 'bg-primary text-primary-foreground' : 'bg-muted'),
+            )}
+            data-testid="message-bubble"
+          >
+            {live && m.forwarded && (
+              <span className="mb-1 flex items-center gap-1 text-xs italic opacity-80" data-testid="message-forwarded">
+                <Forward className="h-3 w-3" aria-hidden /> Forwarded
+              </span>
+            )}
+            {live && m.replyTo && <Quote quote={m.replyTo} mine={m.mine} onJump={onJump} />}
+            {content}
+          </div>
+          {!selecting && <ActionMenu mine={m.mine} items={items} />}
+        </div>
+        <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+          <time dateTime={m.createdAt}>{clock(m.createdAt)}</time>
+          {live && m.pinnedAt && (
+            <span className="inline-flex items-center gap-0.5" data-testid="message-pinned">
+              <Pin className="h-3 w-3" aria-hidden /> Pinned
+            </span>
+          )}
+          {live && m.editedAt && <span data-testid="message-edited">Edited</span>}
+          {canEdit && !selecting && (
+            <button type="button" onClick={() => onEdit(m)} className="inline-flex items-center gap-1 hover:text-foreground" data-testid="message-edit">
+              <Pencil className="h-3 w-3" aria-hidden /> Edit
+            </button>
+          )}
+          {live && m.mine && m.receipt && <ReceiptTicks receipt={m.receipt} />}
+        </div>
       </div>
+      {live && !m.mine && <ReportDialog targetType="DIRECT_MESSAGE" targetId={m.id} open={reporting} onOpenChange={setReporting} />}
       <Viewer files={media} index={viewing} onChange={setViewing} onClose={() => setViewing(null)} />
     </div>
   );

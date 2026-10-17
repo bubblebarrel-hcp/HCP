@@ -7,9 +7,11 @@ import {
   attachmentConfirmSchema,
   attachmentUploadSchema,
   editSchema,
+  forwardSchema,
   listSchema,
   messagesSchema,
   mutedSchema,
+  pinSchema,
   sendSchema,
   startSchema,
   stickerUploadSchema,
@@ -37,9 +39,14 @@ router.post('/conversations/:id/accept', requireAuth, asyncHandler(controller.ac
 router.post('/conversations/:id/decline', requireAuth, asyncHandler(controller.decline));
 router.put('/conversations/:id/mute', requireAuth, validate(mutedSchema), asyncHandler(controller.mute));
 router.post('/conversations/:id/archive', requireAuth, asyncHandler(controller.archive));
+// "I have this conversation open": a heartbeat, so its notices stay out of the bell.
+router.put('/conversations/:id/active', requireAuth, asyncHandler(controller.active));
+router.delete('/conversations/:id/active', requireAuth, asyncHandler(controller.inactive));
+router.post('/conversations/:id/forward', requireAuth, validate(forwardSchema), asyncHandler(controller.forward));
 
 // Editing inside the two-minute window (D73). There is no unsend.
 router.patch('/messages/:id', requireAuth, validate(editSchema), asyncHandler(controller.edit));
+router.put('/messages/:id/pin', requireAuth, validate(pinSchema), asyncHandler(controller.pin));
 
 // Photos, clips and voice notes: ask for a target, PUT the bytes, confirm.
 router.post('/conversations/:id/uploads', requireAuth, validate(attachmentUploadSchema), asyncHandler(controller.requestUpload));

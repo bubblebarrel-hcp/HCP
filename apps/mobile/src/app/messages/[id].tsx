@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, AppState, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import { Copy, Forward, Pin, X } from 'lucide-react-native';
 import { useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +9,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 
 import { Avatar } from '@/components/feed/avatar';
 import { Composer } from '@/components/messages/composer';
+import { ForwardSheet } from '@/components/messages/forward-sheet';
 import { MessageBubble } from '@/components/messages/message-bubble';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -19,10 +22,13 @@ import { isRealtimeConnected, useRealtimeConnection, useRealtimeEvent } from '@/
 import {
   acceptRequest,
   archiveConversation,
+  copyableText,
   declineRequest,
   getConversation,
   getMessages,
   markConversationRead,
+  pinMessage,
+  setConversationActive,
   setConversationMuted,
   type ConversationDetail,
   type DirectMessage,
@@ -64,8 +70,18 @@ export default function ConversationScreen() {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [editing, setEditing] = useState<DirectMessage | null>(null);
+  const [replyingTo, setReplyingTo] = useState<DirectMessage | null>(null);
+  // Non-null while choosing messages to copy or forward.
+  const [selected, setSelected] = useState<Set<string> | null>(null);
+  const [forwardIds, setForwardIds] = useState<string[]>([]);
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const [pinAt, setPinAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const scroller = useRef<ScrollView>(null);
+  // Where each message sits in the list, for jumping to a quote or a pin.
+  const rows = useRef(new Map<string, number>());
+  // Stops the list jumping to the bottom while we scroll to a quoted message.
+  const holdScroll = useRef(false);
   const first = useRef(true);
   const insets = useSafeAreaInsets();
   // The screen's bottom edge is the top of the keyboard. `height` is the keyboard's
@@ -84,7 +100,8 @@ export default function ConversationScreen() {
   const refresh = useCallback(async () => {
     try {
       const [d, page] = await Promise.all([getConversation(id), getMessages(id)]);
-      setDetail(d);
+      // An API that predates pins answers without the field.
+      setDetail({ ...d, pins: d.pins ?? [] });
       setMessages((current) => merge(current, page.items));
       if (first.current) {
         setHasMore(page.hasMore);
@@ -137,6 +154,23 @@ export default function ConversationScreen() {
     };
   }, [user, id, refresh]);
 
+  // While this screen is in view the conversation is "open": its new messages count
+  // on the Messages icon and stay out of the bell. A heartbeat, because the socket
+  // only listens; it lapses on its own if the app dies or goes to the background.
+  useEffect(() => {
+    if (!user) return;
+    const say = (on: boolean) => void setConversationActive(id, on).catch(() => undefined);
+    const beat = () => say(AppState.currentState === 'active');
+    beat();
+    const timer = setInterval(beat, 15_000);
+    const sub = AppState.addEventListener('change', beat);
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+      say(false);
+    };
+  }, [user, id]);
+
   // The edit window shuts by itself: a clock ticks only while a message of mine
   // can still be edited, so a quiet screen does no work.
   const anyEditable = messages.some((m) => m.editableUntil && new Date(m.editableUntil).getTime() > now);
@@ -163,6 +197,75 @@ export default function ConversationScreen() {
       setHasMore(page.hasMore);
     } catch (err) {
       Alert.alert('Could not load earlier messages', errorMessage(err, 'Try again'));
+    }
+  }
+
+  // Takes the view to a message, loading earlier pages until it turns up.
+  async function jumpTo(messageId: string) {
+    const show = () => {
+      const y = rows.current.get(messageId);
+      if (y === undefined) return false;
+      holdScroll.current = true;
+      scroller.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+      setFlashId(messageId);
+      setTimeout(() => {
+        holdScroll.current = false;
+        setFlashId((current) => (current === messageId ? null : current));
+      }, 1600);
+      return true;
+    };
+    if (show()) return;
+    let before = messages[0]?.id;
+    for (let i = 0; before && i < 8; i++) {
+      try {
+        const page = await getMessages(id, { before });
+        setMessages((current) => merge(current, page.items));
+        setHasMore(page.hasMore);
+        if (page.items.some((m) => m.id === messageId)) {
+          // Wait for the rows to be laid out before asking where one is.
+          setTimeout(() => void show(), 250);
+          return;
+        }
+        if (!page.hasMore || page.items.length === 0) break;
+        before = page.items[page.items.length - 1].id;
+      } catch {
+        break;
+      }
+    }
+    Alert.alert('Further back', 'That message is further back than we could load.');
+  }
+
+  async function togglePin(m: DirectMessage) {
+    try {
+      const next = await pinMessage(m.id, !m.pinnedAt);
+      setMessages((current) => merge(current, [next]));
+      void refresh();
+    } catch (err) {
+      Alert.alert('Could not pin that', errorMessage(err, 'Try again'));
+    }
+  }
+
+  function toggleSelected(m: DirectMessage) {
+    setSelected((current) => {
+      const next = new Set(current ?? []);
+      if (next.has(m.id)) next.delete(m.id);
+      else next.add(m.id);
+      return next;
+    });
+  }
+
+  const chosen = messages.filter((m) => selected?.has(m.id) && m.status === 'SENT');
+  async function copyChosen() {
+    const text = chosen.map(copyableText).filter(Boolean).join('\n');
+    if (!text) {
+      Alert.alert('Nothing to copy', 'Only words can be copied.');
+      return;
+    }
+    try {
+      await Clipboard.setStringAsync(text);
+      setSelected(null);
+    } catch {
+      Alert.alert('Could not copy that');
     }
   }
 
@@ -252,6 +355,29 @@ export default function ConversationScreen() {
           />
         </View>
 
+        {detail.pins.length > 0 && (
+          <Pressable
+            accessibilityRole="button"
+            testID="pinned-bar"
+            onPress={() => {
+              const pin = detail.pins[pinAt % detail.pins.length];
+              setPinAt((n) => n + 1);
+              void jumpTo(pin.id);
+            }}
+            style={[styles.pinBar, { borderBottomColor: theme.border, backgroundColor: theme.backgroundElement }]}>
+            <Pin size={16} color={theme.primaryStrong} />
+            <ThemedText numberOfLines={1} style={styles.pinText}>
+              <ThemedText style={[styles.pinText, { fontWeight: '600' }]}>
+                Pinned{detail.pins.length > 1 ? ` · ${(pinAt % detail.pins.length) + 1} of ${detail.pins.length}` : ''}
+              </ThemedText>
+              <ThemedText themeColor="textSecondary" style={styles.pinText}>
+                {'  '}
+                {detail.pins[pinAt % detail.pins.length].preview}
+              </ThemedText>
+            </ThemedText>
+          </Pressable>
+        )}
+
         <ScrollView
           ref={scroller}
           testID="message-list"
@@ -260,15 +386,38 @@ export default function ConversationScreen() {
           // Scrolling the conversation lowers the keyboard, as in every chat.
           keyboardDismissMode="on-drag"
           // The newest message stays in view as the keyboard changes the height.
-          onLayout={() => scroller.current?.scrollToEnd({ animated: false })}
-          onContentSizeChange={() => scroller.current?.scrollToEnd({ animated: false })}>
+          onLayout={() => !holdScroll.current && scroller.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => !holdScroll.current && scroller.current?.scrollToEnd({ animated: false })}>
           {hasMore && (
             <Button variant="ghost" size="sm" onPress={() => void older()}>
               Earlier messages
             </Button>
           )}
           {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} now={now} onEdit={setEditing} />
+            <View key={m.id} onLayout={(e) => rows.current.set(m.id, e.nativeEvent.layout.y)}>
+              <MessageBubble
+                message={m}
+                now={now}
+                onEdit={(message) => {
+                  setReplyingTo(null);
+                  setEditing(message);
+                }}
+                onReply={(message) => {
+                  setEditing(null);
+                  setReplyingTo(message);
+                }}
+                onForward={(message) => setForwardIds([message.id])}
+                onPin={(message) => void togglePin(message)}
+                onSelect={(message) => setSelected(new Set([message.id]))}
+                onJump={(mid) => void jumpTo(mid)}
+                canReply={detail.canReply && !detail.isRequest}
+                canPin={detail.status === 'ACTIVE' && !detail.isRequest}
+                selecting={selected !== null}
+                selected={selected?.has(m.id) ?? false}
+                onToggle={toggleSelected}
+                flash={flashId === m.id}
+              />
+            </View>
           ))}
         </ScrollView>
 
@@ -292,6 +441,21 @@ export default function ConversationScreen() {
               )}
             </View>
           </View>
+        ) : selected !== null ? (
+          <View testID="selection-bar" style={[styles.selectBar, { borderTopColor: theme.border, backgroundColor: theme.canvas }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Stop selecting" onPress={() => setSelected(null)} hitSlop={8}>
+              <X size={22} color={theme.text} />
+            </Pressable>
+            <ThemedText style={styles.selectCount} testID="selection-count">
+              {chosen.length} selected
+            </ThemedText>
+            <Button variant="outline" size="sm" testID="selection-copy" disabled={chosen.length === 0} onPress={() => void copyChosen()}>
+              <Copy size={16} color={theme.text} /> Copy
+            </Button>
+            <Button size="sm" testID="selection-forward" disabled={chosen.length === 0} onPress={() => setForwardIds(chosen.map((m) => m.id))}>
+              <Forward size={16} color={theme.onPrimary} /> Forward
+            </Button>
+          </View>
         ) : detail.canReply ? (
           <View style={{ backgroundColor: theme.canvas }}>
           <Composer
@@ -299,7 +463,10 @@ export default function ConversationScreen() {
             canShareFiles={detail.canShareFiles}
             editing={editing}
             onCancelEdit={() => setEditing(null)}
+            replyingTo={replyingTo}
+            onCancelReply={() => setReplyingTo(null)}
             onSent={({ message, status }) => {
+              setReplyingTo(null);
               setMessages((current) => merge(current, [message]));
               setDetail((d) => (d ? { ...d, status, isRequest: false } : d));
               void refresh();
@@ -318,6 +485,16 @@ export default function ConversationScreen() {
             </ThemedText>
           </View>
         )}
+
+        <ForwardSheet
+          fromId={id}
+          messageIds={forwardIds}
+          onClose={() => setForwardIds([])}
+          onDone={() => {
+            setForwardIds([]);
+            setSelected(null);
+          }}
+        />
       </Animated.View>
     </ThemedView>
   );
@@ -333,5 +510,9 @@ const styles = StyleSheet.create({
   list: { padding: 16, gap: 8 },
   sm: { fontSize: 14, lineHeight: 20 },
   footer: { padding: 16, gap: 12, borderTopWidth: 1 },
+  pinBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1 },
+  pinText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  selectBar: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderTopWidth: 1 },
+  selectCount: { flex: 1, fontSize: 15, lineHeight: 22, fontWeight: '600' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

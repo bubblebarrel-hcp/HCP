@@ -3,10 +3,11 @@
 import { use, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, BellOff, Bell } from 'lucide-react';
+import { ArrowLeft, BellOff, Bell, Copy, Forward, Pin, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/Avatar';
 import { Composer } from '@/components/messages/Composer';
+import { ForwardDialog } from '@/components/messages/ForwardDialog';
 import { MessageBubble } from '@/components/messages/MessageBubble';
 import { Button } from '@/components/ui/button';
 import { ActionDialog } from '@/components/membership/ActionDialog';
@@ -15,10 +16,13 @@ import {
   acceptRequest,
   announceMessagesChanged,
   archiveConversation,
+  copyableText,
   declineRequest,
   getConversation,
   getMessages,
   markConversationRead,
+  pinMessage,
+  setConversationActive,
   setConversationMuted,
   type ConversationDetail,
   type DirectMessage,
@@ -62,6 +66,12 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [editing, setEditing] = useState<DirectMessage | null>(null);
+  const [replyingTo, setReplyingTo] = useState<DirectMessage | null>(null);
+  // Non-null while choosing messages to copy or forward.
+  const [selected, setSelected] = useState<Set<string> | null>(null);
+  const [forwardIds, setForwardIds] = useState<string[]>([]);
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const [pinAt, setPinAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const endRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -135,6 +145,23 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     };
   }, [user, id, refresh, markRead]);
 
+  // While this page is in view the conversation is "open": its new messages count on
+  // the Messages icon and stay out of the bell. A heartbeat, because the socket only
+  // listens; it lapses on its own if the tab dies.
+  useEffect(() => {
+    if (!user) return;
+    const say = (on: boolean) => void setConversationActive(id, on).catch(() => undefined);
+    const beat = () => say(document.visibilityState === 'visible');
+    beat();
+    const timer = setInterval(beat, 15_000);
+    document.addEventListener('visibilitychange', beat);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', beat);
+      say(false);
+    };
+  }, [user, id]);
+
   // The edit window shuts by itself: a clock ticks only while a message of mine
   // can still be edited, so a quiet page does no work.
   const anyEditable = messages.some((m) => m.editableUntil && new Date(m.editableUntil).getTime() > now);
@@ -167,6 +194,73 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
       setHasMore(page.hasMore);
     } catch (err) {
       toast.error(errorMessage(err, 'Could not load earlier messages'));
+    }
+  }
+
+  // Takes the view to a message, loading earlier pages until it turns up.
+  async function jumpTo(messageId: string) {
+    const show = () => {
+      const el = document.querySelector(`[data-message-id="${messageId}"]`);
+      if (!el) return false;
+      stick.current = false;
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setFlashId(messageId);
+      setTimeout(() => setFlashId((now) => (now === messageId ? null : now)), 1600);
+      return true;
+    };
+    if (show()) return;
+    let before = messages[0]?.id;
+    for (let i = 0; before && i < 8; i++) {
+      try {
+        const page = await getMessages(id, { before });
+        setMessages((current) => merge(current, page.items));
+        setHasMore(page.hasMore);
+        if (page.items.some((m) => m.id === messageId)) {
+          requestAnimationFrame(() => requestAnimationFrame(() => void show()));
+          return;
+        }
+        if (!page.hasMore || page.items.length === 0) break;
+        before = page.items[page.items.length - 1].id;
+      } catch {
+        break;
+      }
+    }
+    toast.message('That message is further back than we could load.');
+  }
+
+  async function togglePin(m: DirectMessage) {
+    try {
+      const next = await pinMessage(m.id, !m.pinnedAt);
+      setMessages((current) => merge(current, [next]));
+      toast.success(next.pinnedAt ? 'Pinned' : 'Unpinned');
+      void refresh();
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not pin that'));
+    }
+  }
+
+  function toggleSelected(m: DirectMessage) {
+    setSelected((current) => {
+      const next = new Set(current ?? []);
+      if (next.has(m.id)) next.delete(m.id);
+      else next.add(m.id);
+      return next;
+    });
+  }
+
+  const chosen = messages.filter((m) => selected?.has(m.id) && m.status === 'SENT');
+  async function copyChosen() {
+    const text = chosen.map(copyableText).filter(Boolean).join('\n');
+    if (!text) {
+      toast.message('Nothing to copy in those: only words can be copied.');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copied');
+      setSelected(null);
+    } catch {
+      toast.error('Could not copy that');
     }
   }
 
@@ -268,6 +362,25 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
         />
       </header>
 
+      {detail.pins.length > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            const pin = detail.pins[pinAt % detail.pins.length];
+            setPinAt((n) => n + 1);
+            void jumpTo(pin.id);
+          }}
+          className="flex items-center gap-2 border-b border-border bg-muted/50 px-1 py-2 text-left text-sm hover:bg-muted"
+          data-testid="pinned-bar"
+        >
+          <Pin className="h-4 w-4 shrink-0 text-primary-strong" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">
+            <span className="font-medium">Pinned{detail.pins.length > 1 ? ` · ${(pinAt % detail.pins.length) + 1} of ${detail.pins.length}` : ''}</span>{' '}
+            <span className="text-muted-foreground">{detail.pins[pinAt % detail.pins.length].preview}</span>
+          </span>
+        </button>
+      )}
+
       <div
         className="flex-1 space-y-2 overflow-y-auto py-4"
         onScroll={(e) => {
@@ -284,7 +397,29 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
           </div>
         )}
         {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} now={now} onEdit={setEditing} />
+          <MessageBubble
+            key={m.id}
+            message={m}
+            now={now}
+            onEdit={(message) => {
+              setReplyingTo(null);
+              setEditing(message);
+            }}
+            onReply={(message) => {
+              setEditing(null);
+              setReplyingTo(message);
+            }}
+            onForward={(message) => setForwardIds([message.id])}
+            onPin={(message) => void togglePin(message)}
+            onSelect={(message) => setSelected(new Set([message.id]))}
+            onJump={(mid) => void jumpTo(mid)}
+            canReply={detail.canReply && !detail.isRequest}
+            canPin={detail.status === 'ACTIVE' && !detail.isRequest}
+            selecting={selected !== null}
+            selected={selected?.has(m.id) ?? false}
+            onToggle={toggleSelected}
+            flash={flashId === m.id}
+          />
         ))}
         <div ref={endRef} />
       </div>
@@ -309,13 +444,39 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
             )}
           </div>
         </div>
+      ) : selected !== null ? (
+        <div className="flex items-center gap-2 border-t border-border pt-3" data-testid="selection-bar">
+          <button type="button" onClick={() => setSelected(null)} aria-label="Stop selecting" className="grid h-9 w-9 place-items-center rounded-full hover:bg-muted">
+            <X className="h-5 w-5" aria-hidden />
+          </button>
+          <span className="flex-1 text-sm font-medium" data-testid="selection-count">
+            {chosen.length} selected
+          </span>
+          <Button type="button" variant="outline" size="sm" disabled={chosen.length === 0} onClick={() => void copyChosen()} data-testid="selection-copy">
+            <Copy className="mr-1.5 h-4 w-4" aria-hidden /> Copy
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={chosen.length === 0}
+            onClick={() => {
+              setForwardIds(chosen.map((m) => m.id));
+            }}
+            data-testid="selection-forward"
+          >
+            <Forward className="mr-1.5 h-4 w-4" aria-hidden /> Forward
+          </Button>
+        </div>
       ) : detail.canReply ? (
         <Composer
           conversationId={id}
           canShareFiles={detail.canShareFiles}
           editing={editing}
           onCancelEdit={() => setEditing(null)}
+          replyingTo={replyingTo}
+          onCancelReply={() => setReplyingTo(null)}
           onSent={({ message, status }) => {
+            setReplyingTo(null);
             stick.current = true;
             setMessages((current) => merge(current, [message]));
             setDetail((d) => (d ? { ...d, status, isRequest: false } : d));
@@ -333,6 +494,17 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
               : 'You cannot reply to this conversation.'}
         </p>
       )}
+
+      <ForwardDialog
+        fromId={id}
+        messageIds={forwardIds}
+        onClose={() => setForwardIds([])}
+        onDone={() => {
+          setForwardIds([]);
+          setSelected(null);
+          announceMessagesChanged();
+        }}
+      />
     </div>
   );
 }

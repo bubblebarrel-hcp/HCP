@@ -115,6 +115,28 @@ export function closeRealtime() {
   io = null;
 }
 
+// Which conversation a hasher has open right now. The socket is receive-only, so
+// the open page says so over REST, as a heartbeat; it lapses on its own if the
+// tab dies without saying goodbye. A notice for a conversation someone is
+// looking at would only count what they are already reading. In memory, like
+// the rooms: with more than one API instance this moves next to the adapter.
+const ACTIVE_TTL_MS = 40_000;
+const active = new Map<string, Map<string, number>>();
+
+export function setConversationActive(userId: string, conversationId: string, on: boolean) {
+  const now = Date.now();
+  const mine = active.get(userId) ?? new Map<string, number>();
+  for (const [id, until] of mine) if (until < now) mine.delete(id);
+  if (on) mine.set(conversationId, now + ACTIVE_TTL_MS);
+  else mine.delete(conversationId);
+  if (mine.size) active.set(userId, mine);
+  else active.delete(userId);
+}
+
+export function isConversationActive(userId: string, conversationId: string) {
+  return (active.get(userId)?.get(conversationId) ?? 0) > Date.now();
+}
+
 // Tell one hasher, on every device they are connected from. Never throws: a
 // failed push must not undo or fail the change it describes (the client's
 // fallback poll catches up). Returns how many devices were connected to hear it,

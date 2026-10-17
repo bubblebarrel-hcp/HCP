@@ -2567,16 +2567,28 @@ model DirectMessage {
   deletedAt      DateTime?
   removedAt      DateTime?
   removedReason  String?
+  // A reply quotes one earlier message of the same conversation. The quote is
+  // read from that message when shown, so it follows an edit or a removal.
+  replyToId      String?             @db.Uuid
+  // Passed on from another conversation by whoever sent this one.
+  forwarded      Boolean             @default(false)
+  // Pins are shared: either of the two may pin or unpin, a few at a time.
+  pinnedAt       DateTime?
+  pinnedById     String?             @db.Uuid
 
   conversation DirectConversation  @relation(fields: [conversationId], references: [id])
   sender       User                @relation(fields: [senderId], references: [id])
   sticker      Sticker?            @relation(fields: [stickerId], references: [id])
+  replyTo      DirectMessage?      @relation("DirectMessageReplies", fields: [replyToId], references: [id])
+  replies      DirectMessage[]     @relation("DirectMessageReplies")
   attachments  DirectAttachment[]
   edits        DirectMessageEdit[]
 
   @@unique([conversationId, senderId, clientKey])
   @@index([conversationId, createdAt])
   @@index([senderId, createdAt])
+  @@index([conversationId, pinnedAt])
+  @@index([replyToId])
 }
 
 // What a message said before an edit (D73). Edits are allowed for two minutes

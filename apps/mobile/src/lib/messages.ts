@@ -63,6 +63,28 @@ export interface DirectMessage {
   sticker: MessageSticker | null;
   // Only on my own messages.
   receipt: Receipt | null;
+  // Passed on from another conversation.
+  forwarded: boolean;
+  // The earlier message this one answers, read from that message as it is now.
+  replyTo: ReplyQuote | null;
+  // Set while the message is pinned; pins are shared by both people.
+  pinnedAt: string | null;
+}
+
+export interface ReplyQuote {
+  id: string;
+  mine: boolean;
+  kind: MessageKind;
+  status: MessageStatus;
+  preview: string;
+}
+
+export interface PinnedMessage {
+  id: string;
+  mine: boolean;
+  kind: MessageKind;
+  preview: string;
+  pinnedAt: string;
 }
 
 export interface LastMessage {
@@ -98,6 +120,7 @@ export interface ConversationDetail {
   canShareFiles: boolean;
   editWindowMs: number;
   createdAt: string;
+  pins: PinnedMessage[];
 }
 
 export interface CanMessage {
@@ -109,11 +132,12 @@ export interface CanMessage {
 export type Box = 'inbox' | 'requests';
 type Sent = { message: DirectMessage; conversationId: string; status: ConversationStatus };
 
-export type SendInput =
+export type SendInput = (
   | { kind: 'TEXT'; body: string }
   | { kind: 'MEDIA'; attachmentIds: string[]; body?: string }
   | { kind: 'VOICE'; attachmentIds: string[] }
-  | { kind: 'STICKER'; stickerId: string };
+  | { kind: 'STICKER'; stickerId: string }
+) & { replyToId?: string };
 
 export const listConversations = (box: Box, page = 1, limit = 30) =>
   api<{ items: ConversationSummary[]; total: number; page: number; limit: number }>(
@@ -132,7 +156,27 @@ export const sendMessage = (id: string, input: SendInput, clientKey: string) =>
   api<Sent>(`/conversations/${id}/messages`, { method: 'POST', body: { ...input, clientKey } });
 // Two minutes after sending, no longer (D73). There is no unsend.
 export const editMessage = (id: string, body: string) => api<{ message: DirectMessage }>(`/messages/${id}`, { method: 'PATCH', body: { body } });
-export const markConversationRead = (id: string) => api(`/conversations/${id}/read`, { method: 'POST' });
+export interface ForwardResult {
+  conversationId: string;
+  sent: number;
+  error: { code: string; message: string } | null;
+}
+
+// Messages are passed on in the order they were sent, into conversations I am already in.
+export const forwardMessages = (fromId: string, messageIds: string[], toConversationIds: string[]) =>
+  api<{ results: ForwardResult[] }>(`/conversations/${fromId}/forward`, { method: 'POST', body: { messageIds, toConversationIds } }).then((r) => r.results);
+
+export const pinMessage = (id: string, pinned: boolean) =>
+  api<{ message: DirectMessage }>(`/messages/${id}/pin`, { method: 'PUT', body: { pinned } }).then((r) => r.message);
+
+// "I am looking at this conversation": while it holds, its new messages stay out of the bell.
+export const setConversationActive = (id: string, active: boolean) => api(`/conversations/${id}/active`, { method: active ? 'PUT' : 'DELETE' });
+
+/** The words of a message that can be copied; nothing for a sticker or a voice note. */
+export const copyableText = (m: DirectMessage) =>
+  m.status === 'SENT' && (m.kind === 'TEXT' || m.kind === 'MEDIA') ? (m.body ?? '').trim() : '';
+
+export const markConversationRead =(id: string) => api(`/conversations/${id}/read`, { method: 'POST' });
 export const acceptRequest = (id: string) => api(`/conversations/${id}/accept`, { method: 'POST' });
 export const declineRequest = (id: string) => api(`/conversations/${id}/decline`, { method: 'POST' });
 export const setConversationMuted = (id: string, muted: boolean) =>

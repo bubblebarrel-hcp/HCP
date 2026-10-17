@@ -4,7 +4,7 @@ import { decryptField, encryptField } from '../utils/field-crypto';
 import { ApiError, isUuid } from '../utils/http';
 import { hiddenFor, isBlockedBetween } from './block.service';
 import type { Actor } from './permission.service';
-import { emitToUser } from './realtime.service';
+import { emitToUser, setConversationActive } from './realtime.service';
 import { recordEvent } from './record.service';
 import { publicName, userPublicSelect } from './run.service';
 import { signedReadUrl } from './storage.service';
@@ -39,6 +39,7 @@ const PER_WINDOW = 60;
 const WINDOW_MS = 10 * 60 * 1000;
 const NEW_PER_DAY = 20;
 const REPORT_CONTEXT = 5;
+const MAX_PINS = 3;
 
 const S = ConversationStatus;
 const K = DirectMessageKind;
@@ -161,7 +162,12 @@ function serializePerson(u: Prisma.UserGetPayload<{ select: typeof personSelect 
 
 // ─── Presenting a message ───
 
-const parts = { attachments: { orderBy: { position: 'asc' as const } }, sticker: true } satisfies Prisma.DirectMessageInclude;
+const parts = {
+  attachments: { orderBy: { position: 'asc' as const } },
+  sticker: true,
+  // Only what the quote under a reply needs.
+  replyTo: { select: { id: true, senderId: true, kind: true, status: true, body: true, attachments: { select: { kind: true } } } },
+} satisfies Prisma.DirectMessageInclude;
 type MessageRow = Prisma.DirectMessageGetPayload<{ include: typeof parts }>;
 
 export type Receipt = 'SENT' | 'DELIVERED' | 'SEEN';
@@ -244,6 +250,13 @@ async function presentOne(m: MessageRow, me: string, receipts?: Receipts) {
     attachments,
     sticker,
     receipt: own && live ? receiptOf(m, receipts) : null,
+    forwarded: live && m.forwarded,
+    // The quote is read from the original, so an edit or a removal shows in it.
+    replyTo:
+      live && m.replyTo
+        ? { id: m.replyTo.id, mine: m.replyTo.senderId === me, kind: m.replyTo.kind, status: m.replyTo.status, preview: previewOf(m.replyTo) }
+        : null,
+    pinnedAt: live ? m.pinnedAt : null,
   };
 }
 
@@ -254,7 +267,7 @@ async function present(rows: MessageRow[], me: string, receipts?: Receipts) {
 }
 
 // The line the inbox shows under a name. The kind, never more than the words.
-function previewOf(m: MessageRow) {
+function previewOf(m: Pick<MessageRow, 'status' | 'kind' | 'body'> & { attachments: { kind: MediaKind }[] }) {
   if (m.status === DirectMessageStatus.DELETED) return 'Message deleted';
   if (m.status === DirectMessageStatus.REMOVED) return 'Removed by moderators';
   const caption = decryptField(m.body).slice(0, 140);
@@ -336,7 +349,20 @@ export interface SendInput {
   body?: string;
   attachmentIds?: string[];
   stickerId?: string;
+  replyToId?: string;
   clientKey?: string;
+}
+
+// A copy of a file being passed on: same stored object, a row of its own in the
+// new conversation, so each conversation's access is its own.
+interface PassedFile {
+  kind: MediaKind;
+  storageKey: string;
+  mimeType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  durationSec: number | null;
 }
 
 interface Content {
@@ -344,18 +370,37 @@ interface Content {
   body: string;
   attachmentIds: string[];
   stickerId: string | null;
+  passedFiles?: PassedFile[];
+}
+
+// What a forward carries over: the words, the files or the sticker, never the reply.
+interface Forwarding {
+  kind: DirectMessageKind;
+  body: string;
+  stickerId: string | null;
+  files: PassedFile[];
 }
 
 // Checks what is being sent against what the sender is allowed to send here.
-async function prepare(actor: Actor, conversation: { id: string; status: ConversationStatus; initiatorId: string }, input: SendInput): Promise<Content> {
-  const kind = input.kind ?? K.TEXT;
+async function prepare(
+  actor: Actor,
+  conversation: { id: string; status: ConversationStatus; initiatorId: string },
+  input: SendInput,
+  forwarding?: Forwarding,
+): Promise<Content> {
+  const kind = forwarding?.kind ?? input.kind ?? K.TEXT;
   if (kind === K.TEXT) {
-    return { kind, body: cleanBody(input.body), attachmentIds: [], stickerId: null };
+    return { kind, body: cleanBody(forwarding ? forwarding.body : input.body), attachmentIds: [], stickerId: null };
   }
 
   // Pictures, stickers and voice come from people already in the conversation.
   if (conversation.initiatorId === actor.id && conversation.status !== S.ACTIVE) {
     throw ApiError.forbidden('Wait for them to accept before you send pictures, stickers or voice.', 'DM_MEDIA_NEEDS_ACCEPT');
+  }
+
+  if (forwarding) {
+    if (kind === K.STICKER) return { kind, body: '', attachmentIds: [], stickerId: forwarding.stickerId };
+    return { kind, body: kind === K.MEDIA ? cleanCaption(forwarding.body) : '', attachmentIds: [], stickerId: null, passedFiles: forwarding.files };
   }
 
   if (kind === K.STICKER) {
@@ -440,7 +485,7 @@ export async function send(actor: Actor, conversationId: string, input: SendInpu
   return sendInto(actor, conversationId, input);
 }
 
-async function sendInto(actor: Actor, conversationId: string, input: SendInput) {
+async function sendInto(actor: Actor, conversationId: string, input: SendInput, forwarding?: Forwarding) {
   const { conversation, otherId } = await load(actor, conversationId);
   const clientKey = input.clientKey;
 
@@ -464,7 +509,16 @@ async function sendInto(actor: Actor, conversationId: string, input: SendInput) 
     }
   }
 
-  const content = await prepare(actor, conversation, input);
+  const content = await prepare(actor, conversation, input, forwarding);
+
+  // A reply answers a message of this same conversation, and nowhere else.
+  let replyToId: string | null = null;
+  if (input.replyToId && !forwarding) {
+    if (!isUuid(input.replyToId)) throw ApiError.notFound('Message not found');
+    const original = await prisma.directMessage.findFirst({ where: { id: input.replyToId, conversationId }, select: { id: true } });
+    if (!original) throw ApiError.notFound('Message not found');
+    replyToId = original.id;
+  }
 
   const asker = conversation.initiatorId === actor.id;
   let nextStatus: ConversationStatus = conversation.status;
@@ -499,8 +553,29 @@ async function sendInto(actor: Actor, conversationId: string, input: SendInput) 
         body: encryptField(content.body),
         stickerId: content.stickerId,
         clientKey: clientKey ?? null,
+        replyToId,
+        forwarded: Boolean(forwarding),
       },
     });
+    if (content.passedFiles?.length) {
+      await tx.directAttachment.createMany({
+        data: content.passedFiles.map((f, position) => ({
+          uploaderId: actor.id,
+          conversationId,
+          messageId: created.id,
+          kind: f.kind,
+          storageKey: f.storageKey,
+          mimeType: f.mimeType,
+          sizeBytes: f.sizeBytes,
+          width: f.width,
+          height: f.height,
+          durationSec: f.durationSec,
+          position,
+          state: 'READY' as const,
+          confirmedAt: now,
+        })),
+      });
+    }
     // Files are claimed by this message and no other: a double send of the same
     // upload loses the race here and nothing is written.
     if (content.attachmentIds.length) {
@@ -674,7 +749,19 @@ export async function get(actor: Actor, id: string) {
     canShareFiles: canReply && !(asker && conversation.status !== S.ACTIVE),
     editWindowMs: EDIT_WINDOW_MS,
     createdAt: conversation.createdAt,
+    pins: await pinnedFor(id, actor.id),
   };
+}
+
+// The few messages pinned here, newest pin first, as the bar above the thread shows them.
+async function pinnedFor(conversationId: string, me: string) {
+  const rows = await prisma.directMessage.findMany({
+    where: { conversationId, status: DirectMessageStatus.SENT, pinnedAt: { not: null } },
+    orderBy: { pinnedAt: 'desc' },
+    take: MAX_PINS,
+    include: { attachments: { select: { kind: true } } },
+  });
+  return rows.map((m) => ({ id: m.id, mine: m.senderId === me, kind: m.kind, preview: previewOf(m), pinnedAt: m.pinnedAt }));
 }
 
 // Newest page first, then older ones with `before`. The caller reverses.
@@ -857,6 +944,121 @@ export async function archive(actor: Actor, id: string) {
   return { archived: true };
 }
 
+// ─── Open conversation ───
+
+// The page says it is showing this conversation (and, with `on` false, that it
+// stopped). While it does, new messages in it add nothing to the bell.
+export async function setActive(actor: Actor, id: string, on: boolean) {
+  await load(actor, id);
+  setConversationActive(actor.id, id, on);
+  return { active: on };
+}
+
+// ─── Pinning ───
+
+// Either of the two may pin or unpin a message, up to three at a time. A pin is a
+// bookmark inside the conversation, not an edit: the words are untouched.
+export async function pin(actor: Actor, messageId: string, pinned: boolean) {
+  if (!isUuid(messageId)) throw ApiError.notFound('Message not found');
+  const message = await prisma.directMessage.findUnique({ where: { id: messageId }, include: parts });
+  if (!message) throw ApiError.notFound('Message not found');
+  const { conversation } = await load(actor, message.conversationId);
+  if (conversation.status !== S.ACTIVE) throw ApiError.badRequest('You can pin once the conversation is accepted.', 'DM_PIN_NEEDS_ACCEPT');
+  if (message.status !== DirectMessageStatus.SENT) throw ApiError.badRequest('That message cannot be pinned.', 'DM_NOT_PINNABLE');
+  if (Boolean(message.pinnedAt) === pinned) return { message: (await present([message], actor.id))[0] };
+
+  if (pinned) {
+    const held = await prisma.directMessage.count({ where: { conversationId: message.conversationId, status: DirectMessageStatus.SENT, pinnedAt: { not: null } } });
+    if (held >= MAX_PINS) throw new ApiError(409, `Unpin one first: a conversation holds ${MAX_PINS} pins.`, 'DM_PIN_LIMIT');
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.directMessage.update({
+      where: { id: messageId },
+      data: pinned ? { pinnedAt: new Date(), pinnedById: actor.id } : { pinnedAt: null, pinnedById: null },
+      include: parts,
+    });
+    // Ids only, never the words (D71).
+    await recordEvent(tx, {
+      eventType: pinned ? 'DirectMessagePinned' : 'DirectMessageUnpinned',
+      aggregateType: 'DirectConversation',
+      aggregateId: message.conversationId,
+      actorId: actor.id,
+      payload: { messageId },
+    });
+    return row;
+  });
+  await pushMessageUpdated(updated);
+  // The bar above the thread lives on the conversation, not on the message.
+  for (const userId of [conversation.userLowId, conversation.userHighId]) {
+    pushTo(userId, 'dm:refresh', { conversationId: message.conversationId }, false);
+  }
+  return { message: (await present([updated], actor.id, await receiptsFor(updated.conversationId, actor.id)))[0] };
+}
+
+// ─── Forwarding ───
+
+export interface ForwardResult {
+  conversationId: string;
+  sent: number;
+  // Why nothing (or not everything) went: the same codes sending would answer.
+  error: { code: string; message: string } | null;
+}
+
+// Passes messages on, in the order they were sent, into conversations I am
+// already in. Each one is an ordinary send into the target (rate limits, request
+// rules, "wait for them to accept" for files, blocks answering 404), marked
+// "Forwarded"; it carries no reply, and files are copied as rows of their own.
+// Only live messages from a conversation I can still open.
+export async function forward(actor: Actor, fromConversationId: string, messageIds: string[], toConversationIds: string[]) {
+  await load(actor, fromConversationId);
+  const rows = await prisma.directMessage.findMany({
+    where: { id: { in: messageIds }, conversationId: fromConversationId, status: DirectMessageStatus.SENT },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    include: { attachments: { orderBy: { position: 'asc' } } },
+  });
+  if (rows.length !== messageIds.length) throw ApiError.notFound('Message not found');
+
+  const items: Forwarding[] = rows.map((m) => ({
+    kind: m.kind,
+    body: decryptField(m.body),
+    stickerId: m.stickerId,
+    files: m.attachments.map((a) => ({
+      kind: a.kind,
+      storageKey: a.storageKey,
+      mimeType: a.mimeType,
+      sizeBytes: a.sizeBytes,
+      width: a.width,
+      height: a.height,
+      durationSec: a.durationSec,
+    })),
+  }));
+
+  // A sticker is only passed on by someone who may send it.
+  for (const item of items) {
+    if (item.kind === K.STICKER && !(item.stickerId && (await hasSeenSticker(actor.id, item.stickerId)))) {
+      throw ApiError.notFound('Sticker not found');
+    }
+  }
+
+  const results: ForwardResult[] = [];
+  for (const toId of toConversationIds) {
+    let sent = 0;
+    try {
+      for (const item of items) {
+        await sendInto(actor, toId, {}, item);
+        sent += 1;
+      }
+      results.push({ conversationId: toId, sent, error: null });
+    } catch (error) {
+      const e = error instanceof ApiError ? error : null;
+      if (!e) throw error;
+      results.push({ conversationId: toId, sent, error: { code: e.code ?? 'ERROR', message: e.message } });
+    }
+  }
+  return { results };
+}
+
 // ─── Editing (D73) ───
 
 // The sender may fix the words for two minutes. What it said before is kept
@@ -932,6 +1134,9 @@ export async function inspectForReport(actor: Actor, messageId: string) {
     // Ids and shapes only; staff fetch a signed address per file, one report at a time.
     attachments: m.attachments.map((a) => ({ id: a.id, kind: a.kind, mimeType: a.mimeType, durationSec: a.durationSec })),
     stickerId: m.stickerId,
+    // Who it answers, and whether the sender only passed it on.
+    replyToId: m.replyToId,
+    forwarded: m.forwarded,
     createdAt: m.createdAt.toISOString(),
     reported: m.id === messageId,
   }));

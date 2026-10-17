@@ -43,11 +43,22 @@ interface Staged {
 
 type Panel = 'emoji' | 'sticker' | null;
 
+// A line standing in for the message being answered.
+function replyPreview(m: DirectMessage) {
+  const words = (m.body ?? '').trim();
+  if (m.kind === 'STICKER') return 'Sticker';
+  if (m.kind === 'VOICE') return 'Voice message';
+  if (m.kind === 'MEDIA') return words || (m.attachments.length === 1 ? (m.attachments[0].kind === 'VIDEO' ? 'Video' : 'Photo') : `${m.attachments.length} items`);
+  return words;
+}
+
 export function Composer({
   conversationId,
   canShareFiles,
   editing,
   onCancelEdit,
+  replyingTo,
+  onCancelReply,
   onSent,
   onEdited,
 }: {
@@ -55,6 +66,9 @@ export function Composer({
   canShareFiles: boolean;
   editing: DirectMessage | null;
   onCancelEdit: () => void;
+  // The message being answered; it rides along with whatever is sent next.
+  replyingTo: DirectMessage | null;
+  onCancelReply: () => void;
   onSent: (result: { message: DirectMessage; status: ConversationStatus }) => void;
   onEdited: (message: DirectMessage) => void;
 }) {
@@ -77,6 +91,10 @@ export function Composer({
       field.current?.focus();
     }
   }, [editing]);
+
+  useEffect(() => {
+    if (replyingTo) field.current?.focus();
+  }, [replyingTo]);
 
   useEffect(() => {
     return () => staged.forEach((s) => URL.revokeObjectURL(s.preview));
@@ -144,7 +162,7 @@ export function Composer({
   }
 
   async function post(input: SendInput) {
-    const result = await sendMessage(conversationId, input, key.current);
+    const result = await sendMessage(conversationId, { ...input, ...(replyingTo ? { replyToId: replyingTo.id } : {}) }, key.current);
     key.current = clientKey();
     onSent({ message: result.message, status: result.status });
     return result;
@@ -246,6 +264,18 @@ export function Composer({
     <div className="space-y-2 border-t border-border pt-3" data-testid="composer">
       {panel === 'emoji' && <EmojiPanel onPick={insert} />}
       {panel === 'sticker' && <StickerPanel sending={busy} onSend={(s) => void sendSticker(s)} />}
+
+      {replyingTo && !editing && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border-l-4 border-primary bg-muted px-3 py-2 text-sm" data-testid="reply-banner">
+          <span className="min-w-0">
+            <span className="block font-medium">Replying to {replyingTo.mine ? 'yourself' : 'them'}</span>
+            <span className="block truncate text-muted-foreground">{replyPreview(replyingTo)}</span>
+          </span>
+          <button type="button" onClick={onCancelReply} aria-label="Cancel reply" className="grid h-7 w-7 shrink-0 place-items-center rounded-full hover:bg-background">
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+      )}
 
       {editing && (
         <div className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm" data-testid="editing-banner">
@@ -363,6 +393,8 @@ export function Composer({
             } else if (e.key === 'Escape' && editing) {
               setDraft('');
               onCancelEdit();
+            } else if (e.key === 'Escape' && replyingTo) {
+              onCancelReply();
             } else if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'i')) {
               e.preventDefault();
               format(e.key === 'b' ? '*' : '_');

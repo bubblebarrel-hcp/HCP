@@ -25,6 +25,7 @@ import { reachable } from './block.service';
 import { priorityOf, recipientIds as broadcastRecipientIds } from './broadcast.service';
 import { isEmailConfigured, sendEmail } from './email.service';
 import { isExpoPushToken, isPushConfigured, registerDevice, revokeDevice, sendPush } from './push.service';
+import { isConversationActive } from './realtime.service';
 import { DIGEST_LABELS } from '../utils/digest-schedule';
 import { evaluateQuietHours, quietHoursFor } from './quiet-hours';
 import type { Actor } from './permission.service';
@@ -280,6 +281,9 @@ async function specFor(event: DomainEvent): Promise<NotificationSpec | null> {
       });
       // A muted conversation, or a request the recipient already declined, is silent.
       if (!side || side.mutedAt || side.conversation.status === 'DECLINED') return null;
+      // They are reading this conversation right now: the Messages icon counts it,
+      // the bell does not.
+      if (isConversationActive(recipientId, event.aggregateId)) return null;
       const sender = await publicNameOf(event.actorId);
       const requested = payload.requested === true;
       return {
