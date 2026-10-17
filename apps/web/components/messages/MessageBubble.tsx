@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Check, CheckCheck, CheckSquare, ChevronDown, ChevronLeft, ChevronRight, Copy, Flag, Forward, Pause, Pencil, Pin, PinOff, Play, Reply } from 'lucide-react';
 import { toast } from 'sonner';
 import { ReportDialog } from '@/components/social/ReportDialog';
@@ -169,9 +169,39 @@ function Quote({ quote, mine, onJump }: { quote: ReplyQuote; mine: boolean; onJu
 
 // Everything you can do to one message, behind the chevron. A small popover of our
 // own: it closes on a click elsewhere, on Escape, and when an item is chosen.
-function ActionMenu({ mine, items }: { mine: boolean; items: { key: string; label: string; icon: React.ReactNode; onClick: () => void }[] }) {
+const MENU_WIDTH = 176;
+const EDGE = 8;
+
+function ActionMenu({ items }: { items: { key: string; label: string; icon: React.ReactNode; onClick: () => void }[] }) {
   const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+
+  // Placed from the chevron, then kept inside the screen: a long bubble pushes the
+  // chevron to an edge, and a menu anchored to a fixed side would run off the other.
+  // It opens below the chevron, or above it when there is no room underneath.
+  useLayoutEffect(() => {
+    if (!open || !trigger.current) return;
+    const place = () => {
+      const r = trigger.current!.getBoundingClientRect();
+      const height = menu.current?.offsetHeight ?? items.length * 40 + 8;
+      const left = Math.min(Math.max(r.left + r.width / 2 - MENU_WIDTH / 2, EDGE), window.innerWidth - MENU_WIDTH - EDGE);
+      const below = r.bottom + 4;
+      const top = below + height > window.innerHeight - EDGE ? Math.max(EDGE, r.top - height - 4) : below;
+      setAt({ left, top });
+    };
+    place();
+    // Anything that moves the chevron closes the menu rather than leave it floating.
+    const close = () => setOpen(false);
+    window.addEventListener('resize', close);
+    document.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('resize', close);
+      document.removeEventListener('scroll', close, true);
+    };
+  }, [open, items.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -188,16 +218,23 @@ function ActionMenu({ mine, items }: { mine: boolean; items: { key: string; labe
   }, [open]);
 
   return (
-    <div ref={box} className="relative self-start pt-1">
+    // Sits in the bubble's top corner, over a small pill so it stays readable on any
+    // bubble, picture or sticker. It fades in when the bubble is hovered or focused;
+    // a touch screen has no hover, so it stays faintly visible there.
+    <div ref={box} className="absolute right-1 top-1 z-10 whitespace-normal font-normal not-italic">
       <button
+        ref={trigger}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setAt(null);
+          setOpen((o) => !o);
+        }}
         aria-label="Message actions"
         aria-haspopup="menu"
         aria-expanded={open}
         className={cn(
-          'grid h-7 w-7 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100',
-          open ? 'opacity-100' : 'opacity-0 max-md:opacity-70',
+          'grid h-6 w-6 place-items-center rounded-full bg-background/85 text-foreground shadow-sm backdrop-blur-sm hover:bg-background focus-visible:opacity-100 group-hover/bubble:opacity-100',
+          open ? 'opacity-100' : 'opacity-0 pointer-coarse:opacity-60',
         )}
         data-testid="message-menu"
       >
@@ -205,11 +242,10 @@ function ActionMenu({ mine, items }: { mine: boolean; items: { key: string; labe
       </button>
       {open && (
         <div
+          ref={menu}
           role="menu"
-          className={cn(
-            'absolute top-8 z-20 min-w-40 rounded-lg border border-border bg-card p-1 text-sm shadow-lg',
-            mine ? 'right-0' : 'left-0',
-          )}
+          style={{ position: 'fixed', width: MENU_WIDTH, left: at?.left ?? 0, top: at?.top ?? 0, visibility: at ? 'visible' : 'hidden' }}
+          className="z-50 rounded-lg border border-border bg-card p-1 text-sm text-card-foreground shadow-lg"
         >
           {items.map((item) => (
             <button
@@ -392,15 +428,20 @@ export function MessageBubble({
             <Reply className="h-4 w-4" />
           </span>
         )}
-        <div className={cn('flex max-w-[85%] items-start gap-1', m.mine && 'flex-row-reverse')}>
+        <div className="flex max-w-[85%]">
           <div
             className={cn(
-              'min-w-0 break-words text-sm',
+              'group/bubble relative min-w-0 break-words text-sm',
               !live
                 ? 'rounded-2xl border border-dashed border-border px-3 py-2 italic text-muted-foreground'
                 : bare
                   ? ''
-                  : cn('whitespace-pre-wrap rounded-2xl px-3 py-2', m.mine ? 'bg-primary text-primary-foreground' : 'bg-muted'),
+                  : cn(
+                      'whitespace-pre-wrap rounded-2xl py-2 pl-3',
+                      // Room for the chevron beside the words, so it never covers them.
+                      m.kind === 'TEXT' && !selecting ? 'pr-8' : 'pr-3',
+                      m.mine ? 'bg-primary text-primary-foreground' : 'bg-muted',
+                    ),
             )}
             data-testid="message-bubble"
           >
@@ -411,8 +452,8 @@ export function MessageBubble({
             )}
             {live && m.replyTo && <Quote quote={m.replyTo} mine={m.mine} onJump={onJump} />}
             {content}
+            {!selecting && <ActionMenu items={items} />}
           </div>
-          {!selecting && <ActionMenu mine={m.mine} items={items} />}
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
           <time dateTime={m.createdAt}>{clock(m.createdAt)}</time>
