@@ -164,8 +164,10 @@ export async function canMessage(userId: string) {
   return unwrap(await api.get<Envelope<CanMessage>>(`/hashers/${userId}/can-message`));
 }
 
-export async function getConversation(id: string) {
-  return unwrap(await api.get<Envelope<ConversationDetail>>(`/conversations/${id}`));
+// `open` says this is the page opening the conversation, so it counts as open from
+// this request on and a message landing right now does not notify.
+export async function getConversation(id: string, open = false) {
+  return unwrap(await api.get<Envelope<ConversationDetail>>(`/conversations/${id}${open ? '?open=1' : ''}`));
 }
 
 // Newest first; `before` is the id of the oldest message already on screen.

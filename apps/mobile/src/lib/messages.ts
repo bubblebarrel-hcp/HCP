@@ -145,7 +145,9 @@ export const listConversations = (box: Box, page = 1, limit = 30) =>
   );
 export const unreadCounts = () => api<{ unread: number; requests: number }>('/me/conversations/unread');
 export const canMessage = (userId: string) => api<CanMessage>(`/hashers/${userId}/can-message`);
-export const getConversation = (id: string) => api<ConversationDetail>(`/conversations/${id}`);
+// `open` says this is the screen opening the conversation, so it counts as open from
+// this request on and a message landing right now does not notify.
+export const getConversation = (id: string, open = false) => api<ConversationDetail>(`/conversations/${id}${open ? '?open=1' : ''}`);
 export const getMessages = (id: string, opts: { before?: string; limit?: number } = {}) =>
   api<{ items: DirectMessage[]; hasMore: boolean }>(
     `/conversations/${id}/messages?limit=${opts.limit ?? 40}${opts.before ? `&before=${opts.before}` : ''}`,

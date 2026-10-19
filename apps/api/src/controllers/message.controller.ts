@@ -23,7 +23,7 @@ export const start = async (req: Request, res: Response) =>
   ok(res, await dm.startWith(actor(req), req.body.userId, { kind: 'TEXT', body: req.body.body, clientKey: req.body.clientKey }), 201);
 export const canMessage = async (req: Request, res: Response) => ok(res, await dm.canMessage(actor(req), req.params.id));
 
-export const get = async (req: Request, res: Response) => ok(res, await dm.get(actor(req), req.params.id));
+export const get = async (req: Request, res: Response) => ok(res, await dm.get(actor(req), req.params.id, { open: req.query.open === '1' }));
 export const messages = async (req: Request, res: Response) => {
   const q = req.query as unknown as { before?: string; after?: string; limit: number };
   return ok(res, q.after ? await dm.messagesAfter(actor(req), req.params.id, q.after) : await dm.messages(actor(req), req.params.id, q));

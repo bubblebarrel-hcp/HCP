@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/web-ui';
 import { useAuth } from '@/context/auth';
 import { useTheme } from '@/hooks/use-theme';
 import { errorMessage } from '@/lib/api';
+import { clearConversationNotifications } from '@/lib/push';
 import { isRealtimeConnected, useRealtimeConnection, useRealtimeEvent } from '@/lib/realtime';
 import {
   acceptRequest,
@@ -97,9 +98,15 @@ export default function ConversationScreen() {
     if (!loading && !user) router.replace('/account');
   }, [loading, user, router]);
 
+  // The first read of a conversation is the screen opening it; later ones are polls,
+  // which must not say "open" (they also run while the app is in the background).
+  const openedFor = useRef<string | null>(null);
+
   const refresh = useCallback(async () => {
     try {
-      const [d, page] = await Promise.all([getConversation(id), getMessages(id)]);
+      const opening = openedFor.current !== id;
+      openedFor.current = id;
+      const [d, page] = await Promise.all([getConversation(id, opening), getMessages(id)]);
       // An API that predates pins answers without the field.
       setDetail({ ...d, pins: d.pins ?? [] });
       setMessages((current) => merge(current, page.items));
@@ -120,7 +127,11 @@ export default function ConversationScreen() {
   useRealtimeEvent(['dm:message'], (e: { conversationId: string; message: DirectMessage }) => {
     if (e.conversationId !== id) return;
     setMessages((current) => merge(current, [e.message]));
-    if (!e.message.mine) markConversationRead(id).catch(() => undefined);
+    if (!e.message.mine) {
+      markConversationRead(id).catch(() => undefined);
+      // A push that raced this message to the tray has nothing left to say.
+      void clearConversationNotifications(id);
+    }
   });
   useRealtimeEvent(['dm:message-updated'], (e: { conversationId: string; message: DirectMessage }) => {
     if (e.conversationId !== id) return;
@@ -160,7 +171,12 @@ export default function ConversationScreen() {
   useEffect(() => {
     if (!user) return;
     const say = (on: boolean) => void setConversationActive(id, on).catch(() => undefined);
-    const beat = () => say(AppState.currentState === 'active');
+    const beat = () => {
+      const active = AppState.currentState === 'active';
+      say(active);
+      // Back in front of this conversation: whatever the tray still says about it is stale.
+      if (active) void clearConversationNotifications(id);
+    };
     beat();
     const timer = setInterval(beat, 15_000);
     const sub = AppState.addEventListener('change', beat);

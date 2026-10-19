@@ -81,9 +81,14 @@ export default function ConversationPage({ params }: { params: Promise<{ id: str
     if (!loading && !user) router.replace('/auth/login');
   }, [loading, user, router]);
 
+  // The first read of a conversation is the page opening it; later ones are polls.
+  const openedFor = useRef<string | null>(null);
+
   const refresh = useCallback(async () => {
     try {
-      const [d, page] = await Promise.all([getConversation(id), getMessages(id)]);
+      const opening = openedFor.current !== id;
+      openedFor.current = id;
+      const [d, page] = await Promise.all([getConversation(id, opening), getMessages(id)]);
       setDetail(d);
       setMessages((current) => merge(current, page.items));
       setHasMore((was) => (lastCount.current === 0 ? page.hasMore : was));

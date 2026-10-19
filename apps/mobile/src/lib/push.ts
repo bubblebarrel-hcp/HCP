@@ -146,6 +146,26 @@ export async function unregisterForPush(): Promise<void> {
   }
 }
 
+/**
+ * Takes this conversation's notifications out of the tray. Someone who has opened
+ * a conversation has seen what they said, so a banner left over from before they
+ * opened it (or one that raced the screen opening) only says it again. Best-effort,
+ * and a no-op where there is no tray (web, Expo Go).
+ */
+export async function clearConversationNotifications(conversationId: string): Promise<void> {
+  if (!Notifications || Platform.OS === 'web') return;
+  try {
+    const shown = await Notifications.getPresentedNotificationsAsync();
+    const mine = shown.filter((n) => {
+      const data = n.request.content.data as Record<string, unknown> | undefined;
+      return data?.contextType === 'DirectConversation' && data?.contextId === conversationId;
+    });
+    await Promise.all(mine.map((n) => Notifications.dismissNotificationAsync(n.request.identifier)));
+  } catch {
+    // A tray that cannot be read is left as it is.
+  }
+}
+
 /** Where a tapped notification should take the hasher. */
 export function routeFor(data: Record<string, unknown> | undefined): string | null {
   if (!data) return null;

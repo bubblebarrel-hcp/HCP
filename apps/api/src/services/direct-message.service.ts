@@ -728,8 +728,12 @@ export async function listMine(actor: Actor, opts: { box: 'inbox' | 'requests'; 
   return { items, total, page: opts.page, limit: opts.limit };
 }
 
-export async function get(actor: Actor, id: string) {
+// `open` is the screen opening this conversation: it counts as open from this very
+// request, not from the first heartbeat a moment later, so a message landing in
+// between does not buzz someone who is already looking.
+export async function get(actor: Actor, id: string, opts: { open?: boolean } = {}) {
   const { conversation, me, otherId } = await load(actor, id);
+  if (opts.open) setConversationActive(actor.id, id, true);
   void markDelivered(actor.id, [id]).catch(() => undefined);
   const person = await prisma.user.findUnique({ where: { id: otherId }, select: personSelect });
   const asker = conversation.initiatorId === actor.id;
@@ -815,6 +819,11 @@ export async function markRead(actor: Actor, id: string) {
   await load(actor, id);
   const now = new Date();
   await prisma.directParticipant.updateMany({ where: { conversationId: id, userId: actor.id }, data: { lastReadAt: now, deliveredAt: now } });
+  // Reading it is what the bell's notice for this conversation was asking for.
+  await prisma.notification.updateMany({
+    where: { recipientUserId: actor.id, contextType: 'DirectConversation', contextId: id, readAt: null },
+    data: { readAt: now, status: 'READ' },
+  });
   // The reader's own devices clear their badge.
   pushTo(actor.id, 'dm:read', { conversationId: id });
   // The sender sees "seen" if both of them have receipts on (D73).

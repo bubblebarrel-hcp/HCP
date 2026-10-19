@@ -242,6 +242,8 @@ export function MessageBubble({
     <View
       style={[
         bare ? null : styles.bubble,
+        // Room for the chevron beside the words, so it never covers them.
+        !bare && live && m.kind === 'TEXT' && !selecting ? styles.reserve : null,
         bare
           ? null
           : !live
@@ -269,6 +271,19 @@ export function MessageBubble({
         </Pressable>
       )}
       {content}
+      {/* In the bubble's top corner, over a small pill so it reads on any bubble,
+          picture or sticker. A phone has no hover, so it is always faintly there. */}
+      {!selecting && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Message actions"
+          testID="message-menu"
+          onPress={() => setMenu(true)}
+          hitSlop={8}
+          style={[styles.chevron, { backgroundColor: theme.card }]}>
+          <ChevronDown size={14} color={theme.text} />
+        </Pressable>
+      )}
     </View>
   );
 
@@ -298,11 +313,6 @@ export function MessageBubble({
               style={styles.bubbleWrap}>
               {bubble}
             </Pressable>
-            {!selecting && (
-              <Pressable accessibilityRole="button" accessibilityLabel="Message actions" testID="message-menu" onPress={() => setMenu(true)} hitSlop={8} style={styles.chevron}>
-                <ChevronDown size={16} color={theme.textSecondary} />
-              </Pressable>
-            )}
           </View>
           <View style={styles.meta}>
             <ThemedText themeColor="textSecondary" style={styles.xs}>
@@ -346,7 +356,8 @@ const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'flex-start', gap: 2 },
   lineMine: { flexDirection: 'row-reverse' },
   bubbleWrap: { flexShrink: 1 },
-  chevron: { paddingTop: 6, opacity: 0.7 },
+  reserve: { paddingRight: 32 },
+  chevron: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', opacity: 0.75 },
   replyHint: { position: 'absolute', left: -32, top: 8 },
   quote: { borderLeftWidth: 4, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginBottom: 6, gap: 1 },
   forwarded: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },

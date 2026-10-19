@@ -37,22 +37,25 @@ export function UpdateGate() {
       <View style={styles.backdrop} testID="update-gate">
         <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <ThemedText accessibilityRole="header" style={styles.title}>
-            {required ? 'Please update Shiggy Trails' : 'A new version is out'}
+            {required ? 'Time for a quick update' : 'A new version is ready'}
           </ThemedText>
           <ThemedText themeColor="textSecondary" style={styles.body}>
             {required
-              ? `This version (${installedVersion}) is too old to keep working. Update to ${policy.latest} to carry on.`
-              : `Version ${policy.latest} is ready. You have ${installedVersion}.`}
+              ? 'We have made some improvements that this version of the app cannot keep up with. Update to keep using Shiggy Trails. It only takes a moment, and everything you have is safe.'
+              : 'Update to get the latest features and fixes. It only takes a moment, and you can carry on with the app afterwards.'}
+          </ThemedText>
+          <ThemedText themeColor="textSecondary" style={styles.versions}>
+            You have {installedVersion} · Newest is {policy.latest}
           </ThemedText>
           <View style={styles.footer}>
             {!required && (
               <Button variant="outline" onPress={() => setDismissed(policy.latest)} testID="update-later">
-                Not now
+                Maybe later
               </Button>
             )}
             {policy.storeUrl ? (
               <Button onPress={() => void Linking.openURL(policy.storeUrl!)} testID="update-now">
-                Update
+                Update now
               </Button>
             ) : null}
           </View>
@@ -67,5 +70,6 @@ const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 448, borderWidth: 1, borderRadius: 12, padding: 24, gap: 6 },
   title: { fontSize: 18, lineHeight: 22, fontWeight: '600' },
   body: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  versions: { marginTop: 8, fontSize: 12, lineHeight: 16, fontWeight: '400' },
   footer: { marginTop: 16, flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
 });
