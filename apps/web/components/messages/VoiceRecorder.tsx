@@ -10,9 +10,10 @@ import { clockTime, MAX_VOICE_SECONDS } from '@/lib/messages';
 // bin it. Nothing is uploaded until you press send, and the microphone is released
 // the moment recording stops. Capped at five minutes, as the server is.
 
-// The first one the browser can make. Chrome and Firefox give WebM/Opus, Safari
-// gives MP4/AAC; the server takes either.
-const TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+// The first one the browser can make. MP4/AAC leads because it plays everywhere,
+// the phone app included; MediaRecorder's WebM has no length or seek table and
+// Android's player can cut it short. Firefox has no MP4 and falls back to WebM.
+const TYPES = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
 
 function pickType() {
   if (typeof MediaRecorder === 'undefined') return null;

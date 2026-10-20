@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { Pause, Play } from 'lucide-react-native';
@@ -9,7 +10,11 @@ import { clockTime } from '@/lib/messages';
 // it has got, and the time. The length the sender measured wins over the player's
 // own, which can be zero until the file has loaded.
 export function VoicePlayer({ uri, durationSec, color }: { uri: string; durationSec: number | null; color: string }) {
-  const player = useAudioPlayer({ uri });
+  // A signed address changes every time the conversation is read again, and a new
+  // source stops the player mid-note. Keep the first one; if it has gone stale
+  // (it lasts 15 minutes) the note fails to start and a remount picks up a fresh one.
+  const [source] = useState(uri);
+  const player = useAudioPlayer({ uri: source });
   const status = useAudioPlayerStatus(player);
   const total = durationSec ?? (status.duration > 0 ? status.duration : 0);
   const fraction = total > 0 ? Math.min(1, status.currentTime / total) : 0;
