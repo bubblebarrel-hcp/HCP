@@ -775,6 +775,7 @@ model User {
   circleAttendances             CircleAttendee[]               @relation("CircleAttendeeUser")
   circleAttendanceRecorded      CircleAttendee[]               @relation("CircleAttendeeRecorder")
   trailHares                    TrailHare[]
+  runActivities                 RunActivity[]
   chalkPlaced                   DigitalChalkSymbol[]
   trailRevisions                TrailRevision[]
   storyAssets                   StoryAsset[]
@@ -1734,6 +1735,7 @@ model Run {
   pauses          RunPause[]
   trails          Trail[]
   participations  Participation[]
+  activities      RunActivity[]
   circle          Circle?
   trailReport     TrailReport?
   capsule         RunCapsule?
@@ -1931,6 +1933,7 @@ model Trail {
   beerChecks BeerCheck[]
   chalk      DigitalChalkSymbol[]
   revisions  TrailRevision[]
+  activities RunActivity[]
 
   // BR-TRAIL-001
   @@unique([runId, name])
@@ -3533,4 +3536,57 @@ model ModerationAction {
 
   @@index([reportId, createdAt])
   @@index([actorId, createdAt])
+}
+
+// ───────────────────── Part D2 — Run tracking (D79) ─────────────────────
+
+enum ActivityKind {
+  HASH_RUN // a hasher running a hash run they took part in
+  TRAIL_LAYING // a hare laying or walking the trail they set
+  SOLO // a run of their own, tied to no hash run
+}
+
+// A hasher's own recorded run: the GPS track their phone kept, plus the time,
+// distance, pace and splits worked out from it. It belongs to the hasher (like a
+// post or a reel, D41) and follows the D57 audience scale. The server works the
+// numbers out from the track; it never trusts the phone's totals.
+model RunActivity {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @db.Uuid
+  kind           ActivityKind
+  runId          String?      @db.Uuid
+  trailId        String?      @db.Uuid
+  // The phone's own id for this recording, so an upload retried after a dropped
+  // signal lands once.
+  clientId       String
+  title          String?
+  notes          String?
+  startedAt      DateTime
+  endedAt        DateTime
+  elapsedTimeS   Int
+  movingTimeS    Int
+  distanceM      Int
+  avgPaceSPerKm  Int?
+  elevationGainM Int
+  elevationLossM Int
+  // [[lat, lng, elevationM | null, msSinceStart], ...], 6 decimal places.
+  track          Json
+  // [{ index, distanceM, timeS, paceSPerKm }, ...]: one per kilometre and a last
+  // partial one.
+  splits         Json
+  // Who may see the track and the numbers; default FOLLOWERS (D79). Anyone but
+  // the hasher also waits for the trail's release and gets the first and last
+  // 200 m trimmed.
+  audience       Audience     @default(FOLLOWERS)
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id])
+  run   Run?   @relation(fields: [runId], references: [id])
+  trail Trail? @relation(fields: [trailId], references: [id])
+
+  @@unique([userId, clientId])
+  @@index([userId, startedAt])
+  @@index([runId])
 }

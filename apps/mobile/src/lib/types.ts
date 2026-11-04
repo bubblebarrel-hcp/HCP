@@ -1236,3 +1236,43 @@ export interface PhotoTag {
   user: { id: string; name: string; avatarUrl: string | null };
   canRemove: boolean;
 }
+
+// ─── Recorded runs (D79) ───
+
+export type ActivityKind = 'HASH_RUN' | 'TRAIL_LAYING' | 'SOLO';
+export type ActivityAudience = 'PUBLIC' | 'FOLLOWERS' | 'ONLY_ME';
+
+export interface ActivitySplit {
+  index: number;
+  distanceM: number;
+  timeS: number;
+  paceSPerKm: number;
+}
+
+// What the API sends for a recording. A list card has `preview` and no `track`;
+// the detail has both. For anyone but the hasher the track is already trimmed.
+export interface RunActivity {
+  id: string;
+  userId: string;
+  kind: ActivityKind;
+  runId: string | null;
+  trailId: string | null;
+  title: string | null;
+  notes: string | null;
+  startedAt: string;
+  endedAt: string;
+  elapsedTimeS: number;
+  movingTimeS: number;
+  distanceM: number;
+  avgPaceSPerKm: number | null;
+  elevationGainM: number;
+  elevationLossM: number;
+  audience: ActivityAudience;
+  createdAt: string;
+  isOwner: boolean;
+  // [lat, lng]
+  preview: [number, number][];
+  // [lat, lng, elevationM | null, msSinceStart]
+  track?: [number, number, number | null, number][];
+  splits?: ActivitySplit[];
+}

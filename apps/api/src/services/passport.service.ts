@@ -56,7 +56,7 @@ interface Earned {
 export async function rebuildPassport(userId: string) {
   const passportId = await ensurePassport(userId);
 
-  const [user, attendances, hareRuns, memberships] = await Promise.all([
+  const [user, attendances, hareRuns, memberships, activities] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { homeKennel: { select: { country: true } } },
@@ -90,6 +90,11 @@ export async function rebuildPassport(userId: string) {
     prisma.membership.findMany({
       where: { userId, status: MembershipStatus.ACTIVE },
       select: { kennelId: true },
+    }),
+    // What the hasher actually ran at their hash runs (D79).
+    prisma.runActivity.findMany({
+      where: { userId, runId: { not: null }, deletedAt: null },
+      select: { runId: true, distanceM: true },
     }),
   ]);
 
@@ -128,7 +133,14 @@ export async function rebuildPassport(userId: string) {
   if (firstHare) add('FIRST_HARE', firstHare.runId, firstHare.addedAt);
 
   const runsAttended = attendances.length;
-  const distanceMeters = attendances.reduce((sum, a) => sum + (a.run.trails[0]?.estimatedDistanceM ?? 0), 0);
+  // The distance the hasher recorded at a run beats the hare's estimate of the
+  // trail; a run with no recording still counts the estimate.
+  const ranByRun = new Map<string, number>();
+  for (const a of activities) ranByRun.set(a.runId!, (ranByRun.get(a.runId!) ?? 0) + a.distanceM);
+  const distanceMeters = attendances.reduce(
+    (sum, a) => sum + (ranByRun.get(a.run.id) ?? a.run.trails[0]?.estimatedDistanceM ?? 0),
+    0,
+  );
   const countriesHashed = new Set([...places.values()].map((p) => p.country)).size;
 
   // Reports written credits the Official Scribe of each published report (D29),
@@ -248,6 +260,9 @@ function affectedUsers(event: DomainEvent): string[] {
     case 'MembershipApproved':
     case 'MembershipRemoved':
     case 'MembershipResigned':
+    // A recorded run changes the distance (D79).
+    case 'RunActivityRecorded':
+    case 'RunActivityRemoved':
       return userId ? [userId] : [];
     // A published or corrected report changes the Scribe's tally (D29).
     case 'TrailReportPublished':

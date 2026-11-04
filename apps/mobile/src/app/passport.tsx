@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
-import { Check, Copy, Pin, RefreshCw, Share2, Trash2 } from 'lucide-react-native';
+import { Check, Copy, Footprints, Pin, Play, RefreshCw, Share2, Trash2 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 
@@ -148,6 +148,29 @@ export default function PassportScreen() {
       <PassportView passport={passport} />
 
       <Card>
+        <View testID="passport-runs">
+          <CardHeader style={styles.tight}>
+            <CardTitle>Your runs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ThemedText themeColor="textSecondary" style={styles.sm}>
+              Record a run to keep its route, time, distance and pace. The distance above counts what you record at your hash runs.
+            </ThemedText>
+            <View style={styles.runActions}>
+              <Button testID="passport-record" onPress={() => router.push('/record' as never)}>
+                <Play size={16} color={theme.onPrimary} />
+                <ThemedText style={[styles.buttonLabel, { color: theme.onPrimary }]}>Record a run</ThemedText>
+              </Button>
+              <Button variant="outline" testID="passport-runs-list" onPress={() => router.push('/activities' as never)}>
+                <Footprints size={16} color={theme.text} />
+                <ThemedText style={styles.buttonLabel}>My runs</ThemedText>
+              </Button>
+            </View>
+          </CardContent>
+        </View>
+      </Card>
+
+      <Card>
         <View testID="passport-memories">
           <CardHeader style={[styles.tight, styles.headerBetween]}>
             <CardTitle>Your memories</CardTitle>
@@ -278,6 +301,7 @@ export default function PassportScreen() {
 }
 
 const styles = StyleSheet.create({
+  runActions: { flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' },
   screen: { flex: 1, flexDirection: 'row', justifyContent: 'center' },
   safe: { flex: 1, width: '100%', maxWidth: MaxContentWidth },
   page: { paddingVertical: 16, paddingBottom: 32, gap: 16 },

@@ -1,3 +1,7 @@
+// The location task has to be defined in the bundle's global scope, before anything
+// renders: the app can be started in the background to deliver a GPS fix (D79).
+import '@/lib/recording-task';
+
 import { useEffect } from 'react';
 import { Platform, View } from 'react-native';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, usePathname, useRouter } from 'expo-router';
@@ -12,7 +16,8 @@ import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { BottomNav } from '@/components/bottom-nav';
 import { AppHeader } from '@/components/feed/app-header';
 import { UpdateGate } from '@/components/update-gate';
-import { AuthProvider } from '@/context/auth';
+import { AuthProvider, useAuth } from '@/context/auth';
+import { flushPending } from '@/lib/activity-upload';
 import { ThemePreferenceProvider, useThemePreference } from '@/context/theme-preference';
 import { Notifications, routeFor } from '@/lib/push';
 import { useTheme } from '@/hooks/use-theme';
@@ -65,6 +70,9 @@ function PushedScreens() {
       <Stack.Screen name="settings/index" options={{ title: "Settings" }} />
       <Stack.Screen name="settings/notifications" options={{ title: 'Notification settings' }} />
       <Stack.Screen name="passport" options={{ title: 'Hash Passport' }} />
+      <Stack.Screen name="record" options={{ title: 'Record a run', gestureEnabled: false }} />
+      <Stack.Screen name="activities/index" options={{ title: 'My runs' }} />
+      <Stack.Screen name="activities/[id]" options={{ title: 'Run' }} />
       <Stack.Screen name="kennels/[slug]/index" options={{ title: 'Kennel' }} />
       <Stack.Screen name="kennels/[slug]/runs" options={{ title: 'Kennel runs' }} />
       <Stack.Screen name="kennels/[slug]/officers" options={{ title: 'Officers' }} />
@@ -119,6 +127,16 @@ function Frame() {
   );
 }
 
+// A run finished with no signal waits on the phone (D79); this sends it once the
+// hasher is signed in, wherever the app opens.
+function UploadPendingRuns() {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (user) void flushPending().catch(() => undefined);
+  }, [user]);
+  return null;
+}
+
 function Shell() {
   const { scheme } = useThemePreference();
   return (
@@ -126,6 +144,7 @@ function Shell() {
       <AuthProvider>
         <AnimatedSplashOverlay />
         <UpdateGate />
+        {Platform.OS !== 'web' && <UploadPendingRuns />}
         {Platform.OS !== 'web' && Notifications && <PushRouting />}
         <Frame />
       </AuthProvider>

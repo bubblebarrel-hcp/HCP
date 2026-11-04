@@ -116,6 +116,9 @@ Organized by Chapter 23 domain. "Consumers" lists which cross-cutting systems ca
 | `RunPlanningLocked` | A.3 (planning lock, FR-RUN-005) | Run Service | Audit |
 | `TrailHidden` | A.3 → Trail Hidden (mirrors A.4) | Run Service / Trail Service | Audit |
 | `TrailReleased` | A.3 → Trail Released / A.4 Hidden → Released | Trail Service | Notification, RunCapsule, Audit |
+| `RunActivityRecorded` | A hasher’s recorded run saved (D79) — numbers only, never coordinates | Activity Service | Passport |
+| `RunActivityUpdated` | Title, notes or audience of a recording changed (D79) | Activity Service | — |
+| `RunActivityRemoved` | A recording deleted by its hasher; the row stays (D79) | Activity Service | Passport |
 | `CheckInOpened` | A.3 → Check-In Open | Run Service | Notification |
 | `ParticipantCheckedIn` | Participation created/updated | Run Service | Passport, RunCapsule, Notification (officer view) |
 | `RunStarted` | A.3 → Live Run | Run Service | Notification, RunCapsule |

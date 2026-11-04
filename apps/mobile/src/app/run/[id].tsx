@@ -206,6 +206,15 @@ function RsvpPanel({ run, send, onRun }: { run: RunDetail; send: Send; onRun: (r
                 </ThemedText>
               </View>
             )}
+            {responded && (run.status === 'CHECK_IN_OPEN' || run.status === 'LIVE') && (
+              <Button
+                variant="outline"
+                testID="record-my-run"
+                onPress={() => router.push({ pathname: '/record', params: { kind: 'HASH_RUN', runId: run.id, runTitle: run.title } } as never)}>
+                <Play size={16} color={theme.text} />
+                <ThemedText style={styles.semibold}>Record my run</ThemedText>
+              </Button>
+            )}
             {v.canCheckIn && (
               <Button testID="self-check-in" onPress={() => void send('POST', `/runs/${run.id}/check-in`).catch(() => undefined)}>
                 Check in
@@ -269,6 +278,16 @@ function OrganiserPanel({ run, send, onRun }: { run: RunDetail; send: Send; onRu
             You are {v.isHare ? 'a hare on this run' : 'a kennel officer with run permissions'}.
           </ThemedText>
         </View>
+
+        {v.isHare && run.status !== 'CANCELLED' && run.status !== 'ARCHIVED' && (
+          <Button
+            variant="outline"
+            testID="record-trail"
+            onPress={() => router.push({ pathname: '/record', params: { kind: 'TRAIL_LAYING', runId: run.id, runTitle: run.title } } as never)}>
+            <Footprints size={16} color={theme.text} />
+            <ThemedText style={styles.semibold}>Record the trail as you lay it</ThemedText>
+          </Button>
+        )}
 
         {next ? (
           <ActionDialog
