@@ -2,7 +2,7 @@
   "expo": {
     "name": "Shiggy Trails",
     "slug": "hcp",
-    "version": "1.0.9",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "hcp",
@@ -21,6 +21,9 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "blockedPermissions": [
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ]
     },
     "web": {
@@ -76,7 +79,13 @@
           "isIosBackgroundLocationEnabled": true
         }
       ],
-      ["expo-audio", { "microphonePermission": "Shiggy Trails uses the microphone to record a voice message or a reel." }]
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Shiggy Trails uses the microphone to record a voice message or a reel.",
+          "enableBackgroundPlayback": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
