@@ -20,8 +20,12 @@ const uploadOrigin = process.env.MEDIA_UPLOAD_ORIGIN ?? "https://*.r2.cloudflare
 const csp = [
   "default-src 'self'",
   // React's dev build uses eval for stack traces; production never does.
-  // Google Maps (the Maps JavaScript API) loads its script from maps.googleapis.com.
-  `script-src 'self' 'unsafe-inline' https://maps.googleapis.com${isDev ? " 'unsafe-eval'" : ""}`,
+  // Google Maps (the Maps JavaScript API) loads its script from maps.googleapis.com, and
+  // its vector map lays out labels in WebAssembly. 'wasm-unsafe-eval' allows that and
+  // nothing more: it does not allow eval() or new Function(), unlike 'unsafe-eval'.
+  // Because dev already has 'unsafe-eval', a policy gap like this only shows up in a
+  // production build, so test the map there.
+  `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://maps.googleapis.com${isDev ? " 'unsafe-eval'" : ""}`,
   // The map pulls in a Roboto stylesheet from Google Fonts.
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   // Kennel logos and banners are admin-supplied https URLs, and media served
@@ -36,9 +40,11 @@ const csp = [
   // Google's vector map renders in a web worker it builds from a blob: URL.
   "worker-src 'self' blob:",
   "child-src 'self' blob:",
-  // The vector map fetches its tiles with fetch(), not <img>, so Google's API host
-  // has to be allowed here rather than in img-src. Without it the map draws grey.
-  `connect-src 'self' ${backendOrigin} ${realtimeOrigin} ${uploadOrigin} https://maps.googleapis.com${isDev ? " ws://localhost:*" : ""}`,
+  // The vector map fetches its tiles, styles and icons with fetch(), not <img>, so
+  // Google's hosts have to be allowed here rather than in img-src (without them the map
+  // draws grey), and it reads some images back as data: and blob: URLs. These follow
+  // Google's own CSP guide for the Maps JavaScript API.
+  `connect-src 'self' ${backendOrigin} ${realtimeOrigin} ${uploadOrigin} https://*.googleapis.com https://*.gstatic.com data: blob:${isDev ? " ws://localhost:*" : ""}`,
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'self'",
