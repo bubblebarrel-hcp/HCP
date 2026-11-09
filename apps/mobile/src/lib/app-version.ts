@@ -8,6 +8,8 @@ import { api } from '@/lib/api';
 export interface VersionPolicy {
   min: string;
   latest: string;
+  // What is new in `latest`, one change per entry. Older API builds omit it.
+  notes?: string[];
   storeUrl: string | null;
 }
 

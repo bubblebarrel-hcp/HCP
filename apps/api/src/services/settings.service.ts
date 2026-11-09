@@ -52,6 +52,8 @@ export const STRING_SETTING_DEFAULTS = {
   // below `latest` it only asks. Both are plain x.y.z, compared by number.
   'mobile.version.min': '1.0.0',
   'mobile.version.latest': '1.0.0',
+  // What is new in `latest`, one change per line. Shown in the update prompt.
+  'mobile.version.notes': '',
   'mobile.storeUrl.android': 'https://play.google.com/store/apps/details?id=com.shiggytrails.app',
   // Empty until the app is on the App Store; the app then offers no link.
   'mobile.storeUrl.ios': '',

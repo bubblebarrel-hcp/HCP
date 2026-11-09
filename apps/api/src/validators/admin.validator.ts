@@ -76,7 +76,7 @@ export const takedownSchema = Joi.object({
 export const updateSettingSchema = Joi.object({
   // A number for the tunable limits, text for the app version gate and store links;
   // the service checks which one a given key takes.
-  value: Joi.alternatives(Joi.number().integer().min(0).max(3650), Joi.string().trim().max(300).allow('')).required(),
+  value: Joi.alternatives(Joi.number().integer().min(0).max(3650), Joi.string().trim().max(1100).allow('')).required(),
   reason: Joi.string().trim().max(500).allow('', null),
 });
 

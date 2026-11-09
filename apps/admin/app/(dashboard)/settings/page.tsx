@@ -17,12 +17,14 @@ import { formatDate } from '@/lib/utils';
 
 function SettingRow({ setting, onSaved }: { setting: PlatformSettingRow; onSaved: (s: PlatformSettingRow) => void }) {
   const isText = setting.kind === 'text';
+  // Release notes are several lines, so they get a text area rather than a one-line box.
+  const isNotes = setting.key === 'mobile.version.notes';
   const [draft, setDraft] = useState(String(setting.value));
   const parsed: number | string = isText ? draft.trim() : Number(draft);
   // The API has the last word on text (a version is x.y.z, a link is https); this
   // only stops a save that is plainly empty or out of range.
   const valid = isText
-    ? setting.key === 'mobile.storeUrl.ios' || draft.trim() !== ''
+    ? setting.key === 'mobile.storeUrl.ios' || isNotes || draft.trim() !== ''
     : draft.trim() !== '' && Number.isInteger(parsed) && (parsed as number) >= 0 && (parsed as number) <= 3650;
   const dirty = valid && parsed !== setting.value;
   const id = `setting-${setting.key}`;
@@ -53,6 +55,17 @@ function SettingRow({ setting, onSaved }: { setting: PlatformSettingRow; onSaved
         </p>
       </div>
       <div className="flex items-center gap-2">
+        {isNotes ? (
+          <textarea
+            id={id}
+            rows={4}
+            className="w-72 max-w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            placeholder={'One change per line, e.g.\nNew: show/hide password eye icon\nFixed: crash on trail notification'}
+            value={draft}
+            aria-invalid={!valid}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        ) : (
         <Input
           id={id}
           type={isText ? 'text' : 'number'}
@@ -65,6 +78,7 @@ function SettingRow({ setting, onSaved }: { setting: PlatformSettingRow; onSaved
           aria-invalid={!valid}
           onChange={(e) => setDraft(e.target.value)}
         />
+        )}
         <ReasonDialog
           title={`Change ${setting.key}?`}
           description={`From ${setting.value} to ${parsed}. This takes effect immediately for everyone.`}

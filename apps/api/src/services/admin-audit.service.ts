@@ -145,6 +145,7 @@ const SETTING_DESCRIPTIONS: Record<keyof typeof SETTING_DEFAULTS, string> = {
 const TEXT_SETTING_DESCRIPTIONS: Record<keyof typeof STRING_SETTING_DEFAULTS, string> = {
   'mobile.version.min': 'Oldest phone app version still allowed (x.y.z). Older ones are blocked until updated',
   'mobile.version.latest': 'Newest phone app version out (x.y.z). Older ones are asked to update',
+  'mobile.version.notes': 'What is new in the latest version: one feature or fix per line. Shown in the update prompt',
   'mobile.storeUrl.android': 'Where the Update button goes on Android (https link)',
   'mobile.storeUrl.ios': 'Where the Update button goes on iPhone (https link). Empty hides the button',
 };
@@ -199,7 +200,12 @@ const cmp = (a: string, b: string) => {
 // (that would block the newest release), and a link must be https or empty.
 async function updateTextSetting(actorId: string, key: TextSettingKey, raw: string, reason?: string | null) {
   const value = raw.trim();
-  if (key.startsWith('mobile.version.')) {
+  if (key === 'mobile.version.notes') {
+    const lines = value.split('\n').filter((l) => l.trim() !== '');
+    if (lines.length > 8 || lines.some((l) => l.trim().length > 120)) {
+      throw ApiError.badRequest('Up to 8 lines, each up to 120 characters', 'INVALID_SETTING');
+    }
+  } else if (key.startsWith('mobile.version.')) {
     if (!VERSION.test(value)) throw ApiError.badRequest('A version looks like 1.2.0', 'INVALID_SETTING');
     const other = await prisma.platformSetting.findUnique({
       where: { key: key === 'mobile.version.min' ? 'mobile.version.latest' : 'mobile.version.min' },

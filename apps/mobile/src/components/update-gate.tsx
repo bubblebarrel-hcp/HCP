@@ -44,6 +44,16 @@ export function UpdateGate() {
               ? 'We have made some improvements that this version of the app cannot keep up with. Update to keep using Shiggy Trails. It only takes a moment, and everything you have is safe.'
               : 'Update to get the latest features and fixes. It only takes a moment, and you can carry on with the app afterwards.'}
           </ThemedText>
+          {policy.notes && policy.notes.length > 0 ? (
+            <View style={styles.notes} testID="update-notes">
+              <ThemedText style={styles.notesTitle}>What is new in {policy.latest}</ThemedText>
+              {policy.notes.map((note, i) => (
+                <ThemedText key={i} themeColor="textSecondary" style={styles.note}>
+                  {'•'} {note}
+                </ThemedText>
+              ))}
+            </View>
+          ) : null}
           <ThemedText themeColor="textSecondary" style={styles.versions}>
             You have {installedVersion} · Newest is {policy.latest}
           </ThemedText>
@@ -70,6 +80,9 @@ const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 448, borderWidth: 1, borderRadius: 12, padding: 24, gap: 6 },
   title: { fontSize: 18, lineHeight: 22, fontWeight: '600' },
   body: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
+  notes: { marginTop: 8, gap: 4 },
+  notesTitle: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  note: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
   versions: { marginTop: 8, fontSize: 12, lineHeight: 16, fontWeight: '400' },
   footer: { marginTop: 16, flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
 });
