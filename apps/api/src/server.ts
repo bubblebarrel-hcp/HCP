@@ -47,6 +47,16 @@ import { startReminders, startTrailReleaseSweeper, stopReminders, stopTrailRelea
 
 const app = express();
 
+// Behind Cloudflare and then Railway's edge, every request reaches this process from a
+// proxy, with the real address only in X-Forwarded-For. Left at Express's default (false),
+// `req.ip` is the proxy's address for everyone, so the rate limiters give the whole world
+// one shared bucket, and express-rate-limit logs ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+// The number is how many proxy hops to trust: too low keeps users sharing a bucket, too
+// high lets a client spoof the header to dodge the limit. Two for Cloudflare + Railway;
+// set TRUST_PROXY_HOPS=1 if the API is ever served by Railway directly, 0 locally.
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? (process.env.NODE_ENV === 'production' ? 2 : 0));
+app.set('trust proxy', Number.isInteger(trustProxyHops) && trustProxyHops >= 0 ? trustProxyHops : 0);
+
 app.use(helmet());
 app.use(
   cors({
