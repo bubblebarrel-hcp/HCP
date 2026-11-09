@@ -5,7 +5,7 @@ import { Marker } from 'react-native-maps';
 import { Crosshair } from 'lucide-react-native';
 import * as Location from 'expo-location';
 
-import { OsmMap, WORLD_REGION } from '@/components/map/osm-map';
+import { AppMap, WORLD_REGION } from '@/components/map/app-map';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/web-ui';
 import { useTheme } from '@/hooks/use-theme';
@@ -55,7 +55,7 @@ export function LocationPicker({
 
   return (
     <View style={styles.root} testID="found-location">
-      <OsmMap
+      <AppMap
         ref={map}
         testID="location-picker-map"
         accessibilityLabel="Map for choosing where the kennel hashes"
@@ -77,7 +77,7 @@ export function LocationPicker({
             }}
           />
         )}
-      </OsmMap>
+      </AppMap>
       <View style={styles.row}>
         <Button variant="outline" size="sm" testID="use-my-location" disabled={locating} onPress={() => void locateMe()}>
           {locating ? <ActivityIndicator size="small" color={theme.text} /> : <Crosshair size={16} color={theme.text} />}

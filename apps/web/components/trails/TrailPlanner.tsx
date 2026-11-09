@@ -14,7 +14,7 @@ import { bleedCard, cn } from '@/lib/utils';
 import api, { errorMessage } from '@/services/api';
 import type { MapPoint } from '@/components/map/TrailMap';
 
-// MapLibre needs a browser; never render it on the server.
+// The map needs a browser; never render it on the server.
 const TrailMap = dynamic(() => import('@/components/map/TrailMap').then((m) => m.TrailMap), {
   ssr: false,
   loading: () => <div className="h-[24rem] w-full animate-pulse bg-muted sm:rounded-xl" aria-busy />,

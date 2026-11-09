@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -195,15 +197,41 @@ export function Field({
   );
 }
 
-/** Input: h-10 rounded-md border bg-background px-3 text-sm. */
-export function Input({ style, ...props }: TextInputProps) {
+/**
+ * Input: h-10 rounded-md border bg-background px-3 text-sm. A password field
+ * (`secureTextEntry`) carries its own eye button to show or hide what was typed.
+ */
+export function Input({ style, secureTextEntry, ...props }: TextInputProps) {
   const theme = useTheme();
-  return (
+  const [shown, setShown] = useState(false);
+  const field = (
     <TextInput
       placeholderTextColor={theme.textSecondary}
       {...props}
-      style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.background }, style]}
+      secureTextEntry={secureTextEntry && !shown}
+      style={[
+        styles.input,
+        { color: theme.text, borderColor: theme.border, backgroundColor: theme.background },
+        secureTextEntry && styles.inputWithEye,
+        style,
+      ]}
     />
+  );
+  if (!secureTextEntry) return field;
+  const Icon = shown ? EyeOff : Eye;
+  return (
+    <View>
+      {field}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={shown ? 'Hide password' : 'Show password'}
+        testID={props.testID ? `${props.testID}-toggle` : undefined}
+        hitSlop={8}
+        onPress={() => setShown((v) => !v)}
+        style={styles.eye}>
+        <Icon size={20} color={theme.textSecondary} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -294,6 +322,8 @@ const styles = StyleSheet.create({
   field: { gap: 6 },
   label: { fontSize: 14, lineHeight: 14, fontWeight: '500' },
   hint: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
+  inputWithEye: { paddingRight: 44 },
+  eye: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 44, alignItems: 'center', justifyContent: 'center' },
   input: { minHeight: 40, borderWidth: 1, borderRadius: 6, paddingHorizontal: 12, fontSize: 14, fontFamily: 'Geist_400Regular' },
   bleed: { borderTopWidth: 1, borderBottomWidth: 1, borderRadius: 0 },
   rounded: { borderWidth: 1, borderRadius: 12 },

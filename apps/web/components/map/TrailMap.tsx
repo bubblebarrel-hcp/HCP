@@ -1,28 +1,10 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import {
-  LngLatBounds,
-  Map as MapLibreMap,
-  Marker,
-  NavigationControl,
-  ScaleControl,
-  setWorkerUrl,
-  type GeoJSONSource,
-  type LngLatLike,
-  type MapMouseEvent,
-} from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
-import { OSM_STYLE } from '@/components/map/osm-style';
+import { useEffect } from 'react';
+import { AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
+import { GoogleMap } from '@/components/map/GoogleMap';
 import type { RouteGeoJson } from '@/lib/types';
 import { cn } from '@/lib/utils';
-
-// MapLibre 6 works out its worker's URL from import.meta.url, which a bundler
-// turns into a file:// path, leaving it with an empty URL and no worker, so the
-// GeoJSON route layer never loads. The worker is served from our own origin
-// instead (copied from node_modules by scripts/sync-maplibre-worker.mjs).
-// Module scope, so it is set before any map on the page is created.
-setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
 
 export type MarkerTone = 'primary' | 'accent' | 'danger' | 'plain';
 
@@ -43,13 +25,41 @@ const toneClass: Record<MarkerTone, string> = {
   plain: 'bg-card text-foreground',
 };
 
-function emptyRoute(): GeoJSON.FeatureCollection {
-  return { type: 'FeatureCollection', features: [] };
+const MAX_FIT_ZOOM = 17;
+
+// The route as a line. HCP Orange is the trail (D24).
+function RouteLine({ route }: { route: RouteGeoJson | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map) return;
+    const path =
+      route && route.coordinates.length >= 2 ? route.coordinates.map(([lng, lat]) => ({ lat, lng })) : [];
+    const line = new google.maps.Polyline({ path, strokeColor: '#f4511e', strokeOpacity: 1, strokeWeight: 4, map });
+    return () => line.setMap(null);
+  }, [map, route]);
+  return null;
 }
 
-function routeData(route: RouteGeoJson | null): GeoJSON.FeatureCollection {
-  if (!route || route.coordinates.length < 2) return emptyRoute();
-  return { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: route }] };
+// Keeps the whole trail in view.
+function FitTrail({ route, points }: { route: RouteGeoJson | null; points: MapPoint[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map) return;
+    const coords = [
+      ...(route?.coordinates ?? []).map(([lng, lat]) => ({ lat, lng })),
+      ...points.map((p) => ({ lat: p.latitude, lng: p.longitude })),
+    ];
+    if (coords.length === 0) return;
+    const bounds = new google.maps.LatLngBounds();
+    coords.forEach((c) => bounds.extend(c));
+    map.fitBounds(bounds, 56);
+    // A single point would otherwise zoom right in.
+    const cap = google.maps.event.addListenerOnce(map, 'idle', () => {
+      if ((map.getZoom() ?? 0) > MAX_FIT_ZOOM) map.setZoom(MAX_FIT_ZOOM);
+    });
+    return () => cap.remove();
+  }, [map, route, points]);
+  return null;
 }
 
 export function TrailMap({
@@ -62,124 +72,40 @@ export function TrailMap({
 }: {
   route: RouteGeoJson | null;
   points: MapPoint[];
+  // [longitude, latitude], as GeoJSON has it. Only seeds the first view; framing is done by FitTrail.
   center?: [number, number] | null;
   interactive?: boolean;
   onMapClick?: (lngLat: { lng: number; lat: number }) => void;
   className?: string;
 }) {
-  const container = useRef<HTMLDivElement>(null);
-  const map = useRef<MapLibreMap | null>(null);
-  const markers = useRef<Marker[]>([]);
-  // The map is created once, so its click listener reads the latest handler here.
-  const clickHandler = useRef(onMapClick);
-  // Likewise the route: the source is only created once the style has loaded, and
-  // the route can arrive before or after that, so the load handler reads it here
-  // instead of relying on an effect having run at the right moment.
-  const routeRef = useRef(route);
-
-  useEffect(() => {
-    clickHandler.current = onMapClick;
-  }, [onMapClick]);
-
-  useEffect(() => {
-    routeRef.current = route;
-  }, [route]);
-
-  useEffect(() => {
-    if (!container.current || map.current) return;
-    const instance = new MapLibreMap({
-      container: container.current,
-      style: OSM_STYLE,
-      center: (center ?? [7.4913, 9.0658]) as LngLatLike,
-      zoom: 13,
-    });
-    instance.addControl(new NavigationControl({ showCompass: true }), 'top-right');
-    instance.addControl(new ScaleControl({ unit: 'metric' }));
-    instance.on('load', () => {
-      instance.addSource('route', { type: 'geojson', data: routeData(routeRef.current) });
-      instance.addLayer({
-        id: 'route-line',
-        type: 'line',
-        source: 'route',
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
-        // HCP Orange is the trail (D24).
-        paint: { 'line-color': '#f4511e', 'line-width': 4 },
-      });
-    });
-    instance.on('click', (e: MapMouseEvent) => clickHandler.current?.({ lng: e.lngLat.lng, lat: e.lngLat.lat }));
-    map.current = instance;
-
-    return () => {
-      instance.remove();
-      map.current = null;
-    };
-    // `center` only seeds the first render; later framing is done by fitBounds.
-  }, [center]);
-
-  // Cursor hints that clicking does something.
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    instance.getCanvas().style.cursor = onMapClick ? 'crosshair' : '';
-  }, [onMapClick]);
-
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    // Before the source exists there is nothing to update: the load handler will
-    // create it from routeRef, which already holds this route.
-    const source = instance.getSource('route') as GeoJSONSource | undefined;
-    source?.setData(routeData(route));
-  }, [route]);
-
-  // Markers: the simplest correct thing is to redraw them when they change.
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    markers.current.forEach((m) => m.remove());
-    markers.current = points.map((point) => {
-      const el = document.createElement('div');
-      el.className = cn(
-        'grid h-7 w-7 place-items-center rounded-full border-2 border-card text-[11px] font-bold shadow-md',
-        toneClass[point.tone],
-      );
-      el.textContent = point.mark;
-      el.title = point.label;
-      el.setAttribute('aria-label', point.label);
-      return new Marker({ element: el }).setLngLat([point.longitude, point.latitude]).addTo(instance);
-    });
-  }, [points]);
-
-  // Keep the whole trail in view.
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    const coords: [number, number][] = [
-      ...(route?.coordinates ?? []),
-      ...points.map((p) => [p.longitude, p.latitude] as [number, number]),
-    ];
-    if (coords.length === 0) return;
-    const bounds = coords.reduce(
-      (acc, c) => acc.extend(c as LngLatLike),
-      new LngLatBounds(coords[0] as LngLatLike, coords[0] as LngLatLike),
-    );
-    instance.fitBounds(bounds, { padding: 56, maxZoom: 16, duration: 0 });
-  }, [route, points]);
-
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    if (interactive) instance.scrollZoom.enable();
-    else instance.scrollZoom.disable();
-  }, [interactive]);
-
   return (
-    <div
-      ref={container}
+    <GoogleMap
       className={cn('h-[24rem] w-full overflow-hidden border-y border-border sm:rounded-xl sm:border', className)}
-      role="application"
-      aria-label="Trail map"
-      data-testid="trail-map"
-    />
+      label="Trail map"
+      testId="trail-map"
+      defaultCenter={center ? { lat: center[1], lng: center[0] } : { lat: 9.0658, lng: 7.4913 }}
+      defaultZoom={14}
+      gestureHandling={interactive ? 'greedy' : 'cooperative'}
+      // Cursor hints that clicking does something.
+      draggableCursor={onMapClick ? 'crosshair' : undefined}
+      onClick={(event) => {
+        const at = event.detail.latLng;
+        if (at && onMapClick) onMapClick({ lng: at.lng, lat: at.lat });
+      }}>
+      <RouteLine route={route} />
+      <FitTrail route={route} points={points} />
+      {points.map((point) => (
+        <AdvancedMarker key={point.id} position={{ lat: point.latitude, lng: point.longitude }} title={point.label}>
+          <div
+            aria-label={point.label}
+            className={cn(
+              'grid h-7 w-7 place-items-center rounded-full border-2 border-card text-[11px] font-bold shadow-md',
+              toneClass[point.tone],
+            )}>
+            {point.mark}
+          </div>
+        </AdvancedMarker>
+      ))}
+    </GoogleMap>
   );
 }

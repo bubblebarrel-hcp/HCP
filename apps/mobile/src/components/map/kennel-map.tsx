@@ -4,7 +4,7 @@ import { Marker } from 'react-native-maps';
 import { useRouter } from 'expo-router';
 import Svg, { Circle, Path, Text as SvgText } from 'react-native-svg';
 
-import { OsmMap, WORLD_REGION } from '@/components/map/osm-map';
+import { AppMap, WORLD_REGION } from '@/components/map/app-map';
 import { useTheme } from '@/hooks/use-theme';
 
 // Where the hash is in the world, as the web draws it (components/map/KennelMap.tsx):
@@ -50,7 +50,7 @@ export function KennelMap({ kennels, height = 288 }: { kennels: KennelPin[]; hei
   }, [kennels]);
 
   return (
-    <OsmMap style={{ height, width: '100%' }} initialRegion={region} testID="kennel-map" accessibilityLabel="Map of kennels around the world">
+    <AppMap style={{ height, width: '100%' }} initialRegion={region} testID="kennel-map" accessibilityLabel="Map of kennels around the world">
       {kennels.map((kennel) => {
         const initial = kennel.shortName.slice(0, 1).toUpperCase().replace(/[^A-Z0-9]/, '');
         return (
@@ -79,7 +79,7 @@ export function KennelMap({ kennels, height = 288 }: { kennels: KennelPin[]; hei
           </Marker>
         );
       })}
-    </OsmMap>
+    </AppMap>
   );
 }
 

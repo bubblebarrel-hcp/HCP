@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import type MapView from 'react-native-maps';
 import { Marker, Polyline } from 'react-native-maps';
 
-import { OsmMap } from '@/components/map/osm-map';
+import { AppMap } from '@/components/map/app-map';
 import { useTheme } from '@/hooks/use-theme';
 
 // A recorded route on the map (D79): the line the hasher ran, in HCP Orange as the
@@ -51,7 +51,7 @@ export function RouteMap({
   }, [ready, count, follow]);
 
   return (
-    <OsmMap
+    <AppMap
       ref={map}
       testID={testID}
       accessibilityLabel="Route map"
@@ -81,7 +81,7 @@ export function RouteMap({
           <View style={[styles.dot, styles.dotLast, { backgroundColor: theme.primary, borderColor: theme.card }]} />
         </Marker>
       )}
-    </OsmMap>
+    </AppMap>
   );
 }
 

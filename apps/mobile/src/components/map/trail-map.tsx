@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import type MapView from 'react-native-maps';
 import { Marker, Polyline } from 'react-native-maps';
 
-import { OsmMap } from '@/components/map/osm-map';
+import { AppMap } from '@/components/map/app-map';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import type { MapPoint } from '@/lib/trails';
@@ -65,7 +65,7 @@ export function TrailMap({
   }, [points]);
 
   return (
-    <OsmMap
+    <AppMap
       ref={map}
       testID="trail-map"
       accessibilityLabel="Trail map"
@@ -97,7 +97,7 @@ export function TrailMap({
           </View>
         </Marker>
       ))}
-    </OsmMap>
+    </AppMap>
   );
 }
 

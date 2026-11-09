@@ -20,8 +20,10 @@ const uploadOrigin = process.env.MEDIA_UPLOAD_ORIGIN ?? "https://*.r2.cloudflare
 const csp = [
   "default-src 'self'",
   // React's dev build uses eval for stack traces; production never does.
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
+  // Google Maps (the Maps JavaScript API) loads its script from maps.googleapis.com.
+  `script-src 'self' 'unsafe-inline' https://maps.googleapis.com${isDev ? " 'unsafe-eval'" : ""}`,
+  // The map pulls in a Roboto stylesheet from Google Fonts.
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   // Kennel logos and banners are admin-supplied https URLs, and media served
   // from R2 is https too. In development the media fallback is the API's own
   // /uploads on plain http, so that origin has to be named (D28).
@@ -30,16 +32,13 @@ const csp = [
   // falls back to default-src 'self' and refuses every clip (R2 in production,
   // the API's /uploads in development), and the recorder's blob: preview too.
   `media-src 'self' blob: https:${isDev ? ` ${backendOrigin}` : ''}`,
-  "font-src 'self' data:",
-  // MapLibre does its GeoJSON and vector work in a web worker it builds from a
-  // blob: URL. Without this the worker is refused, silently: raster tiles and
-  // DOM markers still draw, but the trail's route line never does.
+  "font-src 'self' data: https://fonts.gstatic.com",
+  // Google's vector map renders in a web worker it builds from a blob: URL.
   "worker-src 'self' blob:",
   "child-src 'self' blob:",
-  // MapLibre fetches raster tiles with fetch(), not <img>, so the tile host has
-  // to be allowed here rather than in img-src. Without it both maps draw their
-  // markers over a blank background (D15).
-  `connect-src 'self' ${backendOrigin} ${realtimeOrigin} ${uploadOrigin} https://tile.openstreetmap.org${isDev ? " ws://localhost:*" : ""}`,
+  // The vector map fetches its tiles with fetch(), not <img>, so Google's API host
+  // has to be allowed here rather than in img-src. Without it the map draws grey.
+  `connect-src 'self' ${backendOrigin} ${realtimeOrigin} ${uploadOrigin} https://maps.googleapis.com${isDev ? " ws://localhost:*" : ""}`,
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'self'",
