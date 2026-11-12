@@ -38,7 +38,9 @@ import { ActionDialog } from '@/components/ui/action-dialog';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Skeleton } from '@/components/ui/web-ui';
 import { MaxContentWidth } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
+import { useActiveRecording } from '@/hooks/use-active-recording';
 import { useTheme } from '@/hooks/use-theme';
+import { formatDuration } from '@/lib/activities';
 import { api, errorMessage } from '@/lib/api';
 import { brandColor, formatDate, formatRunDate, reportStatusLabel } from '@/lib/format';
 import { EMPTY_ENGAGEMENT } from '@/lib/reactions';
@@ -166,6 +168,9 @@ function RsvpPanel({ run, send, onRun }: { run: RunDetail; send: Send; onRun: (r
   const p = v.participation;
   const responded = p && p.rsvpStatus !== 'CANCELLED';
   const spotsLeft = run.capacity ? Math.max(0, run.capacity - run.counts.going) : null;
+  // The record button shows the clock while this run is being recorded.
+  const recording = useActiveRecording();
+  const recordingHere = recording.active?.runId === run.id;
 
   return (
     <Card style={styles.panel} >
@@ -208,11 +213,21 @@ function RsvpPanel({ run, send, onRun }: { run: RunDetail; send: Send; onRun: (r
             )}
             {responded && (run.status === 'CHECK_IN_OPEN' || run.status === 'LIVE') && (
               <Button
-                variant="outline"
+                variant={recordingHere ? 'default' : 'outline'}
                 testID="record-my-run"
                 onPress={() => router.push({ pathname: '/record', params: { kind: 'HASH_RUN', runId: run.id, runTitle: run.title } } as never)}>
-                <Play size={16} color={theme.text} />
-                <ThemedText style={styles.semibold}>Record my run</ThemedText>
+                {recordingHere ? (
+                  <View style={[styles.recDot, { backgroundColor: theme.danger }]} />
+                ) : (
+                  <Play size={16} color={theme.text} />
+                )}
+                <ThemedText
+                  testID="record-my-run-label"
+                  style={[styles.semibold, recordingHere ? { color: theme.onPrimary } : null]}>
+                  {recordingHere
+                    ? `${recording.active?.status === 'PAUSED' ? 'Paused' : 'Recording'} · ${formatDuration(recording.elapsedMs / 1000)}`
+                    : 'Record my run'}
+                </ThemedText>
               </Button>
             )}
             {v.canCheckIn && (
@@ -1092,6 +1107,7 @@ const styles = StyleSheet.create({
   back: { marginTop: 16 },
   center: { textAlign: 'center' },
   semibold: { fontWeight: '600' },
+  recDot: { width: 10, height: 10, borderRadius: 5 },
   medium: { fontSize: 16, lineHeight: 24, fontWeight: '500' },
   sm: { fontSize: 14, lineHeight: 20, fontWeight: '400' },
   xs: { fontSize: 12, lineHeight: 16, fontWeight: '400' },
